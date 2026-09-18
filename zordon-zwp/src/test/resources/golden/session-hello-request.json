@@ -1,0 +1,1 @@
+{"id":1,"jsonrpc":"2.0","method":"session.hello","params":{"capabilities":["ui.permission-prompt","ui.notifications"],"client":{"kind":"desktop","name":"zordon-desktop","version":"0.1.0"},"protocol":{"max":1,"min":1},"resume":{"lastEventSeq":48210,"startId":"01J9X2K7QF8ZP3000000000000"}}}

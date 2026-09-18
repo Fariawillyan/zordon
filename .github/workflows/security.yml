@@ -1,0 +1,64 @@
+# Pipeline de segurança obrigatória de PR (docs/security/supply-chain.md §3).
+#
+# Nenhum workflow daqui recebe segredo: um PR não deve conseguir exfiltrar
+# credencial de release.
+
+name: Segurança
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Uma varredura semanal acha CVE publicada depois do merge.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          queries: security-extended
+      - run: ./gradlew assemble --no-build-cache
+      - uses: github/codeql-action/analyze@v3
+
+  secrets:
+    name: Segredo no diff e no histórico
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependencies:
+    name: CVE e licenças
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisão de dependências
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # GPL, AGPL e SSPL são incompatíveis com a licença do projeto (ADR-0013).
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, SSPL-1.0

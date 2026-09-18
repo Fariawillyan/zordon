@@ -37,6 +37,12 @@ unit systemd + tarefa agendada + arquivo de endpoint
 **Pronto quando:** reiniciar o Windows, não abrir nenhum terminal, abrir o
 `zordon-desktop` e ver "CORE ONLINE" sem nenhuma ação manual.
 
+**Estado (2026-09-18): pronto.** Verificado reiniciando o Windows: logon às
+11:18:51, núcleo pronto às 11:19:19 sem nenhum terminal aberto, de pé sem
+interrupção, e o desktop conectou mostrando CORE ONLINE. A primeira tentativa
+reprovou — o WSL desligava a distro 15 s depois do boot —, e a correção
+(`instanceIdleTimeout=-1`) está em [Windows↔WSL R1](architecture/windows-wsl.md#r1--o-wsl-não-sobe-no-boot-do-windows).
+
 Este marco existe para atacar [R1](architecture/windows-wsl.md#r1--o-wsl-não-sobe-no-boot-do-windows)
 antes de qualquer investimento em IA. Se o núcleo não sobrevive a um reboot, nada
 mais importa — e é melhor descobrir isso na semana 1.
@@ -45,6 +51,7 @@ mais importa — e é melhor descobrir isso na semana 1.
 
 ```text
 AiProvider + adaptador Anthropic (streaming, ferramentas, cache)
+adaptador compatível com OpenAI + providers por configuração (SPEC-004)
 IntentRouter (só rota rápida + agente geral)
 TurnManager e composição de contexto
 EventBus com seq e replay
@@ -56,6 +63,12 @@ Reconexão automática com backoff
 **Pronto quando:** conversa de texto com streaming; fechar a janela, reabrir e o
 histórico continuar; matar o núcleo e a UI mostrar offline, reconectando sozinha
 quando ele voltar; um turno completo aparecer na tela de Logs.
+
+**Estado (2026-09-18):** implementado e testado ponta a ponta com provider falso
+e servidor falso. **Falta a resposta de um modelo real**, por decisão: o projeto
+não vai usar API paga por crédito, e o provider por assinatura (`claude`/`codex`)
+será definido no M3 ([ADR-0026](adr/ADR-0026-provider-agnostico.md)). Até lá, o
+chat responde pelas rotas locais e diz com clareza que não há modelo disponível.
 
 ## M2 — Voz
 

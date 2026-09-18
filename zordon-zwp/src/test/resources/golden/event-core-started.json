@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"event","params":{"payload":{"startId":"01J9X2K7QF8ZP3000000000000","version":"0.1.0"},"seq":48211,"topic":"system","ts":"2026-09-17T22:31:07.412Z","type":"CORE_STARTED"}}

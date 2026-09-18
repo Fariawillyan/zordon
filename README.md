@@ -5,9 +5,12 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Status: `DESIGN` — nenhuma linha de código de produção escrita ainda.**
-Este repositório contém, neste momento, apenas a documentação de arquitetura.
-A implementação começa pelo marco **M0** descrito em [Roadmap](docs/roadmap.md).
+**Status: marco `M1` — conversa de texto com streaming.** O núcleo roda como
+serviço no WSL, a janela conversa com ele e mostra o custo de cada resposta. Voz,
+ações no computador e agentes vêm nos próximos marcos do [Roadmap](docs/roadmap.md).
+
+**Quer usar?** Siga os [Primeiros passos](docs/operations/quickstart.md) — uns 15
+minutos, do zero à primeira resposta.
 
 ---
 
@@ -120,8 +123,14 @@ Três processos, um protocolo. Detalhes e justificativa em
 | 22 | Todo consumo de token é medido, orçado e atribuído | [ADR-0022](docs/adr/ADR-0022-token-observability.md) |
 | 23 | Documentação como fonte de verdade, com estrutura e metadados | [ADR-0023](docs/adr/ADR-0023-documentacao-como-fonte-de-verdade.md) |
 | 24 | O Zordon escreve o próprio código, mas não se instala | [ADR-0024](docs/adr/ADR-0024-auto-modificacao-e-nucleo-de-confianca.md) |
+| 25 | O transporte do protocolo é um módulo separado do contrato | [ADR-0025](docs/adr/ADR-0025-modulo-de-transporte-zwp.md) |
+| 26 | O núcleo não pertence a nenhum provider de IA | [ADR-0026](docs/adr/ADR-0026-provider-agnostico.md) |
 
 ## Por onde começar a ler
+
+Para **instalar e usar**: [Primeiros passos](docs/operations/quickstart.md).
+
+Para **entender e contribuir**:
 
 1. [Visão e escopo](docs/vision.md) — o que é e o que não é
 2. [Arquitetura](docs/architecture/overview.md) — processos, camadas, fluxo de um turno

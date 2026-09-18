@@ -16,5 +16,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 --------------------------------------------------------------------------------
-Third-party components are listed in docs/21-open-source-e-cadeia-de-suprimentos.md
-and in the SBOM published with each release.
+Third-party components are listed in docs/security/supply-chain.md,
+in gradle/libs.versions.toml and in the SBOM published with each release.

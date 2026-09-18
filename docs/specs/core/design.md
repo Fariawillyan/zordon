@@ -16,34 +16,64 @@ specId: null
 O contrato `AiProvider` está em [Interfaces §2](../../api/core-interfaces.md#2-aiprovider),
 com a justificativa das mudanças em relação ao esboço original do briefing.
 
-Providers previstos:
+**O núcleo não pertence a nenhum fornecedor**
+([ADR-0026](../../adr/ADR-0026-provider-agnostico.md)). Ele pede ao
+`ProviderRegistry` "o provider do papel `conversation`" e não sabe quem responde;
+uma regra do ArchUnit reprova qualquer classe do núcleo que importe um
+adaptador. Quem responde é escolhido em `~/.zordon/config.toml`
+([SPEC-004](SPEC-004-providers-configuraveis.md)).
 
-| Provider | Uso | Local? |
-|---|---|---|
-| `anthropic` | Padrão para conversa, agentes e roteamento | não |
-| `local-openai-compat` | llama.cpp / Ollama / vLLM via API compatível | **sim** |
-| `local-embeddings` | Embeddings para memória e seleção de ferramentas | **sim** |
+Adaptadores, por família de protocolo:
+
+| `type` | Fala com | Local? | Estado |
+|---|---|---|---|
+| `anthropic` | API da Anthropic (Claude) | não | pronto |
+| `openai-compatible` | OpenAI, Ollama, LM Studio, vLLM, OpenRouter, Groq, DeepSeek, endpoint compatível do Gemini | só se o endereço for de loopback | pronto |
+| assinatura via `claude` / `codex` | Planos Claude e ChatGPT | não | próxima fase, com ADR próprio |
+| `local-embeddings` | Embeddings para memória e seleção de ferramentas | sim | M5 |
+
+"Local" é **verificado, não declarado**: só endereço de loopback conta. Um
+Ollama em outra máquina da rede não é local, porque os dados saem deste
+computador — e, a partir do M3, é isso que decide se conteúdo confidencial pode
+ir para o provider.
 
 O provider é configurável por **papel**, não globalmente. Trocar o modelo de
 conversa não deve arrastar o de roteamento nem o de embeddings:
 
 ```toml
+[ai.providers.anthropic]
+type    = "anthropic"
+api_key = "env:ANTHROPIC_API_KEY"     # referência, nunca o valor
+
+[ai.providers.ollama]
+type     = "openai-compatible"
+base_url = "http://127.0.0.1:11434/v1"
+
 [ai.roles]
 conversation = { provider = "anthropic", model = "claude-opus-5", effort = "high" }
 routing      = { provider = "anthropic", model = "claude-haiku-4-5" }
 agent_heavy  = { provider = "anthropic", model = "claude-opus-5", effort = "xhigh" }
 agent_light  = { provider = "anthropic", model = "claude-sonnet-5", effort = "medium" }
 summarize    = { provider = "anthropic", model = "claude-haiku-4-5" }
-embeddings   = { provider = "local-embeddings", model = "bge-m3" }
-fallback     = { provider = "local-openai-compat", model = "qwen2.5-14b-instruct" }
+fallback     = { provider = "ollama",    model = "qwen2.5:7b" }
 ```
+
+Sem `config.toml`, os papéis acima valem com a `ANTHROPIC_API_KEY` — o
+comportamento do M1. Com o arquivo, só vale o que ele diz: o Zordon não mistura
+padrões com escolhas do usuário.
+
+**A reserva (`fallback`) entra uma vez por turno**, e só quando faz sentido: o
+principal falhou por indisponibilidade, limite, crédito ou chave, **antes** do
+primeiro fragmento, e a reserva é outro provider ou modelo. Depois que o texto
+começou a aparecer não há reserva — emendar dois modelos numa frase produziria
+uma resposta que ninguém escreveu. A tela e o log dizem quem respondeu e por quê.
 
 Embeddings são locais por padrão porque eles veem **tudo**: cada mensagem, cada
 fato de memória, cada descrição de ferramenta. Mandar isso para fora da máquina
 contradiz o princípio local-first de forma mais grave do que uma conversa
 pontual.
 
-### Modelos de referência (Claude)
+### Modelos de referência (Claude, o padrão sem configuração)
 
 | Modelo | ID | Contexto | US$/Mtok entrada | US$/Mtok saída |
 |---|---|---|---|---|
@@ -56,6 +86,27 @@ roteamento e sumarização, onde volume alto e latência baixa importam mais que
 profundidade. Preço é um dado de configuração, não uma constante no código — o
 `CostAccountant` lê a tabela de `~/.zordon/pricing.toml` para que uma mudança de
 preço não exija recompilar.
+
+### O que muda entre protocolos
+
+O contrato é o mesmo; os recursos não. Fingir que são iguais seria pior do que
+declarar a diferença:
+
+| Conceito do Zordon | Anthropic | Compatível com OpenAI |
+|---|---|---|
+| `effort` | `output_config.effort` | `reasoning_effort` (`low`/`medium`/`high`; acima vira `high`) — **só se configurado**, porque um modelo que não raciocina devolve 400 |
+| `thinking = ADAPTIVE` | pensamento adaptativo com resumo | sem equivalente; resumo chega se o servidor mandar `reasoning_content` |
+| Marca de cache no prefixo | `cache_control` explícito | ignorada: quem faz cache o faz sozinho pelo prefixo |
+| Consumo | sempre informado | pedido com `stream_options.include_usage`; se não vier, **estimado e marcado** |
+| Recusa | `stop_reason: refusal` | `refusal` no delta ou `finish_reason: content_filter` |
+| Limite de saída | `max_tokens` | `max_completion_tokens`, ou `max_tokens` em servidores antigos (`max_tokens_param`) |
+| Sem crédito | 400 `credit balance` | 429 `insufficient_quota` (OpenAI) ou 402 (OpenRouter) |
+
+Todo adaptador passa pelo mesmo **kit de contrato** — streaming em ordem,
+cancelamento que aborta de fato, a mesma categoria para o mesmo erro HTTP —,
+rodando contra um servidor falso no formato de cada fornecedor. Foi esse kit que
+revelou que o cancelamento do adaptador Anthropic não cancelava: o `cancel()`
+esperava o fluxo terminar sozinho.
 
 ### Detalhes da integração Anthropic (SDK Java)
 

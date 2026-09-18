@@ -1,0 +1,65 @@
+# Build, testes e portões automáticos da Definition of Done.
+#
+# Nenhuma etapa é pulável por label, por urgência ou por quem abriu o PR
+# (docs/security/supply-chain.md §3).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # O wrapper é validado contra o checksum publicado: um wrapper trocado
+          # executa código arbitrário em toda build.
+          validate-wrappers: true
+
+      - name: Verificação completa
+        run: ./gradlew verifyAll --stacktrace
+
+      - name: Relatórios de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-de-teste
+          path: '**/build/reports/tests/**'
+          retention-days: 7
+
+  build-from-scratch:
+    name: Build sem cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      # Mitigação declarada em ADR-0002: garantir que o build funciona do zero,
+      # e não só com o cache quente de quem já compilou.
+      - run: ./gradlew verifyAll --no-build-cache --no-configuration-cache

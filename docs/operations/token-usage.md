@@ -60,8 +60,8 @@ public enum Accuracy { EXACT, ESTIMATED }
 | Provider | Origem da contagem | `accuracy` |
 |---|---|---|
 | Anthropic | `usage` da resposta da API | `EXACT` |
-| OpenAI-compatível local | `usage`, quando o servidor devolve | `EXACT` |
-| Local sem `usage` | Contagem por tokenizador aproximado | `ESTIMATED` |
+| Compatível com OpenAI (qualquer servidor) | `usage`, pedido com `stream_options.include_usage` | `EXACT` |
+| Servidor que não devolve `usage` | Quatro caracteres por token, marcado com `≈` na tela ([SPEC-004](../specs/core/SPEC-004-providers-configuraveis.md)) | `ESTIMATED` |
 | Requisição cancelada no meio | Parcial medido + estimativa do restante | `ESTIMATED` |
 
 Na interface, valor estimado aparece com marcação visível:

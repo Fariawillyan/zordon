@@ -66,12 +66,21 @@ public record RunId(String value) {}
 public record CallId(String value) {}
 public record SessionId(String value) {}
 
-public sealed interface ZordonEvent
-        permits VoiceEvent, ChatEvent, ToolEvent, AgentEvent,
-                McpEvent, PermissionEvent, SystemEvent, AutomationEvent, MemoryEvent {
-    long seq();
-    Instant ts();
-    String topic();
+/**
+ * Um evento já carimbado pelo barramento. O `seq` é atribuído na publicação,
+ * então o evento não nasce com ele: quem publica informa tipo e payload.
+ * Ver SPEC-002 §7 para por que os identificadores de correlação ficam no payload.
+ */
+public record EventEnvelope(long seq, Instant ts, EventType type, Map<String,Object> payload) {
+    public String topic() { return type.topic(); }
+}
+
+/** Catálogo fechado de eventos; cada entrada carrega o seu tópico. */
+public enum EventType {
+    CORE_STARTED(Topic.SYSTEM), SYSTEM_ALERT(Topic.SYSTEM),
+    USER_COMMAND(Topic.CHAT), AI_THINKING(Topic.CHAT),
+    AI_RESPONSE(Topic.CHAT), AI_ERROR(Topic.CHAT);
+    // cresce por marco: um evento entra aqui quando alguém o publica
 }
 ```
 
@@ -143,15 +152,14 @@ Modelo de requisição e resposta:
 ```java
 public record AiRequest(
         String model,
-        List<AiMessage> messages,
         String systemPrompt,
-        List<ToolSpec> tools,
+        List<ToolSpec> tools,          // ordenadas por nome: o cache casa por prefixo
+        List<AiMessage> messages,
         Effort effort,                 // LOW, MEDIUM, HIGH, XHIGH, MAX
         Thinking thinking,             // ADAPTIVE | OFF
         int maxOutputTokens,
-        List<CacheHint> cacheHints,    // onde marcar prefixo estável
-        Duration timeout,
-        Map<String,Object> providerOptions) {}
+        boolean cacheSystemPrompt,     // marca o bloco estável do prefixo
+        Duration timeout) {}
 
 public record AiResponse(
         List<ContentBlock> content,    // texto, pensamento, chamadas de ferramenta
@@ -159,7 +167,9 @@ public record AiResponse(
         TokenUsage usage,
         Money cost,
         String model,
-        Duration latency) {}
+        Duration latency,
+        String refusalExplanation,     // presente só em REFUSAL
+        boolean usageEstimated) {}     // provider não informou o consumo
 
 public record ProviderInfo(
         String id,                     // "anthropic", "local-llamacpp", ...
@@ -168,6 +178,26 @@ public record ProviderInfo(
         List<ModelInfo> models,
         boolean local) {}              // true = nada sai da máquina
 ```
+
+`effort` pode faltar (`effortIfAny()`), e ausente quer dizer "o padrão do
+provider": um modelo que não raciocina recusa `reasoning_effort` com erro 400 em
+alguns protocolos. `usageEstimated` existe porque nem todo servidor informa o
+consumo, e estimativa exibida como medida é mentira com cara de número
+([SPEC-004 §7](../specs/core/SPEC-004-providers-configuraveis.md#7-interfaces)).
+
+Quem escolhe o provider não é o núcleo: é o `ProviderRegistry`, a partir de
+`~/.zordon/config.toml`. O núcleo pede "o provider do papel `conversation`" e
+recebe um `AiProvider` — ou o motivo, em palavras que o usuário consegue seguir,
+de não haver um ([ADR-0026](../adr/ADR-0026-provider-agnostico.md)).
+
+A ordem dos componentes acompanha a ordem de renderização da API — `tools` →
+`system` → `messages` — porque é assim que o prefixo cacheável se forma. Duas
+diferenças em relação ao esboço original, decididas na
+[SPEC-003 §7](../specs/core/SPEC-003-chat-com-streaming.md#7-interfaces): a lista
+`cacheHints` virou o booleano `cacheSystemPrompt`, porque enquanto só existe um
+bloco estável uma lista de marcadores é estrutura sem uso; e `providerOptions`
+não existe, porque um mapa livre de opções é a porta pela qual detalhes de um
+provider vazam para o núcleo.
 
 `ProviderInfo.local` não é cosmético: o `PermissionEngine` consulta esse campo
 para decidir se conteúdo sensível (de um caminho marcado como confidencial) pode

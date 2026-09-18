@@ -55,11 +55,18 @@ vmIdleTimeout=-1
 # se a rede quebrar, remova estas duas linhas e o Zordon cai para o modo NAT.
 networkingMode=mirrored
 hostAddressLoopback=true
+
+[general]
+# Sem esta linha a distro — e o núcleo com ela — é desligada 15 s depois que o
+# último terminal fecha. vmIdleTimeout, acima, só vale depois disso.
+instanceIdleTimeout=-1
 ```
 
-`vmIdleTimeout=-1` impede que o WSL desligue a VM por ociosidade. Sem isso, o
-núcleo pode ser derrubado depois de um período sem interação —
-[R2](../architecture/windows-wsl.md#r2--o-wsl-é-derrubado-por-fora).
+As duas linhas de ociosidade são necessárias, e não a mesma coisa:
+`instanceIdleTimeout` desliga a **distro** (padrão 15 s), `vmIdleTimeout` desliga
+a **VM** (padrão 60 s) depois que nenhuma distro está rodando. Só com as duas o
+núcleo fica de pé sem terminal aberto —
+[R1](../architecture/windows-wsl.md#r1--o-wsl-não-sobe-no-boot-do-windows).
 
 Após editar: `wsl --shutdown` e reiniciar a distro.
 
@@ -111,8 +118,17 @@ Restart=always
 RestartSec=3
 TimeoutStopSec=20
 
-Environment=JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+UseZGC
+Environment="JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+UseZGC"
+# Fixado na instalação: o PATH do systemd não enxerga o JDK do usuário (SDKMAN)
+# e cairia no java do sistema — nesta máquina, o 21, que não roda classes do 25.
+Environment=JAVA_HOME=/home/<user>/.sdkman/candidates/java/25.0.2-tem
 Environment=ZORDON_HOME=/home/<user>/.zordon
+# Resolvido na instalação perguntando ao Windows (R21).
+Environment=ZORDON_WINDOWS_HOME=/mnt/c/Users/<user>
+# nat | mirrored, lido do .wslconfig na instalação. Decide onde o núcleo escuta.
+Environment=ZORDON_NETWORKING_MODE=nat
+# Só o caminho; o "-" deixa o serviço subir sem o arquivo.
+EnvironmentFile=-/home/<user>/.zordon/secrets.env
 
 # Endurecimento — o núcleo não precisa de nada disso
 NoNewPrivileges=true
@@ -121,7 +137,9 @@ ProtectSystem=strict
 ProtectHome=read-only
 # Resolvido na instalação. NUNCA use %i aqui: o usuário Windows pode ter
 # outro nome — foi o caso nesta máquina.
-ReadWritePaths=/home/<user>/.zordon /mnt/c/Users/<user>/.zordon
+# "-": se o perfil do Windows não foi resolvido, o caminho não existe e o
+# systemd recusaria subir.
+ReadWritePaths=/home/<user>/.zordon -/mnt/c/Users/<user>/.zordon
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
@@ -129,6 +147,11 @@ RestrictSUIDSGID=true
 [Install]
 WantedBy=multi-user.target
 ```
+
+Esta é a forma instalada. A fonte é o template
+[`packaging/wsl/zordon.service.template`](../../packaging/wsl/zordon.service.template),
+cujas marcas `@…@` o [`install.sh`](../../packaging/wsl/install.sh) preenche; se os
+dois divergirem, vale o template.
 
 `Type=notify` faz o systemd considerar o serviço ativo só depois que o núcleo
 sinaliza que o `ZwpServer` está escutando e o `endpoint.json` foi escrito. Com
@@ -147,6 +170,62 @@ sudo systemctl enable --now zordon
 systemctl status zordon
 journalctl -u zordon -f
 ```
+
+### Chave de API do provider
+
+> **Provisório.** O destino da chave é o Credential Manager do Windows, via
+> `zordon-host` ([Segurança §5](../security/model.md#5-segredos)). Até essa
+> integração existir, ela fica num arquivo com modo `0600`, lido pelo systemd.
+
+O `install.sh` pergunta de qual provider é a chave (dá para pular). Para
+configurar ou trocar depois:
+
+```bash
+packaging/wsl/set-api-key.sh anthropic     # pede, valida, grava e reinicia o serviço
+packaging/wsl/set-api-key.sh openai
+packaging/wsl/set-api-key.sh --env GROQ_API_KEY   # qualquer outro; grava sem validar
+packaging/wsl/set-api-key.sh --check       # confere todas as chaves conhecidas
+```
+
+Cada provider tem a sua linha em `secrets.env`, e trocar a chave de um preserva
+as dos outros. O nome da variável precisa bater com a referência do
+`config.toml` (`api_key = "env:GROQ_API_KEY"`).
+
+O script:
+
+- pede a chave **sem eco** — ela não passa por argumento, histórico do shell nem
+  chat;
+- para Anthropic e OpenAI, **valida antes de gravar**, com uma chamada que não
+  gasta tokens (`GET /v1/models`) — uma chave recusada não chega ao disco;
+- troca só a linha daquela variável, de uma vez (arquivo temporário + `mv`), com
+  modo `600`;
+- reinicia o serviço, se ele estiver rodando.
+
+A unit já declara `EnvironmentFile=-~/.zordon/secrets.env`, então não há override
+a criar. Sem chave o núcleo sobe normalmente: as rotas locais respondem, e as
+demais mensagens voltam dizendo o que falta.
+
+Por que desta forma:
+
+| Alternativa | Problema |
+|---|---|
+| `Environment=ANTHROPIC_API_KEY=…` na unit | `/etc/systemd/system/` é legível por qualquer usuário, e `systemctl show` exibe o valor |
+| Chave no `.env` do repositório | O `.env` é para desenvolvimento; o serviço não o lê, e ele mora onde o Git está |
+| Chave num argumento de comando | Argumentos aparecem para qualquer usuário em `ps` e ficam no histórico |
+
+O que este arquivo **não** protege, e o Credential Manager protegeria: a chave
+fica em claro no disco, legível por qualquer processo rodando como o mesmo
+usuário, e aparece no ambiente do processo Java (`/proc/<pid>/environ`). É a
+mesma exposição de qualquer variável de ambiente — aceitável enquanto o Zordon
+não lê arquivos por conta própria, e é por isso que o arquivo já está na lista
+`forbidden` (§6) antes de o M3 dar ao Zordon acesso a arquivos.
+
+**Revogar:** revogue no console do provider primeiro; trocar o arquivo sozinho não
+invalida uma chave que possa ter vazado.
+
+**Chave válida não basta:** a conta da API precisa de crédito. Sem ele, o chat
+responde "A conta da API está sem crédito", e o remédio é o console do provider
+(*Plans & Billing*), não o Zordon.
 
 ## 4. Autostart no Windows
 
@@ -178,7 +257,7 @@ WSL — /home/<user>/
 │     bin/zordon-core
 │     lib/*.jar
 └── .zordon/
-      config.toml              configuração principal
+      config.toml              providers e papéis de IA (sem segredo)
       mcp.toml                 servidores MCP
       apps.toml                catálogo de aplicações conhecidas
       pricing.toml             tabela de preços por modelo
@@ -190,6 +269,7 @@ WSL — /home/<user>/
       venv/                    ambiente Python do sidecar
       logs/                    core.jsonl rotacionado
       run/voice.sock           IPC com o sidecar
+      secrets.env              chave de API, modo 0600  ← provisório, ver §3
       secrets.age              fallback cifrado (se não houver Credential Manager)
       security-policy.toml     política de segurança  ← somente leitura em execução
       vault/                   quarentena: payload + manifest + evidências
@@ -204,7 +284,16 @@ Windows
 
 ## 6. Configuração
 
-`~/.zordon/config.toml`, recarregável a quente exceto onde indicado:
+`~/.zordon/config.toml`. O instalador deixa um exemplo comentado
+([`config.toml.example`](../../packaging/wsl/config.toml.example)) se o arquivo
+ainda não existir, e nunca sobrescreve o do usuário.
+
+**Implementado hoje: só `[ai.providers]` e `[ai.roles]`**, lidos na inicialização
+([SPEC-004](../specs/core/SPEC-004-providers-configuraveis.md)). As demais seções
+abaixo são o desenho dos próximos marcos. Uma chave escrita no arquivo é
+recusada: ele guarda `env:NOME`, e o valor fica em `~/.zordon/secrets.env`.
+
+O desenho completo, recarregável a quente exceto onde indicado:
 
 ```toml
 [core]
@@ -212,8 +301,19 @@ port = 8777
 bindAddress = "auto"          # auto = 127.0.0.1 em mirrored, 0.0.0.0 em nat
 logLevel = "INFO"
 
+# Providers: quem pode responder. Nunca a chave — só o NOME da variável.
+[ai.providers.anthropic]
+type    = "anthropic"
+api_key = "env:ANTHROPIC_API_KEY"
+
+[ai.providers.ollama]
+type     = "openai-compatible"
+base_url = "http://127.0.0.1:11434/v1"
+
+# Papéis: quem responde o quê. fallback entra se a conversa falhar antes de responder.
 [ai.roles]
-# ver 09 §9.1
+conversation = { provider = "anthropic", model = "claude-opus-5", effort = "high" }
+fallback     = { provider = "ollama",    model = "qwen2.5:7b" }
 
 [ai.budget]
 perTurn = "USD 0.50"
@@ -231,7 +331,8 @@ workspaces = ["D:/projetos", "/home/<user>/dev"]
 readable   = ["D:/", "C:/Users/<user>/Documents"]
 forbidden  = ["C:/Windows", "C:/Program Files", "**/.git/**", "**/.ssh/**",
               "**/node_modules/**", "**/.env", "**/*.pem", "**/*.key",
-              "~/.zordon/security-policy.toml", "~/.zordon/vault/**"]
+              "~/.zordon/security-policy.toml", "~/.zordon/vault/**",
+              "~/.zordon/secrets.env", "~/.zordon/secrets.age", "~/.zordon/key"]
 
 [voice]
 mode = "wake"

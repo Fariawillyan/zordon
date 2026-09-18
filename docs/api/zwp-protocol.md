@@ -253,11 +253,22 @@ Eventos são notificações `method: "event"`. Envelope comum:
     "seq": 48211,
     "ts": "2026-09-17T22:31:07.412Z",
     "topic": "tools",
-    "turnId": "t_91a", "agentId": "system", "runId": "r_22",
-    "payload": { "tool": "mcp:docker.listContainers", "args": {...}, "risk": "GREEN" }
+    "payload": { "turnId": "t_91a", "agentId": "system", "runId": "r_22",
+                 "tool": "mcp:docker.listContainers", "args": {...}, "risk": "GREEN" }
   }
 }
 ```
+
+Os identificadores de correlação (`turnId`, `agentId`, `runId`) viajam **dentro do
+`payload`**, não no envelope. A maioria dos eventos não tem turno nem execução
+associada — um `SYSTEM_METRICS` não tem —, e mantê-los no envelope significaria
+três campos nulos em quase todo evento
+([SPEC-002 §7](../specs/core/SPEC-002-fundacao-zwp-e-nucleo.md#7-interfaces)).
+Filtrar por turno na UI custa o mesmo nos dois formatos.
+
+As chaves de um objeto JSON são serializadas em ordem determinística. Isso não é
+exigência do JSON-RPC: é o que permite versionar amostras douradas e ler um diff
+de protocolo.
 
 ### Catálogo
 

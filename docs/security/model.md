@@ -259,7 +259,9 @@ workspaces = ["D:/projetos", "~/dev"]            # YELLOW para escrita
 readable   = ["D:/", "C:/Users/<u>/Documents"]   # GREEN para leitura
 forbidden  = ["C:/Windows", "C:/Program Files",
               "**/.git/**", "**/.ssh/**", "**/node_modules/**",
-              "**/.env", "**/*.pem", "**/*.key"]  # negado sempre
+              "**/.env", "**/*.env", "**/*.pem", "**/*.key",
+              "~/.zordon/secrets.env", "~/.zordon/secrets.age",
+              "~/.zordon/key"]                    # negado sempre
 ```
 
 `forbidden` vence tudo, inclusive confirmação do usuário via diálogo — mudar
@@ -288,6 +290,28 @@ por ferramenta.
 Fallback quando o host não está disponível: arquivo `~/.zordon/secrets.age`
 cifrado, com a chave em `~/.zordon/key` com modo `0600`. É inferior ao
 Credential Manager e deve ser sinalizado na tela de Diagnostics.
+
+#### Estado atual (provisório)
+
+Nem o Credential Manager nem o `secrets.age` existem ainda. Desde o M1, a chave
+do provider vive em `~/.zordon/secrets.env`, modo `0600`, carregada pelo systemd
+com `EnvironmentFile` — procedimento em
+[Instalação §3](../operations/install.md#chave-de-api-do-provider).
+
+| Garantia | Credential Manager | `secrets.env` hoje |
+|---|---|---|
+| Cifrada em repouso | Sim | **Não** |
+| Legível por outro processo do mesmo usuário | Não | **Sim** |
+| Fora do ambiente do processo | Sim | **Não** (`/proc/<pid>/environ`) |
+| Fora do Git | Sim | Sim (`*.env` no `.gitignore`) |
+| Fora do alcance das ferramentas do Zordon | Sim | Sim, pela lista `forbidden` |
+
+A última linha é a que torna o provisório aceitável: a lacuna é a de qualquer
+variável de ambiente, e não um caminho novo de vazamento. O que **não** pode
+acontecer é o próprio Zordon ler o arquivo e mandá-lo a um provider dentro de um
+prompt — por isso ele entra em `forbidden` antes de o M3 dar ao Zordon acesso a
+arquivos. Quando o Credential Manager chegar, este arquivo deixa de ser lido, e a
+tela de Diagnostics passa a sinalizá-lo como resíduo a remover.
 
 `config.toml` **nunca** contém segredo. Ele contém referências:
 `provider.apiKey = "secret://anthropic-api-key"`.
@@ -355,8 +379,11 @@ por algum caminho não coberto.
 
 ### Arquivos sensíveis
 
-Arquivos que casam com `**/.env`, `**/*.pem`, `**/*.key`, `**/id_rsa*`,
-`**/credentials*` estão em `forbidden`. Se uma ferramenta os retornar
+Arquivos que casam com `**/.env`, `**/*.env`, `**/*.pem`, `**/*.key`,
+`**/id_rsa*`, `**/credentials*` estão em `forbidden`, assim como os segredos do
+próprio Zordon — `~/.zordon/secrets.env`, `secrets.age` e `key`, que nenhum dos
+padrões anteriores cobria (`key` não tem extensão; `secrets.env` não se chama
+`.env`). Se uma ferramenta os retornar
 indiretamente (ex.: `grep` recursivo), o conteúdo é substituído pelo marcador
 antes de entrar no contexto.
 

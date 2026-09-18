@@ -14,6 +14,10 @@
 .env
 .env.*
 !.env.example
+# Arquivo de ambiente com nome próprio (secrets.env, production.env). O serviço
+# guarda a chave de API em ~/.zordon/secrets.env; uma cópia no repositório seria
+# commitada sem este padrão.
+*.env
 
 *.pem
 *.key

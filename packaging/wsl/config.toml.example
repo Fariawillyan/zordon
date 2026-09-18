@@ -1,0 +1,59 @@
+# ~/.zordon/config.toml — configuração do Zordon
+#
+# Instalado pelo install.sh só se você ainda não tiver um. Ele nunca sobrescreve
+# este arquivo.
+#
+# Tudo abaixo está comentado: sem nada ativo, o Zordon usa a API da Anthropic com
+# a ANTHROPIC_API_KEY. Descomente o bloco do que você tem e reinicie o núcleo:
+#
+#     sudo systemctl restart zordon
+#
+# REGRA: este arquivo NUNCA guarda uma chave. Ele guarda o NOME da variável
+# (api_key = "env:NOME"); o valor fica em ~/.zordon/secrets.env, gravado por
+#     packaging/wsl/set-api-key.sh
+# Uma chave escrita aqui é recusada na leitura — de propósito, para este arquivo
+# poder ser copiado ou colado num pedido de ajuda sem vazar nada.
+#
+# Docs: docs/operations/quickstart.md e docs/specs/core/SPEC-004-providers-configuraveis.md
+
+# ─── Providers: quem pode responder ───────────────────────────────────────────
+
+# API da Anthropic (Claude). Paga por uso; precisa de crédito na conta.
+# [ai.providers.anthropic]
+# type    = "anthropic"
+# api_key = "env:ANTHROPIC_API_KEY"
+
+# API da OpenAI. Paga por uso; a assinatura do ChatGPT NÃO inclui a API.
+# [ai.providers.openai]
+# type     = "openai-compatible"
+# base_url = "https://api.openai.com/v1"
+# api_key  = "env:OPENAI_API_KEY"
+
+# Modelo local com Ollama: gratuito e sem internet; os dados não saem da máquina.
+#   sudo systemctl start ollama && ollama pull qwen2.5:7b
+# [ai.providers.ollama]
+# type     = "openai-compatible"
+# base_url = "http://127.0.0.1:11434/v1"
+# max_tokens_param = "max_tokens"
+
+# Qualquer outro serviço compatível com a API da OpenAI (OpenRouter, Groq,
+# DeepSeek, LM Studio…) segue o mesmo molde:
+# [ai.providers.openrouter]
+# type     = "openai-compatible"
+# base_url = "https://openrouter.ai/api/v1"
+# api_key  = "env:OPENROUTER_API_KEY"      # set-api-key.sh --env OPENROUTER_API_KEY
+
+# ─── Papéis: quem responde o quê ──────────────────────────────────────────────
+#
+# conversation  a conversa do dia a dia
+# fallback      a reserva: entra se a conversa falhar por falta de crédito, chave,
+#               limite ou servidor fora do ar — e a tela diz que entrou
+#
+# effort (opcional): low, medium, high, xhigh, max. Deixe de fora para modelos
+# que não raciocinam — alguns servidores recusam o pedido se ele vier.
+#
+# Confira o nome exato do modelo no seu provider; o Zordon não adivinha.
+
+# [ai.roles]
+# conversation = { provider = "anthropic", model = "claude-opus-5", effort = "high" }
+# fallback     = { provider = "ollama",    model = "qwen2.5:7b" }

@@ -82,8 +82,16 @@ funcionam depois de reiniciar o PC.
    /bin/true` (com backoff exponencial, teto de 5 min) antes de tentar de novo.
    Isso cobre o caso de o usuário ter dado `wsl --shutdown`.
 
-3. **`vmIdleTimeout` explícito** no `.wslconfig`, para que o WSL não decida
-   desligar a VM por ociosidade.
+3. **Ociosidade desligada** no `.wslconfig`: `[general] instanceIdleTimeout=-1`
+   e `[wsl2] vmIdleTimeout=-1`, para que o WSL não decida desligar a distro nem
+   a VM por falta de terminal aberto.
+
+   **[medido]** Em 2026-09-18, depois de reiniciar o Windows, a tarefa agendada
+   subiu a distro e o núcleo ficou pronto em 15 s — e o WSL **desligou a distro 17 s
+   depois**, levando o núcleo junto. O culpado é `instanceIdleTimeout` (padrão 15 s,
+   seção `[general]`), e não `vmIdleTimeout` (padrão 60 s, seção `[wsl2]`), que só
+   entra depois que a distro já caiu. Os dois precisam ser `-1`
+   ([documentação da Microsoft](https://learn.microsoft.com/en-us/windows/wsl/wsl-config)).
 
 **Teste de aceitação.** Reiniciar o Windows, não abrir nenhum terminal, esperar
 60 s, dizer "Zordon". Se responder, R1 está resolvido. Este é o item 3 do

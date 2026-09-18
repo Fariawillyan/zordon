@@ -1,0 +1,280 @@
+/*
+ * Zordon Control — tokens de docs/specs/ui/design-system.md §3 e §4.
+ *
+ * Copyright 2026 Willyan Faria — Apache License 2.0
+ *
+ * Superfícies opacas, ciano restrito à identidade, contraste verificado.
+ * Nada anima em repouso.
+ */
+
+.root {
+    -fx-font-family: "Inter", "Segoe UI", sans-serif;
+
+    /* surface */
+    surface-canvas: #0A0D12;
+    surface-panel: #11151D;
+    surface-raised: #181E28;
+    surface-selected: #123345;
+    border-subtle: #232B38;
+    border-control: #60758E;
+
+    /* texto */
+    text-primary: #E6EDF7;
+    text-secondary: #9AA7BC;
+    text-muted: #8796AB;
+    text-on-accent: #0A0D12;
+
+    /* identidade e semântica */
+    accent-default: #3DDCFF;
+    accent-hover: #7CEAFF;
+    accent-pressed: #22B8D8;
+    status-success: #35D48A;
+    status-warning: #F0B341;
+    status-danger: #FF5B6B;
+    status-processing: #A78BFA;
+}
+
+.root-pane,
+.chat-view {
+    -fx-background-color: surface-canvas;
+}
+
+/* ── conversa ──────────────────────────────────────────────────────────── */
+
+.chat-scroll,
+.chat-scroll .viewport,
+.chat-thread {
+    -fx-background-color: surface-canvas;
+}
+
+.chat-scroll {
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.message {
+    -fx-background-color: surface-raised;
+    -fx-background-radius: 12;
+    -fx-padding: 16;
+    -fx-max-width: 720;
+}
+
+.message-user {
+    -fx-background-color: surface-selected;
+}
+
+.message-error {
+    -fx-background-color: surface-raised;
+    -fx-border-color: status-danger;
+    -fx-border-radius: 12;
+    -fx-border-width: 1;
+}
+
+.message-author {
+    -fx-text-fill: text-secondary;
+    -fx-font-size: 12px;
+}
+
+.message-run {
+    -fx-fill: text-primary;
+    -fx-font-size: 15px;
+}
+
+.message-error .message-run {
+    -fx-fill: status-danger;
+}
+
+.message-meta {
+    -fx-text-fill: text-muted;
+    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-padding: 0 0 0 4;
+}
+
+/* ── composer ──────────────────────────────────────────────────────────── */
+
+.composer {
+    -fx-background-color: surface-panel;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 1 0 0 0;
+}
+
+.composer-field {
+    -fx-font-size: 15px;
+    -fx-text-fill: text-primary;
+    -fx-prompt-text-fill: text-secondary;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-color: border-control;
+    -fx-border-width: 1;
+}
+
+.composer-field,
+.composer-field .content {
+    -fx-background-color: surface-raised;
+}
+
+.composer-field:focused {
+    -fx-border-color: accent-default;
+    -fx-border-width: 2;
+}
+
+.composer-field:disabled {
+    -fx-opacity: 1;
+    -fx-border-color: border-subtle;
+    -fx-prompt-text-fill: text-muted;
+}
+
+.thinking-indicator {
+    -fx-text-fill: status-processing;
+    -fx-font-size: 12px;
+}
+
+.button-primary {
+    -fx-background-color: accent-default;
+    -fx-text-fill: text-on-accent;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-background-radius: 8;
+    -fx-min-height: 40;
+    -fx-padding: 0 20 0 20;
+    -fx-cursor: hand;
+}
+
+.button-primary:hover {
+    -fx-background-color: accent-hover;
+}
+
+.button-primary:pressed {
+    -fx-background-color: accent-pressed;
+}
+
+.button-primary:focused {
+    /* Anel externo separado por fundo escuro, como o design system exige. */
+    -fx-border-color: accent-default;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+    -fx-border-insets: -4;
+}
+
+.button-primary:disabled {
+    -fx-opacity: 0.45;
+    -fx-cursor: default;
+}
+
+/* ── barra de estado ───────────────────────────────────────────────────── */
+
+.status-bar {
+    -fx-background-color: surface-panel;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 1 0 0 0;
+}
+
+.core-status {
+    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.core-detail {
+    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: text-muted;
+}
+
+.state-online {
+    -fx-text-fill: status-success;
+}
+
+.state-connecting {
+    -fx-text-fill: status-warning;
+}
+
+.state-offline {
+    -fx-text-fill: status-danger;
+}
+
+/* ── log de atividades ─────────────────────────────────────────────────── */
+
+.logs-view,
+.logs-table {
+    -fx-background-color: surface-canvas;
+}
+
+.logs-table {
+    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-table-cell-border-color: transparent;
+}
+
+.logs-table .column-header,
+.logs-table .column-header-background .filler {
+    -fx-background-color: surface-panel;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 0 0 1 0;
+}
+
+.logs-table .column-header .label {
+    -fx-text-fill: text-secondary;
+    -fx-font-size: 12px;
+}
+
+.logs-table .table-row-cell {
+    -fx-background-color: surface-canvas;
+    -fx-cell-size: 32;
+}
+
+.logs-table .table-row-cell:odd {
+    -fx-background-color: surface-panel;
+}
+
+.logs-table .table-row-cell:selected {
+    -fx-background-color: surface-selected;
+}
+
+.logs-table .table-cell {
+    -fx-text-fill: text-primary;
+    -fx-padding: 0 12 0 12;
+}
+
+/* ── abas ──────────────────────────────────────────────────────────────── */
+
+.tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: surface-panel;
+}
+
+.tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 8 20 8 20;
+}
+
+.tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-background-color: surface-canvas;
+    -fx-border-color: accent-default;
+    -fx-border-width: 0 0 2 0;
+}
+
+.tab-pane > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: text-secondary;
+    -fx-font-size: 14px;
+}
+
+.tab-pane > .tab-header-area > .headers-region > .tab:selected .tab-label {
+    -fx-text-fill: text-primary;
+}
+
+.tab-pane > .tab-header-area {
+    -fx-padding: 0;
+}
+
+.tab-pane:focused > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+    -fx-border-color: accent-default;
+}
+
+/* ── avisos do sistema na conversa ─────────────────────────────────────── */
+
+.message-notice {
+    -fx-text-fill: status-warning;
+    -fx-font-size: 12px;
+    -fx-padding: 4 4 4 4;
+}

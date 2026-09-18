@@ -50,10 +50,13 @@ implementação de produção.
 
 | ID | Nome | Módulo | Status | Marco |
 |---|---|---|---|---|
-| — | _nenhuma SPEC escrita ainda_ | — | — | — |
+| [001](process/SPEC-001-validacao-de-documentacao.md) | Validação de documentação e rastreabilidade no build | process | DONE | M0 |
+| [002](core/SPEC-002-fundacao-zwp-e-nucleo.md) | Fundação: build, contrato ZWP e núcleo que sobe | core | DONE | M0 |
+| [003](core/SPEC-003-chat-com-streaming.md) | Conversa de texto com streaming | core | DONE | M1 |
+| [004](core/SPEC-004-providers-configuraveis.md) | Providers configuráveis e adaptador compatível com OpenAI | core | DONE | M1 |
 
-A primeira SPEC nasce no M0, e a numeração é **global e sequencial**, não por
-módulo. Número nunca é reutilizado, nem quando a SPEC é rejeitada.
+A numeração é **global e sequencial**, não por módulo. Número nunca é
+reutilizado, nem quando a SPEC é rejeitada.
 
 ## Estados
 

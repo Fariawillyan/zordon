@@ -45,6 +45,8 @@ acerto.
 | [0022](ADR-0022-token-observability.md) | Todo consumo de token é medido, orçado e atribuído | Aceito |
 | [0023](ADR-0023-documentacao-como-fonte-de-verdade.md) | Documentação como fonte de verdade, com estrutura e metadados | Aceito |
 | [0024](ADR-0024-auto-modificacao-e-nucleo-de-confianca.md) | O Zordon escreve o próprio código, mas não se instala | Aceito |
+| [0025](ADR-0025-modulo-de-transporte-zwp.md) | Módulo de transporte `zordon-zwp`, separado do contrato | Aceito |
+| [0026](ADR-0026-provider-agnostico.md) | O núcleo não pertence a nenhum provider de IA | Aceito |
 
 ## Decisões que definem o produto
 

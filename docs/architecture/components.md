@@ -52,6 +52,10 @@ zordon/
 │     records do ZWP, eventos, ZPath, enums de risco
 │     dependência: NENHUMA além do JDK
 │
+├── zordon-zwp/                       ◄── compartilhado Windows+WSL
+│     codec JSON-RPC, endpoint.json, cliente ZWP, backoff de reconexão
+│     dependência: zordon-api + JSON + WebSocket  (ADR-0025)
+│
 ├── zordon-core/                      ◄── aplicação Linux
 │     ZwpServer, EventBus, IntentRouter, TurnManager,
 │     composition root (injeção de todos os módulos abaixo)
@@ -84,6 +88,11 @@ zordon/
 └── docs/
 ```
 
+`zordon-zwp` separa **o que viaja** (o contrato, em `zordon-api`) de **como
+viaja** (codec, socket, descoberta). Sem ele, ou o contrato passaria a depender de
+um serializador, ou o mesmo codec existiria duplicado no núcleo e em cada cliente
+— ver [ADR-0025](../adr/ADR-0025-modulo-de-transporte-zwp.md).
+
 `zordon-monitor` e `zordon-voice-client` não estavam no briefing. O primeiro
 existe porque coleta de métricas tem ciclo de vida próprio (amostragem,
 coalescência, watchers) e não pertence nem ao core nem às skills. O segundo
@@ -94,6 +103,7 @@ existe para isolar o protocolo com o sidecar Python.
 | Módulo | Responsável por | **Não** é responsável por |
 |---|---|---|
 | `zordon-api` | Formato dos dados que cruzam processo | Qualquer lógica |
+| `zordon-zwp` | Serializar, conectar, descobrir o núcleo, reconectar | Qualquer regra de produto |
 | `zordon-core` | Compor tudo, servir ZWP, conduzir o turno | Saber como uma ferramenta executa |
 | `zordon-ai` | Falar com modelos, contar tokens e custo | Decidir qual agente usar |
 | `zordon-agents` | Laço do agente, orçamento, delegação | Implementar ferramentas |
@@ -127,7 +137,7 @@ build:
 1. Nada em `zordon-api` importa de fora de `java.*`.
 2. Nenhum módulo de capacidade importa outro módulo de capacidade.
 3. `zordon-desktop` e `zordon-host` não importam de `zordon-core` nem das
-   capacidades — só de `zordon-api` e `zordon-windows-bridge`.
+   capacidades — só de `zordon-api`, `zordon-zwp` e `zordon-windows-bridge`.
 4. Nenhuma classe fora de `zordon-security` chama `ProcessBuilder`,
    `Runtime.exec` ou `Files.delete` diretamente.
 5. Nenhuma classe fora de `zordon-core` publica no `EventBus` sem passar pela
@@ -210,7 +220,8 @@ em `build.gradle.kts`. Dependências previstas:
 
 | Área | Escolha | Por quê |
 |---|---|---|
-| WebSocket (servidor) | Java `HttpServer` + biblioteca WS enxuta, ou Netty | Sem framework web completo; o núcleo não é um servidor HTTP |
+| WebSocket (servidor e cliente) | `org.java-websocket:Java-WebSocket` (MIT) | Biblioteca enxuta, sem framework web; o mesmo código serve os dois lados do ZWP |
+| Configuração | `org.tomlj:tomlj` (Apache-2.0) | Preços, agentes e rotas rápidas são TOML; parser sem reflexão |
 | JSON | Jackson (databind + records) | Maduro, suporte a records, streaming |
 | SQLite | `sqlite-jdbc` (Xerial) | Bundle nativo, suporta extensões (FTS5, sqlite-vec) |
 | Cliente Claude | `com.anthropic:anthropic-java` | SDK oficial; ver [Core](../specs/core/design.md) |
@@ -219,6 +230,12 @@ em `build.gradle.kts`. Dependências previstas:
 | Log | SLF4J + Logback com encoder JSON | Estruturado desde o início |
 | Teste | JUnit 5, AssertJ, ArchUnit, Testcontainers (MCP/Docker) | |
 | Windows nativo | JNA (apenas no `zordon-host`) | Tray, janelas, eventos de energia |
+
+A coluna "Escolha" registra o que o build **usa**, não o que foi cogitado; as
+versões estão em `gradle/libs.versions.toml`. Toda linha nova aqui passa pela
+revisão de dependência de
+[Cadeia de suprimentos §3](../security/supply-chain.md#3-pipeline-obrigatória-de-pr),
+separada de mudança funcional.
 
 Deliberadamente **fora**: Spring, Quarkus, Micronaut. O núcleo é um processo
 long-running com injeção manual no composition root. Um framework de DI aqui

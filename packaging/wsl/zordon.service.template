@@ -1,0 +1,59 @@
+# Unit do núcleo do Zordon.
+#
+# Este arquivo é um TEMPLATE: packaging/wsl/install.sh substitui as marcas @…@ e
+# instala o resultado em /etc/systemd/system/zordon.service.
+#
+# Unit de sistema, não de usuário: `systemctl --user` exige `loginctl
+# enable-linger` e o comportamento de linger no WSL varia entre versões
+# (docs/operations/install.md §3).
+
+[Unit]
+Description=Zordon Core
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+# O serviço só é considerado ativo quando o ZWP está escutando e o endpoint.json
+# foi publicado. Com Type=simple ele apareceria pronto antes de ser utilizável.
+Type=notify
+NotifyAccess=main
+User=@ZORDON_USER@
+Group=@ZORDON_GROUP@
+WorkingDirectory=@ZORDON_INSTALL_DIR@
+ExecStart=@ZORDON_INSTALL_DIR@/bin/zordon-core
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+# Entre aspas: sem elas o systemd separa no espaço e descarta -XX:+UseZGC.
+Environment="JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+UseZGC"
+# Fixado na instalação. O PATH do systemd não enxerga o JDK do usuário (SDKMAN,
+# por exemplo) e cairia no java do sistema, que pode ser de outra versão.
+Environment=JAVA_HOME=@JAVA_HOME@
+Environment=ZORDON_HOME=@ZORDON_DATA_DIR@
+# Resolvido na instalação perguntando ao Windows. NUNCA derive de $USER: o
+# usuário do Windows e o do WSL podem ter nomes diferentes (R21).
+Environment=ZORDON_WINDOWS_HOME=@ZORDON_WINDOWS_HOME@
+Environment=ZORDON_NETWORKING_MODE=@ZORDON_NETWORKING_MODE@
+# Segredos: só o caminho fica na unit, que é legível por qualquer usuário. O "-"
+# deixa o serviço subir sem o arquivo — sem chave, o chat responde dizendo o que
+# falta, em vez de o núcleo inteiro ficar fora do ar.
+EnvironmentFile=-@ZORDON_DATA_DIR@/secrets.env
+
+# Endurecimento: segunda linha de defesa atrás do PermissionEngine. Mesmo um bug
+# que escapasse à validação encontraria o filesystem em somente leitura fora dos
+# caminhos declarados.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# O "-" no caminho do Windows: se o perfil não foi resolvido, ele seria "/.zordon",
+# que não existe, e o systemd recusaria subir o serviço.
+ReadWritePaths=@ZORDON_DATA_DIR@ -@ZORDON_WINDOWS_HOME@/.zordon
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

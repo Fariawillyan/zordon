@@ -31,7 +31,7 @@ demais ([DoD §2](../process/definition-of-done.md#3-o-problema-que-isto-resolve
 |---|---|---|---|
 | **Unidade** | Regra de domínio isolada | `src/test/java` | ms |
 | **Arquitetura** | Invariantes estruturais (ArchUnit) | `zordon-core:test` | ms |
-| **Contrato** | Serialização ZWP, golden files | `zordon-api:test` | ms |
+| **Contrato** | Serialização ZWP, golden files | `zordon-zwp:test` | ms |
 | **Golden** | Classificação de risco, detectores, recuperação RAG | módulo dono | ms |
 | **Integração** | Módulos reais juntos, com fakes nas bordas | `src/integrationTest` | s |
 | **Aceite** | Critérios de aceite de SPEC | `src/acceptanceTest` | s |

@@ -111,6 +111,7 @@ Baseline **DRAFT**, com referência visual e regras para as futuras SPECs JavaFX
 
 | Documento | Responde |
 |---|---|
+| [Primeiros passos](operations/quickstart.md) ★ | Do zero à primeira resposta, para quem vai usar |
 | [Instalação e runbook](operations/install.md) | `.wslconfig`, systemd, autostart, troubleshooting |
 | [Observabilidade](operations/observability.md) | Logs, métricas, tracing, Diagnostics, SLOs |
 | [Uso de tokens](operations/token-usage.md) | Medição, orçamento, dashboard, otimização |

@@ -1,0 +1,1 @@
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":["chat.stream"],"core":{"startId":"01J9X2K7QF8ZP3000000000000","startedAt":"2026-09-17T22:31:04Z","version":"0.1.0"},"heartbeatIntervalMs":10000,"protocol":1,"resumed":false,"sessionId":"s_7f3a"}}
