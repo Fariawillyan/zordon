@@ -1,0 +1,284 @@
+# ==============================================================================
+#  Zordon — .gitignore
+#
+#  O Zordon manipula microfone, conversas, credenciais, cofre de quarentena e
+#  trilha de auditoria. Categorias inteiras de arquivo aqui NUNCA podem ser
+#  publicadas. Ver docs/security/model.md §5 e docs/security/supply-chain.md.
+#
+#  REGRA: ao adicionar um padrão, confirme que ele não esconde algo que DEVE ser
+#  versionado. Padrão amplo demais é tão perigoso quanto padrão ausente — ele
+#  faz um arquivo necessário sumir sem ninguém perceber.
+# ==============================================================================
+
+# ─── Segredos e credenciais ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.csr
+*.p12
+*.pfx
+*.p7b
+*.jks
+*.keystore
+*.truststore
+*.asc
+*.gpg
+*.age
+*.kdbx
+
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+known_hosts
+authorized_keys
+.ssh/
+
+secrets/
+credentials/
+private/
+
+# Chave de cifra do cofre local do Zordon (docs/security/model.md §5)
+/key
+secrets.age
+
+# Credenciais de ferramentas de desenvolvimento
+.netrc
+.npmrc
+.pypirc
+.git-credentials
+.docker/config.json
+.aws/
+.azure/
+.gcloud/
+kubeconfig
+*.kubeconfig
+local.properties
+signing.properties
+*-local.properties
+*-local.yml
+*-local.yaml
+application-local.yml
+application-local.yaml
+application-local.properties
+# ATENÇÃO: gradle.properties NÃO é ignorado de propósito — ele costuma ser
+# versionado. Nunca coloque chave de assinatura nele; use ~/.gradle/.
+
+# ─── Áudio e voz: o dado mais sensível deste projeto ──────────────────────────
+# Gravação de microfone contém conversa do usuário e de quem estiver por perto.
+# A doc prevê gravações para depurar wake word (docs/specs/voice/design.md §6).
+*.wav
+*.pcm
+*.raw
+*.opus
+*.mp3
+*.m4a
+*.flac
+*.ogg
+/recordings/
+/audio/
+/voice-samples/
+/wake-word-samples/
+# Extensões de áudio são bloqueadas GLOBALMENTE, de propósito. Um .wav de demo
+# na documentação é conveniência; um .wav com a voz do usuário commitado por
+# engano é vazamento irreversível de privacidade. Para incluir um áudio
+# legítimo: git add -f docs/assets/audio/demo.wav
+
+# ─── Captura de tela ──────────────────────────────────────────────────────────
+# Screenshot pode conter qualquer coisa que estava na tela: senha, e-mail, token.
+/screenshots/
+/screenshot/
+/capturas/
+/captures/
+screen-*.png
+screen-*.jpg
+screencap-*.*
+# Imagens legítimas de documentação NÃO são bloqueadas: use docs/assets/.
+
+# ─── Dumps de processo: contêm segredos em memória ────────────────────────────
+# Um heap dump da JVM carrega chaves de API em texto claro.
+# Padrões de dump são ancorados na raiz (/core): sem a barra, "core" bloquearia
+# qualquer diretório chamado core — inclusive docs/specs/core/.
+*.hprof
+*.mdmp
+*.dmp
+/core
+/core.*
+hs_err_pid*.log
+replay_pid*.log
+javacore.*
+Snap.*.trc
+heapdump.*
+
+# ─── Estado e configuração local do Zordon ────────────────────────────────────
+# ~/.zordon/ vive fora do repositório; estes padrões pegam cópia ou symlink.
+.zordon/
+/config.toml
+/mcp.toml
+/apps.toml
+/pricing.toml
+/tool-overrides.toml
+/security-policy.toml
+/endpoint.json
+/automations/
+/skills/
+/backups/
+/vault/
+/quarantine/
+baseline.db
+# Configuração padrão distribuída com o instalador DEVE ser versionada:
+!packaging/**/*.toml
+!packaging/**/*.conf
+
+# ─── Bancos: memória, auditoria, uso, RAG ─────────────────────────────────────
+# zordon.db contém conversas, fatos, auditoria e índice vetorial.
+*.db
+*.db-shm
+*.db-wal
+*.db.bak
+*.db.bak.*
+*.sqlite
+*.sqlite3
+zordon.db*
+audit.db*
+
+# ─── Exportações de dados pessoais ────────────────────────────────────────────
+# A UI permite exportar memória, logs e uso (docs/specs/memory/design.md §8).
+memory-export*.json
+memory-export*.csv
+/conversations/
+/sessions/
+/transcripts/
+usage-export*.csv
+diagnostics-*.json
+diagnostics-*.zip
+zordon-diagnostics*
+last-crash.json
+
+# ─── Modelos de ML (baixados por checksum, nunca versionados) ─────────────────
+models/
+*.onnx
+*.gguf
+*.ggml
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.tflite
+
+# ─── Embeddings e índices do RAG ──────────────────────────────────────────────
+/embeddings/
+/index/
+*.faiss
+*.npy
+*.vec
+
+# ─── Runtime: sockets, pid, locks ─────────────────────────────────────────────
+/run/
+*.sock
+*.pid
+*.lock
+!gradle.lockfile
+!package-lock.json
+!poetry.lock
+
+# ─── Java / Gradle ────────────────────────────────────────────────────────────
+build/
+out/
+bin/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradle/libs.versions.toml
+*.class
+*.jar
+!gradle-wrapper.jar
+.kotlin/
+
+# ─── Python (sidecar de voz) ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ─── Empacotamento e distribuição ─────────────────────────────────────────────
+*.msi
+*.exe
+*.deb
+*.rpm
+*.appx
+dist/
+release/
+
+# ─── Windows: exportações que vazam ambiente ──────────────────────────────────
+*.reg
+*.evtx
+*.vhd
+*.vhdx
+*.lnk
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+*.jsonl
+*.log.*
+journal-*.txt
+
+# ─── Testes e cobertura ───────────────────────────────────────────────────────
+test-results/
+jacoco/
+*.exec
+coverage/
+.nyc_output/
+
+# ─── Temporários ──────────────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.bak.*
+*.orig
+*.rej
+*~
+.#*
+\#*#
+
+# ─── IDE e ferramentas ────────────────────────────────────────────────────────
+.idea/
+!.idea/runConfigurations/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+.claude/settings.local.json
+.claude/**/*.local.*
+
+# ─── SO ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.Spotlight-V100
+.Trashes

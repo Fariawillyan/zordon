@@ -1,0 +1,44 @@
+# Proprietários de código do Zordon.
+#
+# Toda linha exige revisão do dono do caminho antes do merge, e a proteção de
+# branch deve ter "Require review from Code Owners" + "Apply to administrators".
+#
+# ATENÇÃO — esta lista É o núcleo de confiança de ADR-0024. Um caminho escrito
+# errado não gera erro: ele apenas deixa de proteger, em silêncio. Ao renomear
+# ou mover qualquer arquivo abaixo, atualize esta lista no mesmo commit.
+#
+# Caminhos de código ainda não existem (o projeto está em fase de documentação).
+# Estão declarados de propósito, para que a proteção já exista no primeiro commit
+# de implementação.
+
+*                                       @willyanfaria
+
+# ── Núcleo de confiança: código ───────────────────────────────────────────────
+/zordon-security/                       @willyanfaria
+/zordon-defense/                        @willyanfaria
+/zordon-api/                            @willyanfaria
+**/ArchitectureTest.java                @willyanfaria
+**/golden/                              @willyanfaria
+
+# ── Núcleo de confiança: norma e decisões ─────────────────────────────────────
+/docs/security/                         @willyanfaria
+/docs/adr/                              @willyanfaria
+/docs/architecture/security.md          @willyanfaria
+/docs/process/self-modification.md      @willyanfaria
+/docs/process/definition-of-done.md     @willyanfaria
+/docs/process/code-standards.md         @willyanfaria
+
+# ── Contratos: mudar aqui quebra os dois lados ────────────────────────────────
+/docs/api/                              @willyanfaria
+/docs/architecture/components.md        @willyanfaria
+
+# ── Cadeia de suprimentos e build ─────────────────────────────────────────────
+/gradle/libs.versions.toml              @willyanfaria
+/.github/workflows/                     @willyanfaria
+/packaging/                             @willyanfaria
+
+# ── Governança ────────────────────────────────────────────────────────────────
+/CODEOWNERS                             @willyanfaria
+/SECURITY.md                            @willyanfaria
+/LICENSE                                @willyanfaria
+/NOTICE                                 @willyanfaria

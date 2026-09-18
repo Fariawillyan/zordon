@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Copyright 2026 Willyan Faria. SPDX-License-Identifier: Apache-2.0 -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Zordon Control — referência desktop</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="preview.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Ir para o conteúdo</a>
+  <div class="review-bar" aria-label="Controles da prévia">
+    <div><strong>DESIGN STUDY <span>01</span></strong><span class="review-note">Prévia ilustrativa · dados fictícios · sem conexão com a máquina</span></div>
+    <div class="review-actions">
+      <label for="scenario">Cenário</label>
+      <select id="scenario"><option value="normal">Operação normal</option><option value="offline">Núcleo offline</option><option value="host">Host indisponível</option><option value="lockdown">Defense Lockdown</option><option value="empty">Primeiro uso</option></select>
+      <button id="permission-example" class="small-button">Exemplo de permissão</button>
+      <button id="design-button" class="small-button">Design system</button>
+    </div>
+  </div>
+  <div class="window-title"><span class="tiny-mark">△</span> Zordon <span class="window-caption">Referência do desktop JavaFX</span><span class="window-decoration" aria-hidden="true">─　 □　 ×</span></div>
+  <header class="app-header">
+    <div class="brand"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4 37 34H3Z M20 13 30 30H10Z M15 26h10l-5-9"/></svg><div>ZORDON<small>SEU ASSISTENTE RESIDENTE</small></div></div>
+    <div class="core-state" id="core-state"><span class="dot"></span><strong>Núcleo conectado</strong><span class="environment">WSL</span></div>
+    <div class="header-actions">
+      <button id="voice-button" class="voice-button"><span data-icon="mic"></span><span id="voice-label">Voz desligada</span></button>
+      <button id="context-button" class="icon-button" aria-label="Abrir contexto" aria-expanded="false" aria-controls="inspector"><span data-icon="panel"></span></button>
+      <button id="alerts-button" class="icon-button" aria-label="Ver notificações ilustrativas"><span data-icon="bell"></span></button>
+      <button id="pause-button" class="quiet-button"><span data-icon="pause"></span><span>Pausar ações</span></button>
+    </div>
+  </header>
+  <div id="global-banner" class="global-banner" role="status" hidden></div>
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <nav id="navigation"></nav>
+      <div class="sidebar-bottom"><button class="nav-item" data-page="Configurações"><span data-icon="settings"></span><span class="nav-label">Configurações</span></button><div class="local-profile"><span class="avatar">W</span><div>Perfil local<small>Este computador</small></div></div></div>
+    </aside>
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow" id="breadcrumb">ESPAÇO DE TRABALHO / CHAT</div><h1 id="page-title">Containers do projeto</h1></div><button id="new-chat" class="quiet-button"><span data-icon="plus"></span><span>Nova conversa</span></button></div>
+      <div class="main-scroll" id="content"></div>
+      <form class="composer" id="composer">
+        <div class="composer-meta"><span class="context-tag"><span data-icon="spark"></span>Agente automático</span><span id="composer-context">Sessão: Containers do projeto</span><span class="local-label">IA remota · exemplo</span></div>
+        <label class="sr-only" for="command">Peça uma tarefa ao Zordon</label>
+        <textarea id="command" rows="2" placeholder="O que vamos fazer agora?" aria-describedby="composer-hint"></textarea>
+        <div class="composer-bottom"><div><button type="button" id="attach-button" class="icon-button" aria-label="Sobre anexos nesta prévia"><span data-icon="attach"></span></button><button type="button" id="composer-voice" class="icon-button" aria-label="Sobre voz nesta prévia"><span data-icon="mic"></span></button><span id="composer-hint">Enter para enviar · Shift + Enter para nova linha</span></div><button class="send-button" id="send-button" type="submit"><span>Enviar</span><span data-icon="arrow"></span></button></div>
+      </form>
+    </main>
+    <aside class="inspector" id="inspector" aria-label="Contexto da sessão" tabindex="-1">
+      <div class="inspector-heading"><span class="eyebrow">CONTEXTO DA SESSÃO</span><button id="close-context" class="icon-button" aria-label="Fechar contexto"><span data-icon="close"></span></button></div>
+      <section class="panel defense-panel"><div class="panel-heading"><h2><span data-icon="shield"></span>Segurança</h2><button class="text-button" data-page="Segurança" aria-label="Ver Segurança">Ver</button></div><div class="health-summary" id="defense-summary"><span class="status success">✓ Sem pendências</span><p>Defense Engine ativo</p></div><div class="panel-foot"><span>Windows Defender</span><span id="defender-state">Ativo</span></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Sistema <span class="tag">WSL</span></h2><button class="text-button" data-page="Sistema" aria-label="Ver Sistema">Detalhes</button></div><div class="metrics" id="metrics"></div><p class="micro" id="sample-label">Amostras ilustrativas · não são medições</p></section>
+      <section class="panel"><div class="panel-heading"><h2>Execução recente</h2><button class="text-button" data-page="Agentes" aria-label="Ver Agentes">Ver</button></div><div class="agent-summary"><span class="agent-icon" data-icon="chip"></span><div><strong>SystemAgent</strong><small>Consulta de containers</small></div></div><div class="panel-foot"><span>Concluída · exemplo</span><span class="success-text">1,2 s</span></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Conexões MCP</h2><button class="text-button" data-page="MCP" aria-label="Ver conexões MCP">Ver todas</button></div><div id="connections"></div></section>
+      <section class="panel usage-panel"><div class="panel-heading"><h2>Uso de hoje</h2><button class="text-button" data-page="Uso" aria-label="Ver Uso">Abrir</button></div><div class="budget-amount">US$ 1,84 <span>/ 10,00</span></div><div class="meter"><span style="width:18.4%"></span></div><p class="micro">~173.720 tokens · estimado · exemplo</p></section>
+      <p class="inspector-caption">Observe o estado.<br>Decida com contexto.</p>
+    </aside>
+  </div>
+  <footer class="statusbar"><span><i class="dot" id="footer-dot"></i><span id="footer-status">Pronto para uma nova tarefa</span></span><span class="footer-detail">Transporte local <b>·</b> Host Windows <b>·</b> Referência visual v0.1</span></footer>
+  <div id="notice" class="notice" role="status" hidden><span id="notice-text"></span><button class="icon-button" id="dismiss-notice" aria-label="Fechar mensagem"><span data-icon="close"></span></button></div>
+  <dialog id="permission-dialog" aria-labelledby="permission-title" aria-describedby="permission-description">
+    <div class="dialog-label"><span class="status danger">⚠ Risco RED</span><span>SIMULAÇÃO · NENHUMA AÇÃO REAL</span></div>
+    <h2 id="permission-title" tabindex="-1">Mover arquivos para a quarentena?</h2>
+    <p id="permission-description">Revise a ação e seus alvos antes de permitir.</p>
+    <dl class="action-facts"><dt>Ferramenta</dt><dd><code>skill:files.quarantine</code></dd><dt>Agente</dt><dd>DeveloperAgent</dd><dt>Alvo</dt><dd><code>WSL: /projetos/exemplo/logs/</code></dd><dt>Reversível</dt><dd class="success-text">Sim · restauração pelo cofre</dd></dl>
+    <details><summary>Ver os 3 arquivos de exemplo</summary><ul class="target-list"><li><code>logs/api-01.log</code></li><li><code>logs/api-02.log</code></li><li><code>logs/api-03.log</code></li></ul></details>
+    <div class="ai-note"><strong>Contexto da IA · não é a descrição da ação</strong><p>“Posso retirar esses logs da pasta do projeto e preservá-los na quarentena.”</p></div>
+    <p class="micro">Nenhum arquivo será apagado. A decisão vale apenas para esta ação.</p>
+    <div class="dialog-footer"><span id="permission-expiry">Expira em 60 s → negar</span><div><button id="deny-button" class="secondary-button" type="button">Negar</button><button id="allow-button" class="danger-button" type="button" disabled>Permitir esta ação</button></div></div>
+  </dialog>
+  <dialog id="design-dialog" aria-labelledby="design-title"><div class="panel-heading"><span class="eyebrow">ZORDON CONTROL / V0.1</span><button id="close-design" class="icon-button" aria-label="Fechar design system"><span data-icon="close"></span></button></div><h2 id="design-title">Precisão com personalidade.</h2><p>Superfícies escuras. Ciano com propósito. O trabalho no centro.</p><div class="swatches" id="swatches"></div><div class="type-specimen"><span class="eyebrow">TIPOGRAFIA</span><h3>Clareza em cada comando.</h3><p>Inter / Segoe UI · Corpo 15 / 24</p><code>mcp:docker.listContainers</code></div><div class="design-rules"><span>Espaço<br><strong>4 · 8 · 16 · 24</strong></span><span>Controles<br><strong>40 unidades</strong></span><span>Texto<br><strong>≥ 4,5:1</strong></span></div><p class="micro">Famílias locais; fallback do sistema quando as fontes não estão instaladas.</p><a class="doc-link" href="../design-system.md">Ler a especificação completa ↗</a></dialog>
+</body>
+</html>
