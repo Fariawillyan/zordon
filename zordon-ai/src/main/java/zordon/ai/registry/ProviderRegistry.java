@@ -15,10 +15,14 @@
  */
 package zordon.ai.registry;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.ai.AiProvider;
@@ -59,11 +63,18 @@ public final class ProviderRegistry {
     private final Map<String, AiProvider> ready;
     private final Map<String, String> unavailable;
     private final ModelPolicy roles;
+    /** Ids prontos na ordem de preferência: assinatura, local, e a chave paga por último. */
+    private final List<String> preference;
+    /** Modelo de cada provider quando o papel não nomeia um; sem entrada, o Zordon não adivinha. */
+    private final Map<String, String> defaultModels;
 
-    private ProviderRegistry(Map<String, AiProvider> ready, Map<String, String> unavailable, ModelPolicy roles) {
+    private ProviderRegistry(Map<String, AiProvider> ready, Map<String, String> unavailable, ModelPolicy roles,
+            List<String> preference, Map<String, String> defaultModels) {
         this.ready = Map.copyOf(ready);
         this.unavailable = Map.copyOf(unavailable);
         this.roles = Objects.requireNonNull(roles, "roles");
+        this.preference = List.copyOf(preference);
+        this.defaultModels = Map.copyOf(defaultModels);
     }
 
     /** Monta os providers da configuração, resolvendo as chaves no ambiente. */
@@ -76,30 +87,43 @@ public final class ProviderRegistry {
             zordon.ai.cli.CliRunner cli) {
         Map<String, AiProvider> ready = new LinkedHashMap<>();
         Map<String, String> unavailable = new LinkedHashMap<>(settings.rejected());
+        Map<String, String> models = new LinkedHashMap<>();
 
-        settings.providers().forEach((id, config) -> {
+        // Na ordem de preferência, e não na do arquivo: quem tenta primeiro é a
+        // assinatura, e a chave paga por uso fica por último (SPEC-018 §3).
+        for (ProviderConfig config : settings.providers().values().stream()
+                .sorted(Comparator.comparingInt(ProviderConfig::precedence).thenComparing(ProviderConfig::id))
+                .toList()) {
             try {
-                ready.put(id, create(config, pricing, environment, cli));
+                ready.put(config.id(), create(config, pricing, environment, cli));
+                if (config.defaultModel() != null) {
+                    models.put(config.id(), config.defaultModel());
+                }
             } catch (IllegalStateException | IllegalArgumentException e) {
-                unavailable.put(id, e.getMessage());
+                unavailable.put(config.id(), e.getMessage());
             }
-        });
-        ProviderRegistry registry = new ProviderRegistry(ready, unavailable, settings.roles());
+        }
+        ProviderRegistry registry = new ProviderRegistry(ready, unavailable, settings.roles(),
+                new ArrayList<>(ready.keySet()), models);
         registry.describe().forEach((id, state) -> log.info("provider {}: {}", id, state));
         return registry;
     }
 
     /** Registro com providers prontos — para testes e composições que não leem configuração. */
     public static ProviderRegistry of(Map<String, AiProvider> providers, ModelPolicy roles) {
-        return new ProviderRegistry(providers, Map.of(), roles);
+        return new ProviderRegistry(providers, Map.of(), roles, new ArrayList<>(providers.keySet()), Map.of());
     }
 
     public Resolution select(ModelRole role) {
         String roleName = role.name().toLowerCase(Locale.ROOT);
         var choice = roles.find(role);
         if (choice.isEmpty()) {
-            return new Resolution.Unresolved(
-                    null, "nenhum modelo configurado para o papel '" + roleName + "' em ~/.zordon/config.toml");
+            // Papel não declarado: em vez de desistir, o Zordon segue a ordem de
+            // preferência. Embeddings fica de fora — modelo de conversa não serve, e
+            // adivinhar aqui daria um vetor errado em silêncio.
+            Optional<Selection> preferred = role == ModelRole.EMBEDDINGS ? Optional.empty() : preferred(null);
+            return preferred.<Resolution>map(Resolution.Selected::new).orElseGet(() -> new Resolution.Unresolved(
+                    null, "nenhum modelo configurado para o papel '" + roleName + "' em ~/.zordon/config.toml"));
         }
         String providerId = choice.get().provider();
         AiProvider provider = ready.get(providerId);
@@ -111,6 +135,29 @@ public final class ProviderRegistry {
                 ? "provider '" + providerId + "' indisponível: " + reason
                 : "o papel '" + roleName + "' aponta para o provider '" + providerId
                         + "', que não existe em ~/.zordon/config.toml");
+    }
+
+    /**
+     * O primeiro provider pronto da ordem de preferência — assinatura, servidor local,
+     * e só então a chave paga por uso (SPEC-018 §3).
+     *
+     * @param excluding o provider que acabou de falhar, ou {@code null}; ele é pulado,
+     *     porque repetir o mesmo daria o mesmo erro
+     */
+    public Optional<Selection> preferred(String excluding) {
+        for (String id : preference) {
+            String model = defaultModels.get(id);
+            if (id.equals(excluding) || model == null) {
+                continue;   // sem modelo conhecido, o Zordon não adivinha o nome
+            }
+            return Optional.of(new Selection(id, ready.get(id), new ModelPolicy.ModelChoice(id, model, null)));
+        }
+        return Optional.empty();
+    }
+
+    /** A ordem em que os providers prontos são tentados, para o diagnóstico e para a tela. */
+    public List<String> preference() {
+        return preference;
     }
 
     /**

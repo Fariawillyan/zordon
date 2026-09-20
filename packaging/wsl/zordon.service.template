@@ -31,6 +31,10 @@ Environment="JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+UseZGC"
 # Fixado na instalação. O PATH do systemd não enxerga o JDK do usuário (SDKMAN,
 # por exemplo) e cairia no java do sistema, que pode ser de outra versão.
 Environment=JAVA_HOME=@JAVA_HOME@
+# Pelo mesmo motivo: o `claude` da assinatura costuma vir do nvm ou de um npm do
+# usuário, que o PATH do systemd não enxerga. Sem isto, o provider por assinatura
+# — o primeiro da ordem de preferência (SPEC-018 §3) — nunca ficaria disponível.
+Environment=PATH=@EXTRA_PATH@/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=ZORDON_HOME=@ZORDON_DATA_DIR@
 # Onde o motor de voz escuta (SPEC-011, ADR-0028).
 Environment=ZORDON_VOICE_SOCKET=/run/zordon-voice/voice.sock

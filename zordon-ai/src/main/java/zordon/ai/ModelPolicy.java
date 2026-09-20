@@ -42,20 +42,28 @@ public record ModelPolicy(Map<ModelRole, ModelChoice> byRole) {
         byRole = Map.copyOf(byRole);
     }
 
-    /** Provider usado quando não há configuração: o do M1, para ninguém perder o que funcionava. */
-    public static final String DEFAULT_PROVIDER = "anthropic";
+    /**
+     * Provider usado quando não há configuração: a assinatura, nunca a chave paga por
+     * uso (SPEC-018 §3). Quem quiser a API declara-a no {@code config.toml}.
+     */
+    public static final String DEFAULT_PROVIDER = "claude";
+
+    /** A API por chave: só a reserva do padrão, e o último da ordem de preferência. */
+    public static final String API_PROVIDER = "anthropic";
 
     /**
      * Padrão sem {@code config.toml}: Opus para julgamento, Haiku para volume
-     * (docs/specs/core/design.md §1). Com configuração, estes valores não valem.
+     * (docs/specs/core/design.md §1), pela assinatura. Com configuração, estes valores
+     * não valem.
      */
     public static ModelPolicy defaults() {
         Map<ModelRole, ModelChoice> roles = new EnumMap<>(ModelRole.class);
-        roles.put(ModelRole.CONVERSATION, new ModelChoice(DEFAULT_PROVIDER, "claude-opus-5", Effort.HIGH));
-        roles.put(ModelRole.ROUTING, new ModelChoice(DEFAULT_PROVIDER, "claude-haiku-4-5", Effort.LOW));
-        roles.put(ModelRole.AGENT_HEAVY, new ModelChoice(DEFAULT_PROVIDER, "claude-opus-5", Effort.XHIGH));
-        roles.put(ModelRole.AGENT_LIGHT, new ModelChoice(DEFAULT_PROVIDER, "claude-sonnet-5", Effort.MEDIUM));
-        roles.put(ModelRole.SUMMARIZE, new ModelChoice(DEFAULT_PROVIDER, "claude-haiku-4-5", Effort.LOW));
+        roles.put(ModelRole.CONVERSATION, new ModelChoice(DEFAULT_PROVIDER, "opus", Effort.HIGH));
+        roles.put(ModelRole.ROUTING, new ModelChoice(DEFAULT_PROVIDER, "haiku", Effort.LOW));
+        roles.put(ModelRole.AGENT_HEAVY, new ModelChoice(DEFAULT_PROVIDER, "opus", Effort.XHIGH));
+        roles.put(ModelRole.AGENT_LIGHT, new ModelChoice(DEFAULT_PROVIDER, "sonnet", Effort.MEDIUM));
+        roles.put(ModelRole.SUMMARIZE, new ModelChoice(DEFAULT_PROVIDER, "haiku", Effort.LOW));
+        roles.put(ModelRole.FALLBACK, new ModelChoice(API_PROVIDER, "claude-sonnet-5", Effort.MEDIUM));
         return new ModelPolicy(roles);
     }
 

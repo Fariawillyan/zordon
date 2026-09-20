@@ -45,4 +45,33 @@ public record ProviderConfig(
     public Optional<SecretRef> apiKeyIfAny() {
         return Optional.ofNullable(apiKey);
     }
+
+    /**
+     * Em que ordem o Zordon tenta este provider: menor tenta primeiro.
+     *
+     * <p>Assinatura antes de tudo, servidor local depois, e chave de API paga por uso
+     * sempre por último (SPEC-018 §3). A regra é do dono do projeto: o que já está pago
+     * não deve ficar parado enquanto uma chave cobra por token.
+     */
+    public int precedence() {
+        return switch (type) {
+            case CLAUDE_CLI -> 0;
+            case OPENAI_COMPATIBLE -> apiKey == null ? 1 : 2;
+            case ANTHROPIC -> 2;
+        };
+    }
+
+    /**
+     * O modelo usado quando o papel não nomeia um.
+     *
+     * <p>{@code null} quando o nome é do servidor e o Zordon não tem como adivinhar —
+     * é o caso de qualquer compatível com a OpenAI.
+     */
+    public String defaultModel() {
+        return switch (type) {
+            case CLAUDE_CLI -> "sonnet";
+            case ANTHROPIC -> "claude-sonnet-5";
+            case OPENAI_COMPATIBLE -> null;
+        };
+    }
 }

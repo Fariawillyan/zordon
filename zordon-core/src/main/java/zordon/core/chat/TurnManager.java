@@ -325,7 +325,7 @@ public final class TurnManager {
                     attempt(session, turn, intent, handle, reserve.get(), new Fallback(from, unresolved.reason()));
                 } else {
                     running.remove(turn);
-                    publishError(turn, AiException.Kind.NO_CREDENTIALS, unresolved.reason(), false);
+                    publishError(turn, AiException.Kind.NO_CREDENTIALS, noProvider(unresolved.reason()), false);
                 }
             }
         }
@@ -541,12 +541,31 @@ public final class TurnManager {
         }
     }
 
+    /**
+     * Quando ninguém pode responder, o motivo de cada provider — inclusive o da
+     * reserva. Dizer só o primeiro deixaria o usuário arrumando o que não bastava.
+     */
+    private String noProvider(String reason) {
+        String detail = providers.describe().entrySet().stream()
+                .filter(entry -> entry.getValue().startsWith("indisponível"))
+                .map(entry -> entry.getKey() + ": " + entry.getValue().replace("indisponível — ", ""))
+                .collect(java.util.stream.Collectors.joining("; "));
+        return detail.isBlank() ? reason
+                : "Nenhum provider disponível — " + detail
+                        + ". A assinatura é a primeira opção; a chave de API, a última.";
+    }
+
     /** A reserva só serve se for outra coisa: o mesmo provider e modelo falhariam igual. */
     private Optional<Selection> reserveFor(Selection failed) {
-        if (!(providers.select(ModelRole.FALLBACK) instanceof Resolution.Selected selected)) {
+        // Sem papel `fallback` declarado, vale a ordem de preferência: o próximo da
+        // fila, com a chave paga por uso em último (SPEC-018 §3).
+        Optional<Selection> candidate = providers.select(ModelRole.FALLBACK) instanceof Resolution.Selected selected
+                ? Optional.of(selected.selection())
+                : providers.preferred(failed == null ? null : failed.providerId());
+        if (candidate.isEmpty()) {
             return Optional.empty();
         }
-        Selection reserve = selected.selection();
+        Selection reserve = candidate.get();
         boolean same = failed != null
                 && reserve.providerId().equals(failed.providerId())
                 && reserve.choice().model().equals(failed.choice().model());

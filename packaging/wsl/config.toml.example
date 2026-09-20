@@ -3,8 +3,11 @@
 # Instalado pelo install.sh só se você ainda não tiver um. Ele nunca sobrescreve
 # este arquivo.
 #
-# Tudo abaixo está comentado: sem nada ativo, o Zordon usa a API da Anthropic com
-# a ANTHROPIC_API_KEY. Descomente o bloco do que você tem e reinicie o núcleo:
+# Tudo abaixo está comentado: sem nada ativo, o Zordon fala pela ASSINATURA do
+# Claude (o `claude` CLI) e só cai na API por chave se a assinatura não estiver
+# disponível. Essa é a ordem de preferência — assinatura, servidor local, e a
+# chave paga por uso por último (SPEC-018 §3). Descomente o bloco do que você
+# tem e reinicie o núcleo:
 #
 #     sudo systemctl restart zordon
 #
@@ -18,7 +21,19 @@
 
 # ─── Providers: quem pode responder ───────────────────────────────────────────
 
-# API da Anthropic (Claude). Paga por uso; precisa de crédito na conta.
+# PRIMEIRA OPÇÃO — assinatura do Claude (Pro/Max) pelo `claude` CLI: sem chave
+# nenhuma aqui, e sem cobrança por token. O CLI roda sem ferramentas e sem
+# memória própria, pelo caminho auditado do Zordon
+# (docs/specs/core/SPEC-018-provider-por-assinatura-claude-cli.md).
+# Antes: npm i -g @anthropic-ai/claude-code && claude   (para entrar)
+# [ai.providers.claude]
+# type = "claude-cli"
+#
+# Para usar na conversa, em [ai.roles] (mais abaixo):
+#   conversation = { provider = "claude", model = "sonnet" }
+
+# ÚLTIMO RECURSO — API da Anthropic (Claude). Paga por uso; precisa de crédito
+# na conta. O Zordon só chega aqui se a assinatura não estiver disponível.
 # [ai.providers.anthropic]
 # type    = "anthropic"
 # api_key = "env:ANTHROPIC_API_KEY"
@@ -35,16 +50,6 @@
 # type     = "openai-compatible"
 # base_url = "http://127.0.0.1:11434/v1"
 # max_tokens_param = "max_tokens"
-
-# Assinatura do Claude (Pro/Max) pelo `claude` CLI: sem chave nenhuma aqui.
-# O CLI roda sem ferramentas e sem memória própria, pelo caminho auditado do
-# Zordon (docs/specs/core/SPEC-018-provider-por-assinatura-claude-cli.md).
-# Antes: npm i -g @anthropic-ai/claude-code && claude   (para entrar)
-# [ai.providers.claude]
-# type = "claude-cli"
-#
-# Para usar na conversa, em [ai.roles] (mais abaixo):
-#   conversation = { provider = "claude", model = "sonnet" }
 
 # Qualquer outro serviço compatível com a API da OpenAI (OpenRouter, Groq,
 # DeepSeek, LM Studio…) segue o mesmo molde:
@@ -64,9 +69,13 @@
 #
 # Confira o nome exato do modelo no seu provider; o Zordon não adivinha.
 
+# Sem esta seção vale a ordem de preferência: assinatura primeiro, servidor
+# local depois, chave paga por uso por último. Declarar um papel aqui é dizer
+# "eu quero este mesmo" — e aí a ordem não se aplica a ele.
+
 # [ai.roles]
-# conversation = { provider = "anthropic", model = "claude-opus-5", effort = "high" }
-# fallback     = { provider = "ollama",    model = "qwen2.5:7b" }
+# conversation = { provider = "claude",    model = "opus" }
+# fallback     = { provider = "anthropic", model = "claude-sonnet-5" }
 
 # ─── Servidores MCP (docs/specs/mcp/SPEC-020-cliente-mcp.md) ──────────────────
 #

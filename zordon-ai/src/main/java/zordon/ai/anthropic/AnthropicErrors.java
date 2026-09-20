@@ -86,7 +86,9 @@ final class AnthropicErrors {
 
         if (status == 401) {
             return new AiException(AiException.Kind.NO_CREDENTIALS,
-                    "A API recusou a chave (401). Troque-a com packaging/wsl/set-api-key.sh.", service);
+                    "A API recusou a chave (401). O caminho preferido é a assinatura: entre com `claude` no WSL"
+                            + " e a conversa passa por ela. Se quiser mesmo a API, troque a chave com"
+                            + " packaging/wsl/set-api-key.sh.", service);
         }
         if (status == 403) {
             return new AiException(AiException.Kind.NO_CREDENTIALS,

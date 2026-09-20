@@ -34,11 +34,16 @@ class AiSettingsTest {
 
     @AcceptanceCriteria("SPEC-004/CA-1")
     @Test
-    void semArquivoOComportamentoEhODoM1() {
+    void semArquivoAAssinaturaRespondeEAChaveFicaDeReserva() {
         AiSettings settings = AiSettings.load(home.resolve("config.toml"));
 
-        assertThat(settings.providers()).containsOnlyKeys("anthropic");
-        assertThat(settings.roles().forRole(ModelRole.CONVERSATION).model()).isEqualTo("claude-opus-5");
+        assertThat(settings.providers()).containsOnlyKeys("claude", "anthropic");
+        assertThat(settings.providers().get("claude").precedence())
+                .as("a assinatura é tentada antes da chave paga por uso")
+                .isLessThan(settings.providers().get("anthropic").precedence());
+        assertThat(settings.roles().forRole(ModelRole.CONVERSATION).provider()).isEqualTo("claude");
+        assertThat(settings.roles().forRole(ModelRole.CONVERSATION).model()).isEqualTo("opus");
+        assertThat(settings.roles().forRole(ModelRole.FALLBACK).provider()).isEqualTo("anthropic");
     }
 
     @AcceptanceCriteria("SPEC-004/CA-2")
@@ -108,7 +113,7 @@ class AiSettingsTest {
     void arquivoComErroDeSintaxeNaoImpedeONucleoDeSubir() throws Exception {
         AiSettings settings = AiSettings.load(write("[ai.providers.x\ntype = "));
 
-        assertThat(settings.providers()).containsOnlyKeys("anthropic");
+        assertThat(settings.providers()).containsOnlyKeys("claude", "anthropic");
     }
 
     @Test
@@ -123,7 +128,8 @@ class AiSettingsTest {
 
     @Test
     void configSemSecaoDeIaUsaOPadrao() throws Exception {
-        assertThat(AiSettings.load(write("[core]\nport = 8777\n")).providers()).containsOnlyKeys("anthropic");
+        assertThat(AiSettings.load(write("[core]\nport = 8777\n")).providers())
+                .containsOnlyKeys("claude", "anthropic");
     }
 
     /** O exemplo que o instalador copia. Testado porque exemplo que não funciona é documentação falsa. */
@@ -135,7 +141,7 @@ class AiSettingsTest {
         // Reinstalar copia este arquivo; se ele ativasse algo, mudaria o modelo de quem já usa.
         AiSettings settings = AiSettings.load(EXAMPLE);
 
-        assertThat(settings.providers()).containsOnlyKeys("anthropic");
+        assertThat(settings.providers()).containsOnlyKeys("claude", "anthropic");
         assertThat(settings.rejected()).isEmpty();
     }
 

@@ -53,11 +53,20 @@ public record AiSettings(
         rejected = Map.copyOf(rejected);
     }
 
-    /** Sem configuração, o comportamento do M1: Anthropic pela {@code ANTHROPIC_API_KEY}. */
+    /**
+     * Sem configuração: a assinatura do Claude responde, e a API por chave fica de
+     * reserva (SPEC-018 §3). Os dois entram prontos para serem escolhidos; qual deles
+     * atende cada papel é a ordem de preferência que decide.
+     */
     public static AiSettings defaults() {
-        ProviderConfig anthropic = new ProviderConfig(
-                ModelPolicy.DEFAULT_PROVIDER, ProviderType.ANTHROPIC, null, new SecretRef("ANTHROPIC_API_KEY"), null);
-        return new AiSettings(Map.of(anthropic.id(), anthropic), Map.of(), ModelPolicy.defaults());
+        ProviderConfig subscription = new ProviderConfig(
+                ModelPolicy.DEFAULT_PROVIDER, ProviderType.CLAUDE_CLI, null, null, null);
+        ProviderConfig api = new ProviderConfig(
+                ModelPolicy.API_PROVIDER, ProviderType.ANTHROPIC, null, new SecretRef("ANTHROPIC_API_KEY"), null);
+        Map<String, ProviderConfig> providers = new LinkedHashMap<>();
+        providers.put(subscription.id(), subscription);
+        providers.put(api.id(), api);
+        return new AiSettings(providers, Map.of(), ModelPolicy.defaults());
     }
 
     public static AiSettings load(Path file) {

@@ -149,6 +149,15 @@ main() {
   install_config_example
   configure_api_key
 
+  # O bin do npm do usuário (nvm, por exemplo) entra no PATH da unit: é de lá que
+  # vem o `claude` da assinatura, que o PATH do systemd não enxergaria.
+  local extra_path=""
+  local npm_bin
+  if npm_bin="$(command -v npm 2>/dev/null)"; then
+    extra_path="$(dirname "${npm_bin}"):"
+    log "PATH do serviço inclui ${extra_path%:} (para o \`claude\` da assinatura)"
+  fi
+
   log "instalando a unit systemd"
   sed -e "s|@ZORDON_USER@|${USER}|g" \
       -e "s|@ZORDON_GROUP@|$(id -gn)|g" \
@@ -157,6 +166,7 @@ main() {
       -e "s|@ZORDON_WINDOWS_HOME@|${windows_home}|g" \
       -e "s|@ZORDON_NETWORKING_MODE@|${networking_mode}|g" \
       -e "s|@JAVA_HOME@|${java_home}|g" \
+      -e "s|@EXTRA_PATH@|${extra_path}|g" \
       "${REPO_ROOT}/packaging/wsl/zordon.service.template" | sudo tee "${UNIT_PATH}" >/dev/null
 
   sudo systemctl daemon-reload

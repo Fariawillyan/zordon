@@ -49,13 +49,17 @@ class SystemMethodsTest {
         assertThat(core).containsKeys("version", "startId", "startedAt", "uptimeSeconds");
         assertThat((Map<String, Object>) diagnostics.get("providers"))
                 .containsEntry("anthropic", "indisponível — defina ANTHROPIC_API_KEY (em ~/.zordon/secrets.env para o serviço)");
-        Map<String, Object> conversation =
-                (Map<String, Object>) ((Map<String, Object>) diagnostics.get("roles")).get("conversation");
+        Map<String, Object> roles = (Map<String, Object>) diagnostics.get("roles");
+        // A conversa é da assinatura; a chave de API só aparece como reserva (SPEC-018 §3).
+        Map<String, Object> conversation = (Map<String, Object>) roles.get("conversation");
         assertThat(conversation)
-                .containsEntry("provider", "anthropic")
-                .containsEntry("model", "claude-opus-5")
+                .containsEntry("provider", "claude")
+                .containsEntry("model", "opus")
                 .containsEntry("ready", false);
-        assertThat(conversation.get("reason").toString()).contains("ANTHROPIC_API_KEY");
+        assertThat(conversation.get("reason").toString()).contains("claude CLI");
+        assertThat((Map<String, Object>) roles.get("fallback"))
+                .containsEntry("provider", "anthropic")
+                .containsEntry("ready", false);
     }
 
     @AcceptanceCriteria("SPEC-005/CA-12")

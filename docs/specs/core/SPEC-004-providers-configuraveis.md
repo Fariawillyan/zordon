@@ -91,7 +91,7 @@ fora de `zordon.ai.anthropic`.
 
 ```text
 inicialização
-  lê config.toml (ou usa o padrão: anthropic + ANTHROPIC_API_KEY)
+  lê config.toml (ou usa o padrão: claude por assinatura, com anthropic de reserva)
   para cada provider: resolve a chave pela referência env:
       sem chave → provider indisponível, com o motivo guardado
   registra no log o estado de cada provider
@@ -244,7 +244,9 @@ externa ([Testes §11](../../testing/strategy.md#11-casos-de-erro)).
 ## 15. Critérios de aceite
 
 - `CA-1` Dado nenhum `config.toml`, então o papel `conversation` é atendido pela
-  Anthropic com a `ANTHROPIC_API_KEY`, como no M1.
+  assinatura do Claude, e a API por `ANTHROPIC_API_KEY` fica como reserva — a
+  ordem de preferência da [SPEC-018 §3](SPEC-018-provider-por-assinatura-claude-cli.md#3-escopo),
+  que substituiu o padrão do M1 em 2026-09-19.
 - `CA-2` Dado um `config.toml` com providers e papéis, então cada papel resolve
   para o provider, o modelo e o esforço configurados.
 - `CA-3` Dada uma chave escrita literalmente no `config.toml`, então o provider é

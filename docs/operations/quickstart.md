@@ -101,13 +101,18 @@ O Zordon não pertence a nenhum fornecedor: você escolhe quem responde em
 opção. Descomente o bloco do que você tem e reinicie o núcleo com
 `sudo systemctl restart zordon`.
 
+A ordem de preferência é fixa: **assinatura primeiro, servidor local depois, e
+chave de API paga por uso por último** (SPEC-018 §3). Sem nada configurado, o
+Zordon tenta a assinatura e só cai na chave se ela não estiver disponível.
+
 | Você tem | O que fazer |
 |---|---|
-| API da **Anthropic** com crédito | Nada: é o padrão. Só a chave: `packaging/wsl/set-api-key.sh anthropic` |
-| API da **OpenAI** com crédito | Descomente o bloco `openai` e o papel `conversation` apontando para ele; `packaging/wsl/set-api-key.sh openai` |
+| Assinatura do **Claude** (Pro/Max) | Nada no config: é o padrão. Só instale e entre uma vez: `npm i -g @anthropic-ai/claude-code && claude` |
 | **Nada pago** | Modelo local com Ollama — veja abaixo. Gratuito, e a conversa não sai da sua máquina |
+| API da **Anthropic** com crédito | É o último recurso, já configurado como reserva: só a chave, com `packaging/wsl/set-api-key.sh anthropic` |
+| API da **OpenAI** com crédito | Descomente o bloco `openai` e o papel `conversation` apontando para ele; `packaging/wsl/set-api-key.sh openai` |
 | OpenRouter, Groq, DeepSeek, LM Studio… | Mesmo molde do bloco `openrouter` do exemplo; `set-api-key.sh --env NOME_DA_VARIAVEL` |
-| Assinatura do **Claude** ou do **ChatGPT** | Ainda não: é a próxima fase. A assinatura não inclui a API — são produtos separados |
+| Assinatura do **ChatGPT** | Ainda não: depende da sandbox ([ADR-0031](../adr/ADR-0031-sandbox-para-codigo-de-agente.md)) |
 
 **Modelo local, de graça:**
 
@@ -235,7 +240,7 @@ nunca apaga arquivos.
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
 | Janela mostra **NÚCLEO OFFLINE** | Serviço parado ou com erro | `systemctl status zordon`; o motivo está em `journalctl -u zordon -n 50` |
-| "A API recusou a chave" | Chave errada, incompleta ou revogada | `packaging/wsl/set-api-key.sh <provider>` com uma chave nova |
+| "A API recusou a chave" | Chave errada, incompleta ou revogada | Prefira a assinatura (`claude` no WSL); se quiser mesmo a API, `packaging/wsl/set-api-key.sh <provider>` com uma chave nova |
 | "A conta da API está sem crédito" | Chave certa, conta sem saldo | Comprar crédito no console do provider — ou configurar o Ollama como reserva |
 | "provider 'x' indisponível: defina NOME" | A chave daquele provider não foi gravada | `packaging/wsl/set-api-key.sh --env NOME` (ou `anthropic`/`openai`) |
 | "Nada respondendo em http://127.0.0.1:11434" | O Ollama está parado | `sudo systemctl start ollama` |
