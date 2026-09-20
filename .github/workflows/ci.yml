@@ -75,4 +75,9 @@ jobs:
           java-version: '25'
       # Mitigação declarada em ADR-0002: garantir que o build funciona do zero,
       # e não só com o cache quente de quem já compilou.
-      - run: ./gradlew verifyAll --no-build-cache --no-configuration-cache
+      # Com tela virtual, como o job principal: sem ela, os testes de JavaFX
+      # eram pulados e este job aprovava uma superfície menor.
+      - name: Display virtual
+        run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+
+      - run: xvfb-run -a ./gradlew verifyAll --no-build-cache --no-configuration-cache

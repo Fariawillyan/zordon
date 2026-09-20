@@ -27,12 +27,14 @@ import javafx.scene.control.CheckBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import zordon.api.trace.AcceptanceCriteria;
 import zordon.desktop.shell.DesktopState;
 import zordon.desktop.shell.SecurityPresentation;
 import zordon.desktop.shell.SecurityPresentation.Choice;
 
 /** O diálogo de permissão, os avisos e o lockdown na tela (SPEC-015). */
+@EnabledIfEnvironmentVariable(named = "DISPLAY", matches = ".+")
 class PermissionUiTest {
 
     @BeforeAll
