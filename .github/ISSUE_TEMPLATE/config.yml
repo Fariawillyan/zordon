@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Vulnerabilidade de segurança
+    url: https://github.com/Fariawillyan/zordon/security/advisories/new
+    about: Canal privado. Nunca relate falha de segurança numa issue pública.
+  - name: Primeiros passos e problemas de instalação
+    url: https://github.com/Fariawillyan/zordon/blob/main/docs/operations/quickstart.md
+    about: A maior parte dos tropeços de instalação está documentada aqui.

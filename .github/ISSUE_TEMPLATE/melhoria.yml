@@ -1,0 +1,40 @@
+name: Melhoria
+description: Uma capacidade nova ou uma mudança de comportamento
+labels: ["melhoria"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        O Zordon é escrito por SPEC: comportamento novo costuma virar uma, antes
+        do código ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)). Descrever bem
+        o problema aqui é metade desse trabalho.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que problema isso resolve
+      description: O problema de quem usa — não a solução que você já imaginou.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você propõe
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: O que você considerou e descartou
+      description: E por quê. Ajuda a não repetirmos o caminho.
+
+  - type: checkboxes
+    id: seguranca
+    attributes:
+      label: Segurança
+      options:
+        - label: Isto permitiria ao Zordon fazer algo que hoje ele não pode fazer na máquina
+        - label: Isto envolve segredo, credencial ou dado pessoal
+        - label: Isto muda o que é dito ao usuário sobre uma ação autônoma

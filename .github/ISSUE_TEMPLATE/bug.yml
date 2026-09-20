@@ -1,0 +1,68 @@
+name: Defeito
+description: Algo não funciona como o projeto promete
+labels: ["defeito"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Não relate vulnerabilidade de segurança aqui.** Use o
+        [SECURITY.md](../blob/main/SECURITY.md): há canal privado.
+
+  - type: textarea
+    id: o-que-aconteceu
+    attributes:
+      label: O que aconteceu
+      description: O comportamento que você viu, não o que supõe ser a causa.
+    validations:
+      required: true
+
+  - type: textarea
+    id: o-que-esperava
+    attributes:
+      label: O que você esperava
+      description: E, se souber, onde o projeto promete isso (SPEC, README, a própria tela).
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduzir
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: componente
+    attributes:
+      label: Onde
+      options:
+        - Núcleo (WSL)
+        - Janela (JavaFX)
+        - Host do Windows
+        - Motor de voz
+        - Instalação
+        - Não sei
+    validations:
+      required: true
+
+  - type: textarea
+    id: ambiente
+    attributes:
+      label: Ambiente
+      description: "Saída de: `java -version`, a distro do WSL, a versão do Windows e a do Zordon."
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log ou diagnóstico
+      description: |
+        `journalctl -u zordon -n 100` e, se for de voz, `journalctl -u zordon-voice -n 100`.
+        **Leia antes de colar**: o log é redigido, mas caminho e nome de máquina podem aparecer.
+      render: shell
