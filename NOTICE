@@ -16,5 +16,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 --------------------------------------------------------------------------------
+This product bundles the following fonts, each under the SIL Open Font License,
+Version 1.1. The full license texts are distributed alongside the font files in
+zordon-desktop/src/main/resources/zordon/desktop/fonts/.
+
+  Inter 4.1          Copyright (c) 2016 The Inter Project Authors
+                     https://github.com/rsms/inter
+  JetBrains Mono 2.304  Copyright 2020 The JetBrains Mono Project Authors
+                     https://github.com/JetBrains/JetBrainsMono
+
+--------------------------------------------------------------------------------
+Wake word "Zordon" (voice/models/zordon-wake-v1.npz, SPEC-013, ADR-0038).
+The detector uses feature models and code adapted from openWakeWord
+(https://github.com/dscripka/openWakeWord, Apache License 2.0), including
+Google's speech_embedding model (Apache License 2.0). The classifier was trained
+by this project with data under the following licenses:
+
+  Multilingual LibriSpeech, Portuguese and Italian   CC BY 4.0  Pratap et al., Meta AI
+                     https://www.openslr.org/94/
+  LibriSpeech train-clean-100   CC BY 4.0  Panayotov, Chen, Povey, Khudanpur
+                     https://www.openslr.org/12/
+  LibriTTS-R (via Piper en_US-libritts_r-medium)  CC BY 4.0  Koizumi et al.
+                     https://www.openslr.org/141/
+  TTS-Portuguese Corpus (via Piper pt_BR-edresson-low)  CC BY 4.0  Edresson Casanova
+                     https://github.com/Edresson/TTS-Portuguese-Corpus
+  Piper voices pt_BR faber, cadu, jeff (datasets CC0)
+                     https://huggingface.co/rhasspy/piper-voices
+
 Third-party components are listed in docs/security/supply-chain.md,
 in gradle/libs.versions.toml and in the SBOM published with each release.

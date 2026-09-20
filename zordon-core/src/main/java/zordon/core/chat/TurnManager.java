@@ -59,6 +59,10 @@ public final class TurnManager {
 
     private static final Logger log = LoggerFactory.getLogger(TurnManager.class);
     private static final int MAX_OUTPUT_TOKENS = 8_192;
+    /** Tetos do laço de ferramentas (Segurança §8, SPEC-019 CA-3). */
+    static final int MAX_TOOL_CALLS = 25;
+    static final int MAX_STEPS = 15;
+    static final String TOOL_LIMIT_NOTICE = "Parei no limite de ferramentas deste turno.";
 
     /**
      * Falhas que outro provider pode resolver. Pedido inválido e recusa ficam de
@@ -94,6 +98,13 @@ public final class TurnManager {
     private static final class RunningTurn {
         private volatile AiStream stream;
         private volatile boolean cancelled;
+        /** De onde veio o turno ({@code voice} ou {@code text}): a origem das ferramentas que ele chamar. */
+        private volatile String source = "text";
+        /** O agente do turno (SPEC-022); {@code null} sem registro de agentes. */
+        private volatile zordon.core.agents.TurnScope scope;
+        private volatile String notice;
+        private int toolCalls;
+        private int steps;
 
         void attach(AiStream attached) {
             stream = attached;
@@ -130,18 +141,40 @@ public final class TurnManager {
 
     /** Aceita a entrada e devolve imediatamente: a resposta chega por eventos. */
     public TurnId send(SessionId session, String text, String source) {
+        return send(session, text, source, null);
+    }
+
+    /** @param agent o agente escolhido na tela; forçar sempre vence o roteador (Agentes §6) */
+    public TurnId send(SessionId session, String text, String source, String agent) {
         TurnId turn = new TurnId("t_" + Long.toHexString(System.nanoTime()));
         conversations.append(session, new StoredMessage("user", text, turn, Instant.now()));
         bus.publish(EventType.USER_COMMAND, Map.of(
                 "turnId", turn.value(), "sessionId", session.value(), "text", text, "source", source));
 
-        switch (router.route(text)) {
+        Intent routed = router.route(text);
+        if (agent != null && !agent.isBlank() && routed instanceof Intent.Model) {
+            routed = new Intent.Model(agent);
+        }
+        switch (routed) {
             case Intent.Immediate immediate -> answerLocally(session, turn, immediate);
             case Intent.CancelCurrent cancel -> cancelEverything(session, turn);
+            case Intent.Tool tool -> Thread.ofVirtual().name("zordon-turn-" + turn.value())
+                    .start(() -> useTool(session, turn, tool, source));
             case Intent.Model model -> {
                 // Registrado aqui, na thread de quem pediu, antes de qualquer outra
                 // começar: a partir deste ponto o turno já é cancelável.
                 RunningTurn handle = new RunningTurn();
+                handle.source = source;
+                zordon.core.agents.AgentRegistry registry = agents;
+                if (registry != null) {
+                    zordon.core.agents.AgentProfile profile = registry.find(model.agentId()).orElse(null);
+                    if (profile == null) {
+                        handle.notice = "não conheço o agente " + model.agentId() + "; quem responde é o Zordon";
+                        profile = registry.general();
+                    }
+                    handle.scope = zordon.core.agents.TurnScope.of(profile, "voice".equals(source)
+                            ? zordon.api.security.RequestOrigin.VOICE : zordon.api.security.RequestOrigin.UI, nanos);
+                }
                 running.put(turn, handle);
                 Thread.ofVirtual()
                         .name("zordon-turn-" + turn.value())
@@ -185,6 +218,82 @@ public final class TurnManager {
                 "costUsd", "0"));
     }
 
+    /** Quem executa as ferramentas; sem ele, a rota avisa em vez de sumir. */
+    public interface ToolInvoker {
+        java.util.concurrent.CompletableFuture<String> invoke(String tool, Map<String, Object> args, String source,
+                String turnId);
+    }
+
+    private volatile ToolCaller caller;
+
+    /** Liga as ferramentas ao modelo (SPEC-019). Sem isto, o modelo só responde texto. */
+    public void onToolCalls(ToolCaller toolCaller) {
+        this.caller = java.util.Objects.requireNonNull(toolCaller, "toolCaller");
+    }
+
+    /** O que a memória sabe sobre o pedido, como bloco de dados (SPEC-021 CA-2). Vazio se nada. */
+    public interface Recall {
+        String about(String userText);
+    }
+
+    /** Um turno respondido pelo modelo, para a destilação (SPEC-021 CA-5). */
+    public record Completed(SessionId session, TurnId turn, String userText, String answer, boolean tainted) {}
+
+    private volatile Recall recall = text -> "";
+    private volatile java.util.function.Consumer<Completed> completed = done -> { };
+
+    private volatile zordon.core.agents.AgentRegistry agents;
+    private volatile java.util.function.LongSupplier nanos = System::nanoTime;
+    private volatile java.util.function.BiConsumer<zordon.core.agents.AgentProfile, String> suspended =
+            (agent, reason) -> { };
+
+    /** Agentes como configuração (SPEC-022). Sem isto, o turno é do agente geral sem teto próprio. */
+    public void onAgents(zordon.core.agents.AgentRegistry registry) {
+        this.agents = java.util.Objects.requireNonNull(registry, "registry");
+    }
+
+    /** O disjuntor de um turno abriu: o usuário precisa saber (SPEC-022 CA-5). */
+    public void onSuspended(java.util.function.BiConsumer<zordon.core.agents.AgentProfile, String> listener) {
+        this.suspended = java.util.Objects.requireNonNull(listener, "listener");
+    }
+
+    /** O relógio do orçamento de tempo dos agentes. Trocado só nos testes de tempo de parede. */
+    public void nanoClock(java.util.function.LongSupplier source) {
+        this.nanos = java.util.Objects.requireNonNull(source, "source");
+    }
+
+    public void onRecall(Recall memory) {
+        this.recall = java.util.Objects.requireNonNull(memory, "memory");
+    }
+
+    public void onCompleted(java.util.function.Consumer<Completed> listener) {
+        this.completed = java.util.Objects.requireNonNull(listener, "listener");
+    }
+
+    private volatile ToolInvoker tools = (tool, args, source, turnId) ->
+            java.util.concurrent.CompletableFuture.completedFuture("As ferramentas ainda não estão disponíveis.");
+
+    public void onTool(ToolInvoker invoker) {
+        this.tools = java.util.Objects.requireNonNull(invoker, "invoker");
+    }
+
+    /** Rota rápida de ferramenta: a resposta é o resultado dela, dito como qualquer resposta. */
+    private void useTool(SessionId session, TurnId turn, Intent.Tool tool, String source) {
+        String answer;
+        try {
+            answer = tools.invoke(tool.tool(), tool.args(), source, turn.value())
+                    .get(PermissionTimeout.SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            answer = "Não consegui: " + (e.getCause() == null ? e.getMessage() : e.getCause().getMessage()) + ".";
+        }
+        answerLocally(session, turn, new Intent.Immediate(answer, tool.rule()));
+    }
+
+    /** Uma ferramenta pode esperar os 60 s da autorização e mais o tempo dela. */
+    private static final class PermissionTimeout {
+        static final long SECONDS = 15 * 60;
+    }
+
     private void cancelEverything(SessionId session, TurnId turn) {
         int cancelled = running.size();
         running.values().forEach(RunningTurn::cancel);
@@ -194,7 +303,18 @@ public final class TurnManager {
     }
 
     private void askTheModel(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle) {
-        switch (providers.select(ModelRole.CONVERSATION)) {
+        Resolution resolution = providers.select(ModelRole.CONVERSATION);
+        if (handle.scope != null && handle.scope.agent().role() != ModelRole.CONVERSATION
+                && providers.select(handle.scope.agent().role()) instanceof Resolution.Selected own) {
+            // O papel do agente, quando configurado; sem ele, o da conversa.
+            resolution = own;
+        }
+        if (handle.scope != null && handle.scope.meter().step() != null) {
+            running.remove(turn);
+            publishError(turn, AiException.Kind.INVALID_REQUEST, "orçamento do agente esgotado antes de começar", false);
+            return;
+        }
+        switch (resolution) {
             case Resolution.Selected selected -> attempt(session, turn, intent, handle, selected.selection(), null);
             case Resolution.Unresolved unresolved -> {
                 // Sem provider principal — sem chave, por exemplo. É exatamente o
@@ -223,7 +343,10 @@ public final class TurnManager {
                 "turnId", turn.value(),
                 "model", selection.choice().model(),
                 "provider", selection.providerId(),
-                "agentId", intent.agentId()));
+                "agentId", handle.scope == null ? intent.agentId() : handle.scope.agent().id()));
+        if (handle.notice != null) {
+            thinking.put("notice", handle.notice);
+        }
         if (fallback != null) {
             thinking.put("fallbackFrom", fallback.fromProvider());
             thinking.put("reason", fallback.reason());
@@ -232,10 +355,48 @@ public final class TurnManager {
         }
         bus.publish(EventType.AI_THINKING, thinking);
 
+        List<zordon.ai.AiMessage> messages = prompts.toMessages(
+                conversations.conversation(session, PromptComposer.MAX_HISTORY_MESSAGES));
+        String userText = messages.isEmpty() ? "" : messages.getLast().text();
+        messages = withMemory(messages, userText);
+        ToolCaller toolCaller = caller;
+        List<zordon.ai.ToolSpec> offered = toolCaller == null || messages.isEmpty() ? List.of()
+                : handle.scope == null ? toolCaller.offer(userText) : toolCaller.offer(userText, handle.scope);
+        step(session, turn, intent, handle, selection, fallback, messages, offered);
+    }
+
+    /**
+     * A memória entra no começo da última mensagem do usuário, e só na requisição:
+     * o prompt de sistema fica estável para o cache, e a conversa gravada fica limpa.
+     */
+    private List<zordon.ai.AiMessage> withMemory(List<zordon.ai.AiMessage> messages, String userText) {
+        if (messages.isEmpty() || messages.getLast().role() != zordon.ai.Role.USER) {
+            return messages;
+        }
+        String block;
+        try {
+            block = recall.about(userText);
+        } catch (RuntimeException e) {
+            log.warn("memória indisponível neste turno: {}", e.getMessage());
+            return messages;
+        }
+        if (block == null || block.isBlank()) {
+            return messages;
+        }
+        List<zordon.ai.AiMessage> out = new java.util.ArrayList<>(messages.subList(0, messages.size() - 1));
+        out.add(new zordon.ai.AiMessage(zordon.ai.Role.USER,
+                List.of(new zordon.ai.ContentBlock.Text(block + "\n\n" + userText))));
+        return out;
+    }
+
+    /** Uma volta ao modelo. Se ele pedir ferramentas, elas rodam e vem outra volta (SPEC-019). */
+    private void step(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle, Selection selection,
+            Fallback fallback, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered) {
         AiRequest request = AiRequest.builder(selection.choice().model())
-                .systemPrompt(prompts.systemPrompt())
-                .messages(prompts.toMessages(
-                        conversations.conversation(session, PromptComposer.MAX_HISTORY_MESSAGES)))
+                .systemPrompt(handle.scope == null ? prompts.systemPrompt()
+                        : prompts.systemPrompt() + "\n\n" + handle.scope.agent().prompt())
+                .tools(offered)
+                .messages(messages)
                 .effort(selection.choice().effortIfAny().orElse(null))
                 .maxOutputTokens(MAX_OUTPUT_TOKENS)
                 .timeout(Duration.ofMinutes(5))
@@ -246,8 +407,26 @@ public final class TurnManager {
         handle.attach(stream);
         stream.result().whenComplete((response, failure) -> {
             if (failure == null) {
+                ToolCaller toolCaller = caller;
+                zordon.core.agents.TurnScope scope = handle.scope;
+                if (scope != null) {
+                    scope.meter().tokens(response.usage().inputTokens() + response.usage().outputTokens());
+                }
+                String exceeded = scope == null ? null : scope.meter().exceeded();
+                if (exceeded != null && response.stopReason() == StopReason.TOOL_USE) {
+                    stopAtLimit(session, turn, handle, response, selection, fallback,
+                            zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), exceeded));
+                    return;
+                }
+                if (response.stopReason() == StopReason.TOOL_USE && !response.toolCalls().isEmpty()
+                        && toolCaller != null && !handle.isCancelled()) {
+                    useTools(session, turn, intent, handle, selection, fallback, messages, offered, response, toolCaller);
+                    return;
+                }
                 running.remove(turn);
-                completeTurn(session, turn, response, selection, fallback);
+                boolean tainted = tainted(turn);
+                endTools(turn);
+                completeTurn(session, turn, response, selection, fallback, tainted);
                 return;
             }
             // Único lugar em que a falha do turno vira evento: publicá-la também
@@ -272,6 +451,96 @@ public final class TurnManager {
         });
     }
 
+    /**
+     * Roda os pedidos de ferramenta do modelo, um de cada vez, e volta ao modelo
+     * com os resultados. Tetos: 25 chamadas e 15 voltas por turno (SPEC-019 CA-3).
+     */
+    private void useTools(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle, Selection selection,
+            Fallback fallback, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered,
+            AiResponse response, ToolCaller toolCaller) {
+        List<zordon.ai.ContentBlock.ToolUse> calls = response.toolCalls();
+        zordon.core.agents.TurnScope scope = handle.scope;
+        if (scope != null) {
+            String over = scope.meter().calls(calls.size());
+            if (over == null) {
+                over = scope.meter().step();   // a volta que vem depois das ferramentas
+            }
+            if (over != null) {
+                stopAtLimit(session, turn, handle, response, selection, fallback,
+                        zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), over));
+                return;
+            }
+        } else if (handle.toolCalls + calls.size() > MAX_TOOL_CALLS || handle.steps + 1 > MAX_STEPS) {
+            stopAtLimit(session, turn, handle, response, selection, fallback, TOOL_LIMIT_NOTICE);
+            return;
+        }
+        handle.toolCalls += calls.size();
+        handle.steps++;
+        Thread.ofVirtual().name("zordon-tools-" + turn.value()).start(() -> {
+            List<zordon.ai.ContentBlock> results = new java.util.ArrayList<>();
+            for (zordon.ai.ContentBlock.ToolUse call : calls) {
+                if (handle.isCancelled()) {
+                    break;
+                }
+                zordon.ai.ContentBlock.ToolResult result;
+                try {
+                    result = (scope == null ? toolCaller.call(call, handle.source, turn.value())
+                            : toolCaller.call(call, handle.source, turn.value(), scope))
+                            .get(PermissionTimeout.SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    result = new zordon.ai.ContentBlock.ToolResult(call.callId(),
+                            "a ferramenta falhou: " + e.getMessage(), true);
+                }
+                results.add(result);
+                if (scope != null && scope.guard().tripped() != null) {
+                    break;
+                }
+            }
+            if (scope != null && scope.guard().tripped() != null && !handle.isCancelled()) {
+                String reason = scope.guard().tripped();
+                log.warn("turno {}: execução do agente {} suspensa — {}", turn.value(), scope.agent().id(), reason);
+                suspended.accept(scope.agent(), reason);
+                stopAtLimit(session, turn, handle, response, selection, fallback, "Parei: a execução do agente "
+                        + scope.agent().id() + " foi suspensa (" + reason + "). Nada mais será feito até você decidir.");
+                return;
+            }
+            if (handle.isCancelled()) {
+                running.remove(turn);
+                endTools(turn);
+                publishCancelled(turn);
+                return;
+            }
+            List<zordon.ai.AiMessage> next = new java.util.ArrayList<>(messages);
+            next.add(new zordon.ai.AiMessage(zordon.ai.Role.ASSISTANT, response.content()));
+            next.add(new zordon.ai.AiMessage(zordon.ai.Role.USER, results));
+            step(session, turn, intent, handle, selection, fallback, next, offered);
+        });
+    }
+
+    /** Termina o turno com o que já havia e o motivo de parar: nunca em silêncio. */
+    private void stopAtLimit(SessionId session, TurnId turn, RunningTurn handle, AiResponse response,
+            Selection selection, Fallback fallback, String notice) {
+        running.remove(turn);
+        boolean tainted = tainted(turn);
+        endTools(turn);
+        String partial = response.text().isBlank() ? notice : response.text() + " " + notice;
+        completeTurn(session, turn, new AiResponse(List.of(new zordon.ai.ContentBlock.Text(partial)),
+                StopReason.END_TURN, response.usage(), response.cost(), response.model(), response.latency(), null,
+                response.isUsageEstimated()), selection, fallback, tainted);
+    }
+
+    private boolean tainted(TurnId turn) {
+        ToolCaller toolCaller = caller;
+        return toolCaller != null && toolCaller.tainted(turn.value());
+    }
+
+    private void endTools(TurnId turn) {
+        ToolCaller toolCaller = caller;
+        if (toolCaller != null) {
+            toolCaller.endTurn(turn.value());
+        }
+    }
+
     /** A reserva só serve se for outra coisa: o mesmo provider e modelo falhariam igual. */
     private Optional<Selection> reserveFor(Selection failed) {
         if (!(providers.select(ModelRole.FALLBACK) instanceof Resolution.Selected selected)) {
@@ -284,8 +553,8 @@ public final class TurnManager {
         return same ? Optional.empty() : Optional.of(reserve);
     }
 
-    private void completeTurn(
-            SessionId session, TurnId turn, AiResponse response, Selection selection, Fallback fallback) {
+    private void completeTurn(SessionId session, TurnId turn, AiResponse response, Selection selection,
+            Fallback fallback, boolean tainted) {
         if (response.stopReason() == StopReason.REFUSAL) {
             // Recusa chega como sucesso HTTP. Tratá-la como resposta vazia produz
             // "o Zordon não respondeu" sem causa aparente.
@@ -313,6 +582,17 @@ public final class TurnManager {
             payload.put("fallbackReason", fallback.reason());
         }
         bus.publish(EventType.AI_RESPONSE, payload);
+
+        if (!text.isBlank()) {
+            String asked = conversations.conversation(session, PromptComposer.MAX_HISTORY_MESSAGES).stream()
+                    .filter(message -> turn.equals(message.turn()) && "user".equals(message.role()))
+                    .map(StoredMessage::text).findFirst().orElse("");
+            try {
+                completed.accept(new Completed(session, turn, asked, text, tainted));
+            } catch (RuntimeException e) {
+                log.warn("turno {}: aviso de conclusão falhou: {}", turn.value(), e.getMessage());
+            }
+        }
 
         log.info("turno {} concluído por {} em {} ms · {} tokens{} · {}",
                 turn.value(), selection.providerId(), response.latency().toMillis(),

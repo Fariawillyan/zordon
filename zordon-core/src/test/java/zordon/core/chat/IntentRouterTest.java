@@ -61,4 +61,17 @@ class IntentRouterTest {
     void normalizacaoTiraAcentoCaixaEEspacoSobrando() {
         assertThat(IntentRouter.normalize("  Zordon,  QUE   Horas São ")).isEqualTo("que horas sao");
     }
+
+    @zordon.api.trace.AcceptanceCriteria("SPEC-011/CA-8")
+    @org.junit.jupiter.api.Test
+    void aTranscricaoComPontoFinalCaiNaRotaDaHora() {
+        IntentRouter router = new IntentRouter();
+
+        org.assertj.core.api.Assertions.assertThat(router.route("Que horas são."))
+                .isInstanceOf(Intent.Immediate.class);
+        org.assertj.core.api.Assertions.assertThat(router.route("Zordon, que horas são?"))
+                .isInstanceOf(Intent.Immediate.class);
+        org.assertj.core.api.Assertions.assertThat(router.route("Qual é a data de hoje."))
+                .isInstanceOf(Intent.Model.class);
+    }
 }

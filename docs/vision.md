@@ -78,6 +78,14 @@ passo silencioso.
    barramento e grava uma entrada de auditoria. O log de atividades da UI é uma
    projeção desse fluxo, não uma feature separada.
 
+6. **Zordon é voice-first.** A comunicação operacional com o usuário ocorre
+   prioritariamente por voz e estados visuais; detalhes técnicos permanecem
+   ocultos por padrão. O Zordon narra ações reais ("Encontrei uma falha no
+   Docker", "Preciso da sua autorização para continuar"), nunca o pensamento
+   interno do modelo, e agrupa o que é técnico em etapas. Logs, comandos,
+   arquivos e diffs ficam no trace completo, visível só no modo técnico.
+   Ver [ADR-0029](adr/ADR-0029-voice-first.md).
+
 6. **Degradação graciosa.** Cada camada tem modo reduzido: sem MCP, o Zordon
    funciona com Skills; sem voz, funciona por texto; sem núcleo, a UI mostra
    estado offline e enfileira; sem internet, agentes locais continuam.

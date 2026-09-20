@@ -1,0 +1,36 @@
+# Motor de voz do Zordon (SPEC-011, ADR-0028).
+#
+# Copyright 2026 Willyan Faria — Apache License 2.0
+#
+# Unit, e não processo filho do núcleo: o núcleo não executa processos (regra 4
+# de components.md §4). PartOf faz o motor parar e reiniciar junto com o núcleo.
+# O socket vive no RuntimeDirectory: o systemd cria /run/zordon-voice (0700) ao
+# subir e o remove ao parar — não sobra socket velho, e o Zordon não apaga nada.
+
+[Unit]
+Description=Zordon — motor de voz (VAD, transcrição e fala)
+PartOf=zordon.service
+After=zordon.service
+
+[Service]
+Type=simple
+User=@ZORDON_USER@
+ExecStart=@ZORDON_DATA_DIR@/venv/bin/python -m zordon_voice
+Environment=PYTHONPATH=@ZORDON_INSTALL_DIR@/voice
+Environment=ZORDON_HOME=@ZORDON_DATA_DIR@
+Environment=ZORDON_VOICE_SOCKET=/run/zordon-voice/voice.sock
+Environment=PYTHONUNBUFFERED=1
+RuntimeDirectory=zordon-voice
+RuntimeDirectoryMode=0700
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=zordon.service

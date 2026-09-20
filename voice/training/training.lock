@@ -1,0 +1,21 @@
+# Fontes do treino da palavra "Zordon" (SPEC-013, ADR-0038): destino em ~/.zordon/training/sources,
+# URL de revisão fixa, SHA-256 e tamanho. train_wake.py fetch recusa arquivo que não bata.
+# Licenças: openWakeWord (código e features) Apache 2.0; speech embedding do Google Apache 2.0;
+# datasets das vozes: faber, cadu e jeff CC0; edresson CC BY 4.0; LibriTTS-R CC BY 4.0.
+# Negativos extras (tentativa 3): MLS italiano e LibriSpeech train-clean-100, ambos CC BY 4.0.
+# MLS português (CC BY 4.0): o arquivo inteiro, conferido por tamanho e SHA-256; o manifesto guarda
+# o SHA-256 de cada áudio usado.
+
+oww/melspectrogram.onnx	https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx	ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f	1087958
+oww/embedding_model.onnx	https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx	70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f	1326578
+piper/pt_BR-cadu-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/cadu/medium/pt_BR-cadu-medium.onnx	765f0809a6ea9035d4a6d0d008dbf8876e68b2dd32029312672fa8f405bdb535	62950044
+piper/pt_BR-cadu-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/cadu/medium/pt_BR-cadu-medium.onnx.json	5fe03aa3d4901880554905b12075713cd552598c8a350455a1ec73f8b4e6be19	5040
+piper/pt_BR-jeff-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/jeff/medium/pt_BR-jeff-medium.onnx	3a6f4c46355813c2b7bbc4d16b6d13d60ed72074b952a393baace82a7d0c94b5	62950044
+piper/pt_BR-jeff-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/jeff/medium/pt_BR-jeff-medium.onnx.json	7bf8145b572b36806f5ce0f1d3322b6711975bc7d0473e8d36fced4a9ec0030d	5041
+piper/pt_BR-edresson-low.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/edresson/low/pt_BR-edresson-low.onnx	de4cecee38b30bb1a6378a337af605d59f0c377df702c6a6752870db8991cd84	63104526
+piper/pt_BR-edresson-low.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/edresson/low/pt_BR-edresson-low.onnx.json	f138992d2e777d1e3aa0bbb14c2d324307b0f342c1bcf20978765b3bea506c56	4168
+piper/en_US-libritts_r-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx	10bb85e071d616fcf4071f369f1799d0491492ab3c5d552ec19fb548fac13195	78580914
+piper/en_US-libritts_r-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json	b471dc60d2d8335e819c393d196d6fbf792817f40051257b269878505bc9afb3	20123
+mls/mls_portuguese_opus.tar.gz	https://dl.fbaipublicfiles.com/mls/mls_portuguese_opus.tar.gz	2763fbc2df15211014e6c117b9036d6f9b4e7bf87ca3f67df95885cc63a6eed9	2597205013
+mls/mls_italian_opus.tar.gz	https://dl.fbaipublicfiles.com/mls/mls_italian_opus.tar.gz	e7b48a6f8d71778dc895f5b32e284e7c91eb484140de0117b4149c91be3ec049	4002080567
+librispeech/train-clean-100.tar.gz	https://www.openslr.org/resources/12/train-clean-100.tar.gz	d4ddd1d5a6ab303066f14971d768ee43278a5f2a0aa43dc716b0e64ecbbbf6e2	6387309499

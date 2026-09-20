@@ -75,7 +75,8 @@ class ZwpCodecTest {
                 "s_7f3a",
                 List.of("chat.stream"),
                 false,
-                10_000);
+                10_000,
+                50);
 
         String json = codec.encode(ZwpResponse.ok(1, codec.toParams(result)));
 

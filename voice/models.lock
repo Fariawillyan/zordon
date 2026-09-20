@@ -1,0 +1,13 @@
+# Modelos do motor de voz (SPEC-011): destino em ~/.zordon/models, URL de revisão fixa,
+# SHA-256 e tamanho. install-voice.sh recusa arquivo que não bata: modelo é código que executa.
+# `repo:` é modelo gerado no projeto (voice/training, SPEC-013), copiado do repositório.
+
+faster-whisper-small/config.json	https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/config.json	b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828	2370
+faster-whisper-small/model.bin	https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/model.bin	3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671	483546902
+faster-whisper-small/tokenizer.json	https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/tokenizer.json	fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab	2203239
+faster-whisper-small/vocabulary.txt	https://huggingface.co/Systran/faster-whisper-small/resolve/536b0662742c02347bc0e980a01041f333bce120/vocabulary.txt	34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913	459861
+piper/pt_BR-faber-medium.onnx	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx	858555e3a064209c57088fe6bd70c4c3dc54d03eaa00c45d5ecaf43a33f95aa7	63201294
+piper/pt_BR-faber-medium.onnx.json	https://huggingface.co/rhasspy/piper-voices/resolve/c10ece1aade47bb51c153c893d14e5bf8e5b7117/pt/pt_BR/faber/medium/pt_BR-faber-medium.onnx.json	7e694de195ae3fc36dd732c445eb04fb49b649854893cb5506b978f0d50a1d6f	4855
+wake/melspectrogram.onnx	https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx	ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f	1087958
+wake/embedding_model.onnx	https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx	70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f	1326578
+wake/zordon-wake-v1.npz	repo:voice/models/zordon-wake-v1.npz	adf2b2e9db4e5782eb7b29c81135d370bd27b6e6903456180b980f0550ddcff5	869286

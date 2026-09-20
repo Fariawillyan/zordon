@@ -69,6 +69,9 @@ public final class CoreConnection implements AutoCloseable {
         default void onOffline(String reason) {}
 
         default void onEvent(EventEnvelope event) {}
+
+        /** Frame binário do núcleo, como a fala a tocar (ZWP §7). */
+        default void onBinary(zordon.api.zwp.BinaryFrame frame) {}
     }
 
     private static final Logger log = LoggerFactory.getLogger(CoreConnection.class);
@@ -82,6 +85,9 @@ public final class CoreConnection implements AutoCloseable {
     private final ReconnectBackoff backoff = new ReconnectBackoff();
     private final AtomicReference<State> state = new AtomicReference<>(State.OFFLINE);
     private final AtomicReference<ZwpClient> active = new AtomicReference<>();
+    private final Map<String, RequestHandler> handlers = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, java.util.function.Consumer<Map<String, Object>>> notifications =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private volatile boolean running;
     private volatile Thread worker;
@@ -101,6 +107,24 @@ public final class CoreConnection implements AutoCloseable {
         }
         running = true;
         worker = Thread.ofVirtual().name("zordon-core-connection").start(this::loop);
+    }
+
+    /** Atende {@code method} vindo do núcleo, nesta conexão e nas próximas. */
+    public CoreConnection handle(String method, RequestHandler handler) {
+        handlers.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        return this;
+    }
+
+    /** Recebe a notificação {@code method} do núcleo, nesta conexão e nas próximas. */
+    public CoreConnection onNotification(String method, java.util.function.Consumer<Map<String, Object>> handler) {
+        notifications.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        return this;
+    }
+
+    /** Envia um frame binário pela conexão atual. @return falso se offline. */
+    public boolean sendBinary(zordon.api.zwp.BinaryFrame frame) {
+        ZwpClient current = active.get();
+        return current != null && current.sendBinary(frame);
     }
 
     public State state() {
@@ -152,10 +176,17 @@ public final class CoreConnection implements AutoCloseable {
                 }
 
                 @Override
+                public void onBinary(zordon.api.zwp.BinaryFrame frame) {
+                    listener.onBinary(frame);
+                }
+
+                @Override
                 public void onClosed(int code, String reason) {
                     closed.countDown();
                 }
             })) {
+                handlers.forEach(candidate::handle);
+                notifications.forEach(candidate::onNotification);
                 HelloResult hello = candidate.connect(helloFor(endpoint), Duration.ofSeconds(10));
                 active.set(candidate);
                 state.set(State.ONLINE);

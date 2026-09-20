@@ -32,6 +32,8 @@ Environment="JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=50 -XX:+UseZGC"
 # por exemplo) e cairia no java do sistema, que pode ser de outra versão.
 Environment=JAVA_HOME=@JAVA_HOME@
 Environment=ZORDON_HOME=@ZORDON_DATA_DIR@
+# Onde o motor de voz escuta (SPEC-011, ADR-0028).
+Environment=ZORDON_VOICE_SOCKET=/run/zordon-voice/voice.sock
 # Resolvido na instalação perguntando ao Windows. NUNCA derive de $USER: o
 # usuário do Windows e o do WSL podem ter nomes diferentes (R21).
 Environment=ZORDON_WINDOWS_HOME=@ZORDON_WINDOWS_HOME@

@@ -1,0 +1,27 @@
+# DeveloperAgent (Agentes §2): Git, builds, testes e logs.
+id          = "developer"
+name        = "DeveloperAgent"
+description = "Git, builds, testes, logs e containers dos projetos"
+prompt      = """
+Você é o DeveloperAgent. Sempre estabelece o contexto antes de agir: git.status
+antes de falar de Git, docker.ps antes de falar de container, e confere qual
+ferramenta de build o projeto usa. Análise de log é resumo, não despejo: cite as
+linhas que importam e diga o que elas significam.
+"""
+
+[tools]
+include = ["git.*", "build.*", "fs.*", "docker.*", "system.metrics", "memory.search", "mcp.git.*", "mcp.docker.*"]
+exclude = ["fs.quarantine", "fs.restore"]
+pinned  = ["git.status", "fs.read", "docker.ps", "docker.logs"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_heavy"
+
+[budget]
+maxSteps     = 15
+maxToolCalls = 25
+maxTokens    = 120000
+wallClock    = "PT5M"

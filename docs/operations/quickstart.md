@@ -131,12 +131,49 @@ Duas regras do arquivo, que evitam dor de cabeça:
 
 ## 5. Abrir a janela
 
+A janela roda no Windows — é lá que existe som. Instale uma vez, a partir do
+Ubuntu:
+
 ```bash
-./gradlew :zordon-desktop:run
+packaging/windows/install-desktop.sh
 ```
 
-O Windows 11 mostra a janela direto na sua área de trabalho (é o WSLg). Na barra
-de baixo deve aparecer **CORE ONLINE** em verde.
+Ele precisa de um Java 25 no Windows (se não houver, diz como instalar: `winget
+install EclipseAdoptium.Temurin.25.JRE`), copia o desktop para
+`%LOCALAPPDATA%\Programs\Zordon\desktop`, cria o atalho **Zordon** no menu
+Iniciar e toca os seis efeitos sonoros em silêncio para provar que a saída de
+áudio funciona. Depois, abra pelo menu Iniciar. O cabeçalho mostra **Núcleo
+conectado**.
+
+Para desenvolver, `./gradlew :zordon-desktop:run` abre a mesma janela pelo WSLg,
+mas sem som: o WSL não tem saída de áudio.
+
+### O motor de voz
+
+Quem ouve e fala é um processo Python no Ubuntu, o `zordon-voice`. Instale uma vez
+(baixa ≈ 1 GB entre dependências e modelos, tudo conferido por hash):
+
+```bash
+packaging/wsl/install-voice.sh
+```
+
+Depois, na tela de Voz, clique na esfera (ou Ctrl+Espaço) e diga "que horas
+são?". O Zordon responde pela caixa de som do Windows. Perguntas gerais dependem
+de um provedor de IA configurado.
+
+### O host do Windows
+
+O microfone é controlado por um processo sem janela no Windows, o host:
+
+```bash
+packaging/windows/install-host.sh
+```
+
+Ele instala em `%LOCALAPPDATA%\Programs\Zordon\host`, inicia o host na hora e
+mostra o comando de PowerShell que o registra para subir sozinho no logon. Na
+tela de Voz, **Host do Windows** passa a **Conectado** e o microfone aparece
+**desligado, confirmado pelo host**. Ele só liga quando houver motor de voz e
+você escolher um modo.
 
 Teste as duas conversas:
 
@@ -173,8 +210,7 @@ instanceIdleTimeout=-1
 Depois, no PowerShell: `wsl --shutdown`. Isso fecha todos os terminais do WSL.
 
 **O teste que prova que funcionou:** reinicie o Windows, não abra nenhum
-terminal, abra o Ubuntu só para rodar a janela
-(`cd ~/zordon && ./gradlew :zordon-desktop:run`) e veja CORE ONLINE sem ter
+terminal, abra o Zordon pelo menu Iniciar e veja **Núcleo conectado** sem ter
 iniciado o núcleo à mão.
 
 ## Depois de instalado

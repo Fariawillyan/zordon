@@ -68,12 +68,18 @@ public final class ProviderRegistry {
 
     /** Monta os providers da configuração, resolvendo as chaves no ambiente. */
     public static ProviderRegistry build(AiSettings settings, Pricing pricing, Map<String, String> environment) {
+        return build(settings, pricing, environment, null);
+    }
+
+    /** @param cli quem roda os providers por assinatura; {@code null} deixa-os indisponíveis */
+    public static ProviderRegistry build(AiSettings settings, Pricing pricing, Map<String, String> environment,
+            zordon.ai.cli.CliRunner cli) {
         Map<String, AiProvider> ready = new LinkedHashMap<>();
         Map<String, String> unavailable = new LinkedHashMap<>(settings.rejected());
 
         settings.providers().forEach((id, config) -> {
             try {
-                ready.put(id, create(config, pricing, environment));
+                ready.put(id, create(config, pricing, environment, cli));
             } catch (IllegalStateException | IllegalArgumentException e) {
                 unavailable.put(id, e.getMessage());
             }
@@ -122,7 +128,32 @@ public final class ProviderRegistry {
         return states;
     }
 
-    private static AiProvider create(ProviderConfig config, Pricing pricing, Map<String, String> environment) {
+    /**
+     * Quem atende cada papel configurado, e se está pronto — para a tela de
+     * Diagnóstico e para o aviso de "sem provider". Nomes, nunca chaves.
+     */
+    public Map<String, Map<String, Object>> describeRoles() {
+        Map<String, Map<String, Object>> described = new LinkedHashMap<>();
+        for (ModelRole role : ModelRole.values()) {
+            roles.find(role).ifPresent(choice -> {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("provider", choice.provider());
+                entry.put("model", choice.model());
+                switch (select(role)) {
+                    case Resolution.Selected selected -> entry.put("ready", true);
+                    case Resolution.Unresolved unresolved -> {
+                        entry.put("ready", false);
+                        entry.put("reason", unresolved.reason());
+                    }
+                }
+                described.put(role.name().toLowerCase(Locale.ROOT), entry);
+            });
+        }
+        return described;
+    }
+
+    private static AiProvider create(ProviderConfig config, Pricing pricing, Map<String, String> environment,
+            zordon.ai.cli.CliRunner cli) {
         return switch (config.type()) {
             case ANTHROPIC -> {
                 SecretRef reference = config.apiKeyIfAny().orElse(new SecretRef("ANTHROPIC_API_KEY"));
@@ -135,6 +166,16 @@ public final class ProviderRegistry {
                     config.apiKeyIfAny().map(reference -> requireKey(reference, environment)).orElse(null),
                     config.maxTokensParam(),
                     pricing);
+            case CLAUDE_CLI -> {
+                if (cli == null) {
+                    throw new IllegalStateException("não há como rodar o claude neste núcleo");
+                }
+                if (!cli.available("claude")) {
+                    throw new IllegalStateException("claude não está no catálogo de programas; instale o claude CLI"
+                            + " (npm i -g @anthropic-ai/claude-code), entre com `claude` e reinicie o núcleo");
+                }
+                yield new zordon.ai.cli.ClaudeCliProvider(config.id(), cli);
+            }
         };
     }
 

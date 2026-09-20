@@ -23,6 +23,9 @@ public interface ZwpClientListener {
     /** Evento do barramento do núcleo. */
     default void onEvent(EventEnvelope event) {}
 
+    /** Frame binário do núcleo (ZWP §7). */
+    default void onBinary(zordon.api.zwp.BinaryFrame frame) {}
+
     /** Conexão encerrada, por qualquer motivo. */
     default void onClosed(int code, String reason) {}
 }

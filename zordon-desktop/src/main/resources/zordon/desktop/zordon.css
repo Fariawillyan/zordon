@@ -9,8 +9,8 @@
 
 .root {
     -fx-font-family: "Inter", "Segoe UI", sans-serif;
+    -fx-font-size: 14px;
 
-    /* surface */
     surface-canvas: #0A0D12;
     surface-panel: #11151D;
     surface-raised: #181E28;
@@ -18,13 +18,11 @@
     border-subtle: #232B38;
     border-control: #60758E;
 
-    /* texto */
     text-primary: #E6EDF7;
     text-secondary: #9AA7BC;
     text-muted: #8796AB;
     text-on-accent: #0A0D12;
 
-    /* identidade e semântica */
     accent-default: #3DDCFF;
     accent-hover: #7CEAFF;
     accent-pressed: #22B8D8;
@@ -32,135 +30,337 @@
     status-warning: #F0B341;
     status-danger: #FF5B6B;
     status-processing: #A78BFA;
+
+    -fx-background-color: surface-canvas;
 }
 
-.root-pane,
-.chat-view {
+.root-pane { -fx-background-color: surface-canvas; }
+
+.label { -fx-text-fill: text-primary; }
+
+/* ── cabeçalho ─────────────────────────────────────────────────────────── */
+
+.app-header {
+    -fx-background-color: surface-panel;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 0 0 1 0;
+}
+
+.brand-name {
+    -fx-font-size: 20px;
+    -fx-font-weight: 700;
+    -fx-text-fill: accent-default;
+}
+
+.brand-tagline {
+    -fx-font-size: 9px;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-secondary;
+}
+
+.header-core { -fx-font-weight: 600; }
+.header-muted { -fx-text-fill: text-secondary; }
+
+.status-dot { -fx-fill: text-muted; }
+.dot-online { -fx-fill: status-success; }
+.dot-connecting { -fx-fill: status-warning; }
+.dot-offline { -fx-fill: status-danger; }
+
+/* ── navegação ─────────────────────────────────────────────────────────── */
+
+.navigation {
     -fx-background-color: surface-canvas;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 0 1 0 0;
+}
+
+.nav-scroll, .nav-scroll > .viewport { -fx-background-color: transparent; -fx-background-insets: 0; -fx-padding: 0; }
+
+.nav-scroll .scroll-bar:vertical { -fx-pref-width: 6; }
+
+.nav-group {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-muted;
+    -fx-padding: 14 12 6 12;
+}
+
+.nav-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-padding: 7 12 7 12;
+    -fx-min-height: 36;
+    -fx-cursor: hand;
+}
+
+.nav-item:hover { -fx-background-color: surface-raised; }
+
+.nav-item:focused {
+    -fx-border-color: accent-default;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+}
+
+.nav-text { -fx-text-fill: text-secondary; -fx-font-size: 14px; }
+
+.nav-selected {
+    -fx-background-color: surface-selected;
+    -fx-border-color: transparent transparent transparent accent-default;
+    -fx-border-width: 0 0 0 3;
+}
+
+.nav-selected .nav-text { -fx-text-fill: text-primary; -fx-font-weight: 500; }
+.nav-selected .icon { -fx-stroke: accent-default; }
+
+.nav-unavailable .nav-text { -fx-text-fill: text-muted; }
+.nav-unavailable { -fx-cursor: default; }
+
+.nav-badge {
+    -fx-font-size: 10px;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-secondary;
+    -fx-background-color: surface-raised;
+    -fx-border-color: border-subtle;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-padding: 1 5 1 5;
+}
+
+.nav-footer { -fx-border-color: border-subtle; -fx-border-width: 1 0 0 0; }
+.nav-profile { -fx-font-size: 13px; }
+.nav-profile-detail { -fx-font-size: 12px; -fx-text-fill: text-muted; }
+
+.avatar {
+    -fx-min-width: 32;
+    -fx-min-height: 32;
+    -fx-max-width: 32;
+    -fx-max-height: 32;
+    -fx-alignment: center;
+    -fx-background-color: surface-raised;
+    -fx-border-color: border-control;
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-primary;
+}
+
+/* ── área de trabalho ──────────────────────────────────────────────────── */
+
+.workspace {
+    -fx-background-color: surface-panel;
+    -fx-background-radius: 12;
+    -fx-border-color: border-subtle;
+    -fx-border-radius: 12;
+}
+
+.workspace:focus-within { -fx-border-color: accent-default; }
+
+.page, .page > .viewport, .chat-view { -fx-background-color: transparent; }
+.page { -fx-background-insets: 0; -fx-padding: 0; }
+
+.page-header { -fx-border-color: border-subtle; -fx-border-width: 0 0 1 0; }
+
+.crumb {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-muted;
+}
+
+.page-title { -fx-font-size: 24px; -fx-font-weight: 600; }
+
+.notice {
+    -fx-background-color: surface-raised;
+    -fx-border-color: status-warning;
+    -fx-border-width: 0 0 0 3;
+    -fx-text-fill: text-primary;
+    -fx-padding: 10 16 10 16;
+    -fx-max-width: infinity;
 }
 
 /* ── conversa ──────────────────────────────────────────────────────────── */
 
-.chat-scroll,
-.chat-scroll .viewport,
-.chat-thread {
-    -fx-background-color: surface-canvas;
-}
-
-.chat-scroll {
+.chat-list, .chat-list .list-cell {
+    -fx-background-color: transparent;
     -fx-background-insets: 0;
     -fx-padding: 0;
 }
 
-.message {
-    -fx-background-color: surface-raised;
-    -fx-background-radius: 12;
-    -fx-padding: 16;
-    -fx-max-width: 720;
-}
+.chat-list .list-cell:filled:selected, .chat-list .list-cell:filled:hover { -fx-background-color: transparent; }
 
-.message-user {
-    -fx-background-color: surface-selected;
-}
-
-.message-error {
-    -fx-background-color: surface-raised;
-    -fx-border-color: status-danger;
-    -fx-border-radius: 12;
-    -fx-border-width: 1;
-}
-
-.message-author {
-    -fx-text-fill: text-secondary;
-    -fx-font-size: 12px;
-}
-
-.message-run {
-    -fx-fill: text-primary;
-    -fx-font-size: 15px;
-}
-
-.message-error .message-run {
-    -fx-fill: status-danger;
-}
-
+.message-author { -fx-font-weight: 600; }
+.message-time { -fx-font-size: 12px; -fx-text-fill: text-muted; }
+.message-body { -fx-font-size: 15px; -fx-line-spacing: 4; }
 .message-meta {
-    -fx-text-fill: text-muted;
     -fx-font-family: "JetBrains Mono", "Consolas", monospace;
     -fx-font-size: 12px;
-    -fx-padding: 0 0 0 4;
+    -fx-text-fill: text-muted;
+}
+
+.message-assistant .avatar { -fx-border-color: accent-default; -fx-text-fill: accent-default; }
+.message-error .avatar { -fx-border-color: status-danger; -fx-text-fill: status-danger; }
+.message-error .message-body { -fx-text-fill: status-danger; }
+.message-notice .avatar { -fx-border-color: status-warning; -fx-text-fill: status-warning; }
+.message-notice .message-body { -fx-text-fill: status-warning; -fx-font-size: 13px; }
+
+.new-messages {
+    -fx-background-color: accent-default;
+    -fx-text-fill: text-on-accent;
+    -fx-background-radius: 16;
+    -fx-font-weight: 600;
+    -fx-padding: 6 14 6 14;
 }
 
 /* ── composer ──────────────────────────────────────────────────────────── */
 
 .composer {
-    -fx-background-color: surface-panel;
+    -fx-background-color: surface-raised;
+    -fx-background-radius: 0 0 12 12;
     -fx-border-color: border-subtle;
     -fx-border-width: 1 0 0 0;
 }
+
+.composer-meta { -fx-font-size: 12px; -fx-text-fill: text-secondary; }
+.composer-hint { -fx-font-size: 12px; -fx-text-fill: text-muted; }
 
 .composer-field {
     -fx-font-size: 15px;
     -fx-text-fill: text-primary;
     -fx-prompt-text-fill: text-secondary;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: border-control;
-    -fx-border-width: 1;
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
 }
 
-.composer-field,
-.composer-field .content {
-    -fx-background-color: surface-raised;
-}
+.composer-field .content { -fx-background-color: transparent; }
+.composer-field .scroll-pane, .composer-field .scroll-pane .viewport { -fx-background-color: transparent; }
+.composer-field:disabled { -fx-opacity: 1; -fx-prompt-text-fill: status-warning; }
 
-.composer-field:focused {
-    -fx-border-color: accent-default;
-    -fx-border-width: 2;
-}
-
-.composer-field:disabled {
-    -fx-opacity: 1;
-    -fx-border-color: border-subtle;
-    -fx-prompt-text-fill: text-muted;
-}
-
-.thinking-indicator {
-    -fx-text-fill: status-processing;
-    -fx-font-size: 12px;
-}
+/* ── botões ────────────────────────────────────────────────────────────── */
 
 .button-primary {
     -fx-background-color: accent-default;
     -fx-text-fill: text-on-accent;
-    -fx-font-size: 14px;
-    -fx-font-weight: 500;
+    -fx-font-weight: 600;
     -fx-background-radius: 8;
     -fx-min-height: 40;
-    -fx-padding: 0 20 0 20;
+    -fx-padding: 0 18 0 18;
+    -fx-graphic-text-gap: 8;
     -fx-cursor: hand;
 }
 
-.button-primary:hover {
-    -fx-background-color: accent-hover;
+.button-primary:hover { -fx-background-color: accent-hover; }
+.button-primary:pressed { -fx-background-color: accent-pressed; }
+.button-primary:disabled { -fx-opacity: 0.45; }
+
+.button-secondary, .shortcut {
+    -fx-background-color: transparent;
+    -fx-text-fill: text-primary;
+    -fx-border-color: border-control;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-min-height: 40;
+    -fx-padding: 0 16 0 16;
+    -fx-graphic-text-gap: 8;
+    -fx-cursor: hand;
 }
 
-.button-primary:pressed {
-    -fx-background-color: accent-pressed;
+.button-secondary:hover, .shortcut:hover { -fx-background-color: surface-raised; }
+
+.button-tertiary, .icon-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: text-secondary;
+    -fx-graphic-text-gap: 8;
+    -fx-cursor: hand;
+    -fx-background-radius: 8;
 }
 
-.button-primary:focused {
-    /* Anel externo separado por fundo escuro, como o design system exige. */
+.button-tertiary:hover, .icon-button:hover { -fx-background-color: surface-raised; }
+
+.button-primary:focused, .button-secondary:focused, .shortcut:focused,
+.button-tertiary:focused, .icon-button:focused {
     -fx-border-color: accent-default;
     -fx-border-width: 2;
-    -fx-border-radius: 10;
-    -fx-border-insets: -4;
+    -fx-border-radius: 8;
 }
 
-.button-primary:disabled {
-    -fx-opacity: 0.45;
-    -fx-cursor: default;
+/* ── modos da voz ──────────────────────────────────────────────────────── */
+
+.mode-option {
+    -fx-background-color: transparent;
+    -fx-text-fill: text-primary;
+    -fx-border-color: border-control;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-min-height: 40;
+    -fx-padding: 0 16 0 16;
+    -fx-cursor: hand;
 }
+
+.mode-option:hover { -fx-background-color: surface-raised; }
+
+.mode-option:selected {
+    -fx-background-color: surface-selected;
+    -fx-border-color: accent-default;
+    -fx-font-weight: 600;
+}
+
+.mode-option:focused {
+    -fx-border-color: accent-default;
+    -fx-border-width: 2;
+}
+
+.header-voice { -fx-text-fill: text-secondary; -fx-font-size: 14px; }
+
+/* ── listas de escolha ─────────────────────────────────────────────────── */
+
+.combo-box {
+    -fx-background-color: surface-raised;
+    -fx-border-color: border-control;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-min-height: 40;
+}
+
+.combo-box .list-cell { -fx-text-fill: text-primary; -fx-background-color: transparent; -fx-padding: 0 12 0 12; }
+.combo-box .arrow { -fx-background-color: text-secondary; }
+.combo-box .arrow-button { -fx-background-color: transparent; }
+.combo-box:disabled { -fx-opacity: 1; -fx-border-color: border-subtle; }
+.combo-box:disabled .list-cell, .combo-box .list-cell:empty { -fx-text-fill: text-muted; }
+.combo-box-popup .list-view { -fx-background-color: surface-raised; -fx-border-color: border-subtle; }
+.combo-box-popup .list-view .list-cell { -fx-background-color: surface-raised; -fx-text-fill: text-primary; -fx-padding: 8 12 8 12; }
+.combo-box-popup .list-view .list-cell:hover, .combo-box-popup .list-view .list-cell:selected { -fx-background-color: surface-selected; }
+
+/* ── cartões (inspector, Início, Diagnóstico) ──────────────────────────── */
+
+.inspector, .inspector > .viewport { -fx-background-color: transparent; -fx-background-insets: 0; }
+
+.inspector-title {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: text-muted;
+}
+
+.card {
+    -fx-background-color: surface-panel;
+    -fx-background-radius: 12;
+    -fx-border-color: border-subtle;
+    -fx-border-radius: 12;
+    -fx-padding: 16;
+}
+
+.card-title { -fx-font-size: 14px; -fx-font-weight: 600; }
+.row-key { -fx-font-size: 12px; -fx-text-fill: text-muted; }
+.row-value { -fx-font-size: 13px; }
+.muted { -fx-text-fill: text-muted; -fx-font-size: 13px; }
+.body-text { -fx-font-size: 15px; }
+.warning-text { -fx-text-fill: status-warning; -fx-font-size: 13px; }
+.quote { -fx-text-fill: text-secondary; -fx-font-style: italic; }
+.step-done { -fx-text-fill: status-success; -fx-font-weight: 700; }
+.step-pending { -fx-text-fill: text-muted; }
+
+/* ── gaveta ────────────────────────────────────────────────────────────── */
+
+.scrim { -fx-background-color: rgba(10, 13, 18, 0.6); }
+.navigation, .inspector { -fx-effect: null; }
 
 /* ── barra de estado ───────────────────────────────────────────────────── */
 
@@ -170,36 +370,11 @@
     -fx-border-width: 1 0 0 0;
 }
 
-.core-status {
-    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
-    -fx-font-size: 12px;
-    -fx-font-weight: bold;
-}
-
-.core-detail {
-    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
-    -fx-font-size: 12px;
-    -fx-text-fill: text-muted;
-}
-
-.state-online {
-    -fx-text-fill: status-success;
-}
-
-.state-connecting {
-    -fx-text-fill: status-warning;
-}
-
-.state-offline {
-    -fx-text-fill: status-danger;
-}
+.status-text { -fx-font-size: 12px; -fx-text-fill: text-secondary; }
 
 /* ── log de atividades ─────────────────────────────────────────────────── */
 
-.logs-view,
-.logs-table {
-    -fx-background-color: surface-canvas;
-}
+.logs-view, .logs-table { -fx-background-color: transparent; }
 
 .logs-table {
     -fx-font-family: "JetBrains Mono", "Consolas", monospace;
@@ -207,74 +382,264 @@
     -fx-table-cell-border-color: transparent;
 }
 
-.logs-table .column-header,
-.logs-table .column-header-background .filler {
+.logs-table .column-header, .logs-table .column-header-background .filler {
     -fx-background-color: surface-panel;
     -fx-border-color: border-subtle;
     -fx-border-width: 0 0 1 0;
 }
 
-.logs-table .column-header .label {
-    -fx-text-fill: text-secondary;
-    -fx-font-size: 12px;
-}
+.logs-table .column-header-background { -fx-background-color: surface-panel; }
+.logs-table .column-header .label { -fx-text-fill: text-secondary; -fx-font-size: 12px; }
+.logs-table .table-row-cell { -fx-background-color: transparent; -fx-cell-size: 32; }
+.logs-table .table-row-cell:odd { -fx-background-color: surface-canvas; }
+.logs-table .table-row-cell:selected { -fx-background-color: surface-selected; }
+.logs-table .table-cell { -fx-text-fill: text-primary; -fx-padding: 0 12 0 12; }
+.logs-table .placeholder .label { -fx-text-fill: text-muted; }
 
-.logs-table .table-row-cell {
-    -fx-background-color: surface-canvas;
-    -fx-cell-size: 32;
-}
+/* ── barras de rolagem discretas ───────────────────────────────────────── */
 
-.logs-table .table-row-cell:odd {
-    -fx-background-color: surface-panel;
-}
+.scroll-bar { -fx-background-color: transparent; }
+.scroll-bar .thumb { -fx-background-color: border-subtle; -fx-background-radius: 4; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button { -fx-padding: 0; -fx-pref-height: 0; -fx-pref-width: 0; }
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-shape: " "; -fx-padding: 0; }
 
-.logs-table .table-row-cell:selected {
-    -fx-background-color: surface-selected;
-}
-
-.logs-table .table-cell {
+.tooltip {
+    -fx-background-color: surface-raised;
     -fx-text-fill: text-primary;
-    -fx-padding: 0 12 0 12;
+    -fx-font-size: 12px;
+    -fx-background-radius: 6;
 }
 
-/* ── abas ──────────────────────────────────────────────────────────────── */
+/* SPEC-008 — console de voz: decoração ciano restrita à experiência sonora. */
+.voice-page, .voice-page > .viewport { -fx-background-color: #09121b; }
+.voice-mode-strip {
+    -fx-background-color: #09121b;
+    -fx-border-color: #20303e;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-padding: 12;
+}
+.voice-mode-strip .mode-option {
+    -fx-font-size: 11px;
+    -fx-min-height: 34;
+    -fx-padding: 0 9;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+.voice-mode-strip .mode-option:selected {
+    -fx-background-color: linear-gradient(to bottom, #07445a, #082633);
+    -fx-border-color: #00d9ed;
+}
+.voice-status-card {
+    -fx-padding: 8 12;
+    -fx-border-color: #192c3b;
+    -fx-border-radius: 7;
+    -fx-min-width: 120;
+}
+.voice-caption { -fx-text-fill: #a0b8cc; -fx-font-size: 11px; }
+.voice-console {
+    -fx-background-color: #060f18;
+    -fx-border-color: #00d8ed;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 1;
+}
+.voice-console-title { -fx-font-size: 20px; -fx-text-fill: #e6f1f7; }
+.voice-console-header { -fx-padding: 18 20 12 20; }
+.voice-console-footer { -fx-padding: 12 18 16 18; }
+.voice-test {
+    -fx-background-color: linear-gradient(to bottom, #073b4d, #071b28);
+    -fx-text-fill: #c9faff;
+    -fx-border-color: #00dbef;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-min-height: 36;
+    -fx-padding: 0 14;
+    -fx-cursor: hand;
+}
+.voice-test:hover { -fx-background-color: #0a4355; }
+.voice-test:focused { -fx-border-color: #e4ffff; -fx-border-width: 2; }
+.voice-test:disabled { -fx-opacity: 0.5; }
+.voice-console .mode-option, .voice-console .button-secondary { -fx-min-height: 36; -fx-font-size: 12px; }
+.voice-volume-box {
+    -fx-background-color: #081924;
+    -fx-border-color: #163847;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-padding: 6 10;
+}
+.voice-volume-box .label { -fx-font-size: 11px; }
+.voice-volume-box .slider .track { -fx-background-color: #1c4252; -fx-pref-height: 3; }
+.voice-volume-box .slider .thumb { -fx-background-color: #02d8f0; -fx-padding: 5; }
+.voice-volume-box .slider:focused .thumb { -fx-background-color: #d3fcff; }
+.voice-output-status { -fx-font-size: 10px; -fx-text-fill: #90c9d8; }
+.voice-settings { -fx-padding: 16 20; -fx-background-color: #0d202b; }
+.voice-settings .check-box { -fx-text-fill: #d2e6ed; -fx-font-size: 12px; }
+.voice-settings .check-box .box { -fx-background-color: #112d3b; -fx-border-color: #4e7b8e; -fx-border-radius: 3; }
+.voice-settings .check-box:selected .mark { -fx-background-color: #03dcf1; }
+.voice-settings .check-box:focused .box { -fx-border-color: #b5f5ff; }
+.voice-details > .title { -fx-background-color: #101c28; -fx-padding: 14; -fx-background-radius: 8; }
+.voice-details { -fx-text-fill: #b1c8d9; }
+.voice-details > .title > .arrow-button .arrow { -fx-background-color: #94b6c8; }
+.voice-details > .content { -fx-background-color: transparent; -fx-border-color: #20303e; -fx-padding: 12; }
 
-.tab-pane > .tab-header-area > .tab-header-background {
-    -fx-background-color: surface-panel;
+/* ── teste do microfone (SPEC-009) ─────────────────────────────────────── */
+
+.microphone-meter { -fx-accent: accent-default; -fx-pref-height: 10; }
+.microphone-meter > .track { -fx-background-color: surface-raised; -fx-background-radius: 5; }
+.microphone-meter > .bar { -fx-background-color: accent-default; -fx-background-radius: 5; -fx-background-insets: 0; }
+
+/* ── shell compacto da SPEC-010 ────────────────────────────────────────── */
+
+.root-pane { -fx-background-color: #06121A; }
+
+.rail {
+    -fx-background-color: #081821;
+    -fx-border-color: #13303C;
+    -fx-border-width: 0 1 0 0;
 }
 
-.tab-pane > .tab-header-area > .headers-region > .tab {
+.rail-item {
     -fx-background-color: transparent;
-    -fx-padding: 8 20 8 20;
-}
-
-.tab-pane > .tab-header-area > .headers-region > .tab:selected {
-    -fx-background-color: surface-canvas;
-    -fx-border-color: accent-default;
-    -fx-border-width: 0 0 2 0;
-}
-
-.tab-pane > .tab-header-area > .headers-region > .tab .tab-label {
-    -fx-text-fill: text-secondary;
-    -fx-font-size: 14px;
-}
-
-.tab-pane > .tab-header-area > .headers-region > .tab:selected .tab-label {
-    -fx-text-fill: text-primary;
-}
-
-.tab-pane > .tab-header-area {
+    -fx-background-radius: 0;
     -fx-padding: 0;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 0 3;
 }
 
-.tab-pane:focused > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
-    -fx-border-color: accent-default;
+.rail-item:hover { -fx-background-color: rgba(61, 220, 255, 0.06); }
+.rail-item:focused { -fx-border-color: transparent transparent transparent #3DDCFF; }
+
+.rail-selected {
+    -fx-border-color: transparent transparent transparent #12E3F7;
+    -fx-border-width: 0 0 0 3;
 }
 
-/* ── avisos do sistema na conversa ─────────────────────────────────────── */
+.rail-core { -fx-arc-width: 2; -fx-arc-height: 2; }
+.core-online { -fx-fill: #2E7F95; }
+.core-connecting { -fx-fill: status-warning; }
+.core-offline { -fx-fill: status-danger; }
 
-.message-notice {
-    -fx-text-fill: status-warning;
+.voice-page { -fx-background-color: #06121A; }
+
+.console-button {
+    -fx-background-color: rgba(6, 20, 28, 0.85);
+    -fx-text-fill: #D6E4EE;
+    -fx-border-color: #2A5566;
+    -fx-border-radius: 7;
+    -fx-background-radius: 7;
+    -fx-padding: 0.5em 1.3em 0.5em 1.1em;
+    -fx-graphic-text-gap: 10;
+    -fx-min-height: 2.5em;
+    -fx-pref-height: 2.5em;
+    -fx-max-height: 2.5em;
+    -fx-cursor: hand;
+}
+
+.console-primary {
+    -fx-text-fill: #E9FBFF;
+    -fx-border-color: #3DDCFF;
+    -fx-effect: dropshadow(gaussian, rgba(18, 227, 247, 0.35), 12, 0.2, 0, 0);
+}
+
+.console-button:hover { -fx-background-color: rgba(18, 60, 76, 0.9); }
+.console-button:selected { -fx-border-color: #3DDCFF; }
+.console-button:focused { -fx-border-color: #7CEAFF; }
+
+.console-card {
+    -fx-background-color: rgba(8, 24, 33, 0.97);
+    -fx-border-color: #1F4E5E;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 16;
+}
+
+.console-card .label, .console-card .check-box { -fx-text-fill: #C7D6E2; -fx-font-size: 12px; }
+
+.console-caption {
+    -fx-text-fill: #7FD9EA;
+    -fx-font-size: 11px;
+}
+
+.voice-pill {
+    -fx-background-color: rgba(8, 24, 33, 0.92);
+    -fx-border-color: #2A5566;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-padding: 6 8 6 14;
+}
+
+.pill-text { -fx-text-fill: #D6E4EE; -fx-font-size: 12px; }
+.pill-live .pill-dot { -fx-fill: #12E3F7; }
+.pill-live { -fx-border-color: #3DDCFF; }
+.pill-warning .pill-dot { -fx-fill: status-warning; }
+
+.pill-action {
+    -fx-background-color: #12E3F7;
+    -fx-text-fill: #04141B;
     -fx-font-size: 12px;
-    -fx-padding: 4 4 4 4;
+    -fx-font-weight: 600;
+    -fx-background-radius: 12;
+    -fx-padding: 3 12 3 12;
+    -fx-cursor: hand;
 }
+
+.tile {
+    -fx-background-color: surface-raised;
+    -fx-text-fill: text-primary;
+    -fx-border-color: border-subtle;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-min-height: 40;
+    -fx-padding: 0 14 0 12;
+    -fx-graphic-text-gap: 10;
+    -fx-cursor: hand;
+}
+
+.tile:hover { -fx-border-color: border-control; }
+.tile-unavailable { -fx-text-fill: text-muted; -fx-cursor: default; }
+
+.conversation { -fx-background-color: surface-panel; }
+.settings-page, .settings-page > .viewport { -fx-background-color: surface-canvas; }
+
+/* A esfera é o botão de falar (SPEC-011): invisível, só o foco aparece. */
+.orb-button { -fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 0; }
+.orb-button:focused { -fx-border-color: rgba(124, 234, 255, 0.5); -fx-border-radius: 50%; -fx-border-width: 1; }
+
+/* ── segurança: permissão, avisos e lockdown (SPEC-015) ──────────────────── */
+
+.permission-dialog {
+    -fx-background-color: surface-panel;
+    -fx-border-color: border-subtle;
+    -fx-border-width: 1;
+}
+.permission-dialog .label { -fx-text-fill: text-primary; }
+.permission-dialog .muted { -fx-text-fill: text-muted; }
+.permission-dialog .warning { -fx-text-fill: status-warning; -fx-font-weight: 600; }
+.permission-dialog .mono { -fx-font-family: "JetBrains Mono", monospace; -fx-font-size: 12px; }
+.permission-dialog .scroll-pane, .permission-dialog .scroll-pane .viewport { -fx-background-color: surface-raised; }
+
+.notification-bar {
+    -fx-background-color: surface-raised;
+    -fx-border-width: 0 0 0 3;
+    -fx-border-color: status-warning;
+    -fx-padding: 10 16 10 16;
+    -fx-background-radius: 6;
+}
+.notification-bar .label { -fx-text-fill: text-primary; }
+.notification-bar.severity-high { -fx-border-color: status-danger; }
+.notification-bar.severity-critical { -fx-border-color: status-danger; -fx-border-width: 0 0 0 5; }
+.severity-critical.permission-dialog { -fx-border-color: status-danger; -fx-border-width: 2; }
+
+.button-danger {
+    -fx-background-color: transparent;
+    -fx-border-color: status-danger;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: status-danger;
+    -fx-padding: 8 16 8 16;
+}
+.button-danger:hover { -fx-background-color: rgba(255, 91, 107, 0.12); }
+.permission-dialog .check-box { -fx-text-fill: text-primary; }
+.permission-dialog .check-box .box { -fx-background-color: surface-raised; -fx-border-color: border-control; }

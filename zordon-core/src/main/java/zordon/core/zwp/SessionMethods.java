@@ -67,7 +67,7 @@ public final class SessionMethods {
                     ZwpErrorKind.ERR_PROTOCOL_UNSUPPORTED,
                     "núcleo fala ZWP v" + ZwpProtocol.VERSION + ", cliente pediu " + hello.protocol());
         }
-        session.completeHello(hello.client());
+        session.completeHello(hello.client(), hello.capabilities());
         boolean resumed = resume(session, hello.resumeIfAny().orElse(null));
 
         log.info(
@@ -84,7 +84,8 @@ public final class SessionMethods {
                 session.id(),
                 capabilities,
                 resumed,
-                ZwpProtocol.DEFAULT_HEARTBEAT.toMillis()));
+                ZwpProtocol.DEFAULT_HEARTBEAT.toMillis(),
+                ZwpProtocol.DEFAULT_AUDIO_CREDIT_FRAMES));
     }
 
     /**

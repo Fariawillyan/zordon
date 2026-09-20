@@ -25,11 +25,16 @@ public record HelloResult(
         String sessionId,
         List<String> capabilities,
         boolean resumed,
-        long heartbeatIntervalMs) {
+        long heartbeatIntervalMs,
+        int audioCreditFrames) {
 
     public HelloResult {
         Objects.requireNonNull(core, "core");
         Objects.requireNonNull(sessionId, "sessionId");
         capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
+        // Núcleo anterior à SPEC-009 não manda o campo: vale o padrão do protocolo.
+        if (audioCreditFrames <= 0) {
+            audioCreditFrames = ZwpProtocol.DEFAULT_AUDIO_CREDIT_FRAMES;
+        }
     }
 }

@@ -348,16 +348,18 @@ public interface PermissionEngine {
 
 public record ActionDescriptor(
         String tool,               // ferramenta resolvida
-        JsonNode args,             // argumentos validados
-        RiskLevel risk,            // risco efetivo (após assess)
+        Map<String, Object> args,  // argumentos validados (zordon-api não depende de JSON)
+        RiskLevel baseRisk,        // piso da ferramenta; o motor só sobe
         Set<Effect> effects,       // ver o enum Effect em §1 — não há DELETE_FS
         List<ZPath> touchedPaths,
-        String humanSummary) {}    // "Excluir 43 arquivos em D:\projeto\logs"
+        int targets,               // um glob que casa 43 arquivos conta 43
+        List<String> command,      // programa e argumentos, quando executa processo
+        String humanSummary) {}    // "Mover 43 arquivos de D:\projeto\logs para a quarentena"
 
-public sealed interface Decision {
-    record Allow(String reason, Scope scope) implements Decision {}
-    record Deny(String reason) implements Decision {}
-    record AskUser(String requestId, Duration ttl) implements Decision {}
+public sealed interface Decision {         // cada variante carrega o risco efetivo e o motivo
+    record Allow(RiskLevel risk, String reason, boolean session) implements Decision {}
+    record Deny(RiskLevel risk, String reason) implements Decision {}
+    record AskUser(RiskLevel risk, String reason, Duration ttl, boolean perAction) implements Decision {}
     /** Contenção autônoma pré-autorizada: reversível, com prazo, notificada. */
     record AutoContain(String reason, Duration ttl, String rollbackToken)
             implements Decision {}

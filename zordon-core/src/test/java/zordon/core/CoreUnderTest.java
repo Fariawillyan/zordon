@@ -40,9 +40,17 @@ public final class CoreUnderTest implements AutoCloseable {
     }
 
     public static CoreUnderTest start(Path home) throws InterruptedException {
+        return start(home, Map.of());
+    }
+
+    /** Com um ambiente explícito — é assim que um teste dá uma chave ao núcleo sem usar a real. */
+    public static CoreUnderTest start(Path home, Map<String, String> environment) throws InterruptedException {
         ZordonConfig config = new ZordonConfig(
                 home, Optional.empty(), "127.0.0.1", 0, ZordonConfig.NetworkingMode.MIRRORED);
-        ZordonCore core = new ZordonCore(config, new SystemdNotifier(), Map.of());
+        // Nunca o motor de voz real desta máquina: um socket que não existe, salvo pedido.
+        Map<String, String> isolated = new java.util.HashMap<>(environment);
+        isolated.putIfAbsent("ZORDON_VOICE_SOCKET", home.resolve("voice.sock").toString());
+        ZordonCore core = new ZordonCore(config, new SystemdNotifier(), isolated);
         core.start();
         return new CoreUnderTest(core, config);
     }

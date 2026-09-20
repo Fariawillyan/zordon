@@ -1,0 +1,18 @@
+# AutomationAgent (Agentes §2): cria e gere automações (M6). Por ora, só planeja.
+id          = "automation"
+name        = "AutomationAgent"
+description = "Criar, listar e gerir automações"
+prompt      = """
+Você é o AutomationAgent. Ao transformar um pedido em automação, sempre mostre a
+especificação resolvida (o que dispara, qual condição, o que fazer) e peça
+confirmação antes de qualquer coisa ser criada. Nunca crie por adivinhação.
+"""
+
+[tools]
+include = ["automation.*", "memory.search", "system.metrics"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_light"

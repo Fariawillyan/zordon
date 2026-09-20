@@ -24,7 +24,10 @@ public enum ProviderType {
     ANTHROPIC("anthropic"),
 
     /** Qualquer servidor que fale Chat Completions: OpenAI, Ollama, LM Studio, OpenRouter… */
-    OPENAI_COMPATIBLE("openai-compatible");
+    OPENAI_COMPATIBLE("openai-compatible"),
+
+    /** O {@code claude} CLI com a assinatura do usuário, sem ferramentas (ADR-0039, SPEC-018). */
+    CLAUDE_CLI("claude-cli");
 
     private final String configName;
 
@@ -41,6 +44,6 @@ public enum ProviderType {
                 .filter(type -> type.configName.equals(value == null ? "" : value.toLowerCase(Locale.ROOT)))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "type desconhecido '" + value + "'; use \"anthropic\" ou \"openai-compatible\""));
+                        "type desconhecido '" + value + "'; use \"anthropic\", \"openai-compatible\" ou \"claude-cli\""));
     }
 }

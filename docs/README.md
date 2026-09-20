@@ -70,6 +70,8 @@ A norma. Três documentos que se leem juntos.
 | [Defesa e detecção](security/defense.md) ★ | Zero Trust, detectores, playbooks, quarentena, disjuntor, lockdown |
 | [Comunicação proativa](security/communication.md) ★ | Nenhuma ação silenciosa: níveis, canais, anti-fadiga |
 | [Cadeia de suprimentos](security/supply-chain.md) | Apache 2.0, pipeline de PR, dependências, divulgação |
+| [Identidade e origem](security/identity.md) | Quem pediu e o teto de risco por origem (voz, UI, automação, agente) |
+| [Sandbox](security/sandbox.md) | Onde roda o código de agente: worktree, bubblewrap, systemd-run |
 
 ## Agentes e conhecimento
 
@@ -78,6 +80,9 @@ A norma. Três documentos que se leem juntos.
 | [Catálogo de agentes](agents/catalog.md) | Os agentes, seus escopos, e o que cada um **não** faz |
 | [Orquestração](agents/orchestration.md) | Seleção, delegação, limites, ciclo de revisão |
 | [Runtime de agente](specs/agents/design.md) | Laço, orçamento, disjuntor, delegação |
+| [Planner e TaskStore](specs/agents/planner.md) | Planos duráveis, estados de tarefa, retomada após queda |
+| [Verificação e avaliação](specs/agents/evaluation.md) | Verifier por tarefa, Evaluation Engine por capacidade |
+| [Extensões](architecture/extensions.md) | Manifesto versionado de skills, agentes, MCP, providers e workflows |
 | [Knowledge Base](rag/knowledge-base.md) | O que é indexado, com que metadados, e o que não é |
 | [Indexação](rag/indexing.md) | Chunking, incremental, versionamento |
 | [Context Router](rag/context-router.md) | Como o agente recebe só o que precisa |
@@ -87,6 +92,7 @@ A norma. Três documentos que se leem juntos.
 | Módulo | Design |
 |---|---|
 | [core](specs/core/design.md) | IA, providers, Intent Router, contexto, custo |
+| [core › capacidades](specs/core/capabilities-and-routing.md) | Capability Registry e Model Router |
 | [voice](specs/voice/design.md) | Wake word, VAD, STT, TTS, latência |
 | [agents](specs/agents/design.md) | Runtime de agente |
 | [mcp](specs/mcp/design.md) | Cliente MCP, ToolRegistry, seleção semântica |

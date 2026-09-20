@@ -63,7 +63,7 @@ método novo é introduzido por este documento.
 | Chat | `chat.send/history/newSession/cancel`, `AI_RESPONSE`, `AI_ERROR` | Seleção explícita de agente não aparece nos params de `chat.send`; título/renomeação e paginação de sessões |
 | Resultados | `TOOL_STARTED`, `TOOL_FINISHED` com `summary` | Payload tipado para tabela Docker e referências de origem; não inventar dados a partir de resumo |
 | Anexos | `attachments?`, frame `FILE_CHUNK` | Schema, limites, validação, destino e ciclo de upload |
-| Voz | Modos e `VOICE_*`/`TTS_*` | Snapshot completo, confirmação de captura off, seleção de dispositivo, calibração e prazo do modo open |
+| Voz | Modos, `VOICE_*`/`TTS_*`, `voice.status`, `VOICE_STATE`, dispositivos e prazo do `open` ([SPEC-006](../voice/SPEC-006-tela-e-estado-da-voz.md)) | Calibração do piso de ruído e teste do microfone (entram com o host) |
 | Permissão | `ui.requestPermission`, `permission.respond` | Escolher um caminho canônico de resposta; deduplicar por `requestId` e definir deadline absoluto |
 | Agentes | `agent.list/run/cancel`, `AGENT_*` | Snapshot de execuções, relações pai/filho e lista por perfil tipados |
 | MCP / Skills | `mcp.list/connect/disconnect`, `skill.list`, `tool.describe` | CRUD de configuração e distinção tipada entre backoff de transporte e isolamento de segurança |

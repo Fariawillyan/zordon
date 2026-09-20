@@ -15,6 +15,7 @@ tasks.register<TraceabilityTask>("traceability") {
     sources.from(layout.projectDirectory.asFileTree.matching {
         include("*/src/**/*.java")
         include("buildSrc/src/**/*.kt")
+        include("voice/**/*.py")
     })
     index = layout.buildDirectory.file("traceability/index.json")
 }

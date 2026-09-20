@@ -64,21 +64,23 @@ arquitetura simples em vez de distribuir os modelos entre os dois lados.
 |---|---|---|---|---|
 | Captura | `javax.sound.sampled` | JDK | WASAPI via JNA | Sem dependência nativa; suficiente para 16 kHz mono |
 | VAD | Silero VAD (ONNX) | MIT | WebRTC VAD | Muito melhor com ruído; ~1 MB; roda em CPU |
-| Wake word | openWakeWord | Apache-2.0 | Porcupine | Sem restrição de uso; modelo custom treinável |
+| Wake word | Features openWakeWord + classificador `zordon-wake-v1` | Apache-2.0 (features e código) | Porcupine | Classificador próprio; fontes de treino no lock da SPEC-013 |
 | STT | faster-whisper (CTranslate2) | MIT | Vosk, whisper.cpp | Melhor qualidade em PT-BR; CUDA no WSL2 |
 | TTS | Piper | MIT | Coqui, TTS de nuvem | Rápido, local, vozes PT-BR decentes |
 
 Sobre **Porcupine**: é mais preciso e tem SDK Java, mas o uso comercial exige
 licença e a palavra custom é gerada em portal deles. Para um projeto pessoal
 funcionaria; a escolha por openWakeWord preserva a opção de o projeto crescer
-sem renegociar licença. É uma decisão reversível — a interface `WakeWordDetector`
-isola as duas.
+sem renegociar licença. É uma decisão reversível — o detector fica isolado em
+`voice/zordon_voice/wake.py`.
 
-Sobre a **palavra "Zordon"**: é uma boa wake word — três sílabas, fonemas
-distintos, não ocorre em conversa normal em português. Modelos do openWakeWord
-para palavras custom são treinados com áudio sintético gerado por TTS
-(centenas de vozes/entonações) mais ruído de fundo; o processo é documentado e
-roda offline. Meta: taxa de falso positivo abaixo de **1 por 8 horas** de fala
+Sobre a **palavra "Zordon"**: o detector próprio usa positivos sintetizados com
+Piper e negativos de fala portuguesa e palavras parecidas. Os modelos prontos de
+palavras do openWakeWord não são usados. As fontes, a separação de locutores e
+os critérios de avaliação estão na
+[SPEC-013](SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md) e na
+[ADR-0038](../../adr/ADR-0038-palavra-de-ativacao-treinada-aqui.md).
+Meta de campo: taxa de falso positivo abaixo de **1 por 8 horas** de fala
 ambiente, e taxa de falso negativo abaixo de **5%** a 2 metros do microfone.
 
 ## 3. Máquina de estados

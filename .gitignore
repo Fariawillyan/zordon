@@ -171,6 +171,10 @@ last-crash.json
 
 # ─── Modelos de ML (baixados por checksum, nunca versionados) ─────────────────
 models/
+# Classificador próprio da SPEC-013; modelos baixados continuam ignorados.
+!/voice/models/
+/voice/models/*
+!/voice/models/zordon-wake-v1.npz
 *.onnx
 *.gguf
 *.ggml
@@ -195,9 +199,15 @@ models/
 !gradle.lockfile
 !package-lock.json
 !poetry.lock
+!/voice/requirements.lock
+!/voice/models.lock
+!/voice/training/training.lock
 
 # ─── Java / Gradle ────────────────────────────────────────────────────────────
 build/
+# Pacotes de código do build-logic, não diretórios de saída do Gradle.
+!/buildSrc/src/main/kotlin/zordon/build/
+!/buildSrc/src/test/kotlin/zordon/build/
 out/
 bin/
 .gradle/

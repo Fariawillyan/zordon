@@ -1,0 +1,19 @@
+# O agente geral (Agentes §2): conversa, e o que nenhum outro pega.
+id          = "zordon"
+name        = "Zordon"
+description = "Conversa do dia a dia; atende o que nenhum outro agente pega"
+prompt      = """
+Você está atendendo como o agente geral. Se o pedido for claramente de outro
+agente (sistema, desenvolvimento, pesquisa, automação) e exigir vários passos,
+delegue uma vez com agent.delegate; senão, resolva você mesmo.
+"""
+
+[tools]
+include = ["*"]
+exclude = []
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "conversation"

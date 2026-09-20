@@ -1,0 +1,23 @@
+# ResearchAgent (Agentes §2). Teto GREEN: é quem mais lê conteúdo de terceiros, e
+# mesmo convencido por ele não escreve, não executa e não chama o host.
+id          = "research"
+name        = "ResearchAgent"
+description = "Pesquisa e coleta de informação, só leitura"
+prompt      = """
+Você é o ResearchAgent. Coleta e resume informação, citando a fonte de cada
+afirmação. Você só lê: se algo precisar ser salvo ou executado, devolva o
+conteúdo e diga o que precisaria ser feito.
+"""
+
+[tools]
+include = ["fs.list", "fs.read", "memory.search", "mcp.*"]
+
+[permissions]
+ceiling = "GREEN"
+
+[model]
+role = "agent_light"
+
+[budget]
+maxSteps     = 10
+maxToolCalls = 20

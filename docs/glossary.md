@@ -3,7 +3,7 @@ document: glossary
 module: meta
 section: glossary
 version: 1
-updatedAt: 2026-09-17
+updatedAt: 2026-09-18
 securityLevel: public
 tags: [termos,definicoes]
 specId: null
@@ -78,4 +78,15 @@ specId: null
 | **Núcleo de confiança** | Caminhos cuja integridade sustenta as invariantes. O Zordon propõe, nunca aplica. [Auto-modificação §4](process/self-modification.md#4-núcleo-de-confiança) |
 | **Preflight** | Os nove passos obrigatórios antes de alterar qualquer projeto. [Auto-modificação §6](process/self-modification.md#6-preflight-obrigatório) |
 | **Zero Trust** | Nada confiável por posição; identidade, capacidades e hierarquia imutável. [Defesa §2](security/defense.md#2-zero-trust-aplicado) |
+| **Origem** | De onde veio a ordem (`ui`, `voice`, `automation`, `agent`, `autonomous`). Limita o risco máximo da ação. [ADR-0030](adr/ADR-0030-origem-da-ordem.md) · [Identidade](security/identity.md) |
+| **Sandbox** | Worktree git + bubblewrap + `systemd-run`, com rede desligada, onde roda código de agente. [ADR-0031](adr/ADR-0031-sandbox-para-codigo-de-agente.md) · [Sandbox](security/sandbox.md) |
+| **SecretBroker** | Usa o segredo em nome de quem pede, sem entregá-lo. [ADR-0032](adr/ADR-0032-segredo-se-usa-nao-se-entrega.md) · [Segurança](security/model.md#uso-intermediado) |
+| **Capability Registry** | Vocabulário fechado de capacidades (`TEXT`, `CODE`, `VISION`, `LOCAL_ONLY`…) declaradas por provider. [Capacidades](specs/core/capabilities-and-routing.md) |
+| **Model Router** | Escolhe o modelo por restrições duras, privacidade e orçamento. [ADR-0033](adr/ADR-0033-capacidades-e-roteador-de-modelos.md) |
+| **ExtensionRegistry** | Registro das extensões com manifesto versionado e `approvedHash`. [ADR-0034](adr/ADR-0034-manifesto-de-extensao-versionado.md) · [Extensões](architecture/extensions.md) |
+| **Planner** | Transforma um pedido de vários passos em `Plan` persistido. [Planner](specs/agents/planner.md) |
+| **TaskStore** | Estado durável de planos e tarefas; sobrevive à queda do WSL. [ADR-0035](adr/ADR-0035-planos-duraveis-e-estado-de-tarefas.md) |
+| **Verifier** | Confere o critério de conclusão de uma tarefa com evidência, antes de dizer "pronto". [ADR-0036](adr/ADR-0036-conclusao-verificada.md) |
+| **Evaluation Engine** | Mede uma capacidade contra um conjunto fixo em `evals/`. [Avaliação](specs/agents/evaluation.md) |
+| **KnowledgeGraph** | Relações entre entidades na memória, com fonte obrigatória. [ADR-0037](adr/ADR-0037-relacoes-na-memoria.md) · [Memória §10](specs/memory/design.md#10-relações-grafo-de-conhecimento) |
 | **ZWP** | Zordon Wire Protocol: JSON-RPC 2.0 bidirecional sobre WebSocket + frames binários. [ZWP](api/zwp-protocol.md) |

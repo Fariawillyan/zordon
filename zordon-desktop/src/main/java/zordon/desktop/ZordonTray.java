@@ -43,16 +43,18 @@ final class ZordonTray {
     private static final int SIZE = 16;
 
     private final TrayIcon icon;
+    private final MenuItem pause;
 
-    private ZordonTray(TrayIcon icon) {
+    private ZordonTray(TrayIcon icon, MenuItem pause) {
         this.icon = icon;
+        this.pause = pause;
     }
 
     /**
      * @return vazio quando o ambiente não tem bandeja — o aplicativo continua
      *     inteiro, só sem o ícone. Não é motivo para não abrir.
      */
-    static Optional<ZordonTray> install(Runnable onOpen, Runnable onQuit) {
+    static Optional<ZordonTray> install(Runnable onOpen, Runnable onQuit, Runnable onTogglePause) {
         if (!SystemTray.isSupported()) {
             log.info("bandeja do sistema indisponível neste ambiente");
             return Optional.empty();
@@ -61,9 +63,13 @@ final class ZordonTray {
             PopupMenu menu = new PopupMenu();
             MenuItem open = new MenuItem("Abrir Zordon");
             open.addActionListener(event -> onOpen.run());
+            // O kill switch mora aqui também: é o botão que se aperta quando algo parece errado (Segurança §8).
+            MenuItem pause = new MenuItem("Pausar Zordon");
+            pause.addActionListener(event -> onTogglePause.run());
             MenuItem quit = new MenuItem("Encerrar interface");
             quit.addActionListener(event -> onQuit.run());
             menu.add(open);
+            menu.add(pause);
             menu.addSeparator();
             menu.add(quit);
 
@@ -71,7 +77,7 @@ final class ZordonTray {
             icon.setImageAutoSize(true);
             icon.addActionListener(event -> onOpen.run());
             SystemTray.getSystemTray().add(icon);
-            return Optional.of(new ZordonTray(icon));
+            return Optional.of(new ZordonTray(icon, pause));
         } catch (AWTException | RuntimeException e) {
             log.warn("não foi possível instalar o ícone da bandeja: {}", e.toString());
             return Optional.empty();
@@ -81,6 +87,10 @@ final class ZordonTray {
     void show(TrayState state) {
         icon.setImage(render(state));
         icon.setToolTip(state.tooltip());
+    }
+
+    void lockdown(boolean active) {
+        pause.setLabel(active ? "Retomar Zordon" : "Pausar Zordon");
     }
 
     void remove() {

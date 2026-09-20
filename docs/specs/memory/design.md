@@ -264,3 +264,29 @@ replicação. Nenhum deles se aplica a um assistente pessoal hoje.
 Se acontecer: `MemoryStore` ganha uma segunda implementação, `sqlite-vec` vira
 `pgvector`, FTS5 vira `tsvector`, e o RRF continua igual. O trabalho fica contido
 em `zordon-memory` — que é precisamente o objetivo de a interface existir.
+
+## 10. Relações (grafo de conhecimento)
+
+O RAG responde "o que diz o documento"; a memória, "o que sabemos". Perguntas de
+**relação** — qual serviço usa este banco, em que servidor roda, o que quebra se
+ele parar — ficam em duas tabelas no mesmo SQLite
+([ADR-0037](../../adr/ADR-0037-relacoes-na-memoria.md)):
+
+```sql
+CREATE TABLE entity   (id TEXT PRIMARY KEY, kind TEXT, name TEXT, attrs_json TEXT);
+CREATE TABLE relation (from_id TEXT, kind TEXT, to_id TEXT,
+                       source TEXT NOT NULL,        -- de onde veio: compose, config, rag:<doc>, usuário
+                       confidence REAL, observed_at TEXT,
+                       PRIMARY KEY (from_id, kind, to_id, source));
+```
+
+- `kind` de entidade: `project`, `service`, `database`, `server`, `container`,
+  `person`, `repository`; de relação: `uses`, `runs_on`, `owned_by`, `depends_on`,
+  `exposes`.
+- Toda relação tem **fonte**; relação sem fonte não entra. Quando a fonte muda
+  (o `docker-compose.yml` foi editado), as relações dela são revalidadas.
+- Vizinhança e impacto até N saltos são `WITH RECURSIVE`. A interface
+  `KnowledgeGraph` isola a troca por um banco de grafo, que só entra se as
+  consultas ficarem lentas com dados reais.
+- Entra no M8; antes disso as tabelas existem vazias.
+

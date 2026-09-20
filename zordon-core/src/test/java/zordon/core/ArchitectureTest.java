@@ -25,7 +25,6 @@ import com.tngtech.archunit.lang.ArchRule;
 import zordon.api.trace.AcceptanceCriteria;
 import java.io.File;
 import java.nio.file.Files;
-import zordon.api.trace.AcceptanceCriteria;
 
 /**
  * As invariantes arquiteturais, verificadas no build
@@ -133,6 +132,28 @@ class ArchitectureTest {
             .dependOnClassesThat()
             .resideInAPackage("zordon.ai.registry..")
             .because("um adaptador fala com um fornecedor; quem escolhe entre eles é o registro");
+
+    /** O núcleo de confiança classifica e audita; ele não conhece quem executa (ADR-0024). */
+    @AcceptanceCriteria("SPEC-029/CA-4")
+    @ArchTest
+    static final ArchRule nucleoDeConfiancaNaoConheceONucleoDeAplicacao = noClasses()
+            .that()
+            .resideInAPackage("zordon.security..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("zordon.core..", "zordon.memory..", "zordon.defense..", "zordon.ai..")
+            .because("o núcleo de confiança é a autoridade: ele não pode depender de quem ele controla");
+
+    /** A defesa observa e classifica; conter é do núcleo, pelo caminho mediado (SPEC-026 §10). */
+    @AcceptanceCriteria("SPEC-029/CA-4")
+    @ArchTest
+    static final ArchRule defesaNaoConheceONucleo = noClasses()
+            .that()
+            .resideInAPackage("zordon.defense..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("zordon.core..", "zordon.memory..", "zordon.ai..")
+            .because("detector classifica; quem executa resposta é o núcleo");
 
     @ArchTest
     static final ArchRule capacidadesNaoSeConhecem = slices()

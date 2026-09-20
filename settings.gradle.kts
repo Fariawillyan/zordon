@@ -22,7 +22,11 @@ include("zordon-api")
 include("zordon-zwp")
 include("zordon-core")
 include("zordon-ai")
+include("zordon-security")
+include("zordon-memory")
+include("zordon-defense")
 include("zordon-desktop")
+include("zordon-host")
 
 dependencyResolutionManagement {
     repositories {

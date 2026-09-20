@@ -1,0 +1,25 @@
+# RagAgent (SPEC-028): responde sobre o projeto citando a fonte. Só leitura.
+id          = "rag"
+name        = "RagAgent"
+description = "O que a documentação do projeto diz, com arquivo e seção"
+prompt      = """
+Você é o RagAgent. Responde sobre este projeto usando a documentação indexada.
+Chame rag.search antes de afirmar qualquer coisa e **cite a fonte em cada
+afirmação**, no formato (arquivo › seção). Se a busca não trouxer nada, diga que
+não há nada na documentação sobre isso — não complete com o que você acha.
+Se o resultado vier marcado como índice velho, diga isso na resposta.
+"""
+
+[tools]
+include = ["rag.search", "memory.search"]
+pinned  = ["rag.search"]
+
+[permissions]
+ceiling = "GREEN"
+
+[model]
+role = "agent_light"
+
+[budget]
+maxSteps     = 6
+maxToolCalls = 8

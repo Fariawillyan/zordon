@@ -162,6 +162,25 @@ O que **não** existe e não vai existir: laços, funções, recursão, código
 arbitrário. Quando um workflow precisa de lógica de verdade, o passo certo é
 invocar um agente — ele é o lugar onde julgamento acontece.
 
+### Execução durável
+
+Um workflow pode levar horas (esperar um build, repetir uma checagem) e o WSL
+pode cair no meio ([R2](../../architecture/windows-wsl.md#r2--o-wsl-é-derrubado-por-fora)).
+A execução usa o `TaskStore` do [Planner](../agents/planner.md#4-taskstore)
+([ADR-0035](../../adr/ADR-0035-planos-duraveis-e-estado-de-tarefas.md)): cada
+disparo é uma tarefa, cada passo uma etapa com estado persistido.
+
+| Capacidade | Como |
+|---|---|
+| Pausa e retomada | `pause` leva a execução a `blocked`; `resume` continua da etapa seguinte à última concluída |
+| Retry | Por passo: `retry = { attempts = 3, backoff = "30s" }`; só em passos marcados `idempotent = true` ou GREEN de leitura |
+| Continuação depois de erro | `onError = "stop" \| "skip" \| "notify"` por passo; o padrão é parar e notificar |
+| Queda do núcleo | Execuções `running` voltam como `blocked`; passo com efeito não é repetido sem decisão |
+| Idempotência | Chave `(automation_id, scheduled_for, step_id)`: um passo concluído não roda de novo no mesmo disparo |
+
+Os passos fixam a versão das skills e agentes que chamam
+([Extensões §4](../../architecture/extensions.md#4-versões-e-reversão)).
+
 ## 7. Segurança de automações
 
 Automação é a superfície mais perigosa do sistema: ela roda sem ninguém olhando,

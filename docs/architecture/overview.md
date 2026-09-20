@@ -255,6 +255,36 @@ Regras não-negociáveis:
 
 Catálogo completo de eventos em [ZWP §6](../api/zwp-protocol.md#6-eventos).
 
+### Voice-first: do evento à voz
+
+> **Zordon é voice-first. A comunicação operacional com o usuário ocorre
+> prioritariamente por voz e estados visuais; detalhes técnicos permanecem
+> ocultos por padrão.** ([ADR-0029](../adr/ADR-0029-voice-first.md))
+
+```text
+ Eventos de agentes e ferramentas
+          │
+          ▼
+ Barramento de eventos do Zordon ──────────► Live Trace (tudo, em disco)
+          │                                   só no modo técnico
+          ▼
+ Intérprete de atividade   eventos técnicos → etapas; estado visual
+          │
+          ▼
+ Narrador de voz           o que merece fala: etapa, problema, decisão,
+          │                autorização, resultado; sem repetir, sem enxurrada
+          ▼
+ TTS (motor de voz)
+          │
+          ▼
+ Áudio no host + animação do núcleo no desktop
+```
+
+O intérprete e o narrador vivem no núcleo, porque é lá que os eventos existem e
+é o núcleo que sabe se um evento é técnico ou relevante. O desktop só desenha o
+estado e toca o que o núcleo decidiu falar. Especificado na
+[SPEC-012](../specs/voice/SPEC-012-voice-first-narracao-e-estados.md).
+
 ## 6. Regras de dependência entre módulos
 
 ```text

@@ -286,6 +286,17 @@ lembra na próxima atualização — e, em uma dependência, é um vetor de cade
 suprimentos com a nossa própria assinatura
 ([Cadeia de suprimentos](../security/supply-chain.md)).
 
+### 8.3 Versionamento do ecossistema
+
+Skills, agentes, servidores MCP, providers, automações e workflows têm manifesto
+versionado ([ADR-0034](../adr/ADR-0034-manifesto-de-extensao-versionado.md),
+[Extensões](../architecture/extensions.md)). Quando o Zordon altera um deles:
+
+- produz uma **versão nova** — nunca edita a aprovada no lugar;
+- a versão nova fica suspensa até aprovação, e a anterior continua ativa;
+- automações continuam presas à versão que aprovaram;
+- reverter é apontar para a versão anterior, que nunca é apagada.
+
 ## 9. Auditoria
 
 Toda alteração de projeto produz entrada de auditoria, na mesma cadeia de hash do

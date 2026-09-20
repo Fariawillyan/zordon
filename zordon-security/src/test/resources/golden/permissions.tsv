@@ -1,0 +1,50 @@
+# Tabela golden do PermissionEngine (SPEC-014 CA-6). Mudou o risco ou a decisão? Reveja aqui, junto.
+# id	ferramenta	piso	efeitos	caminhos (W: = Windows)	alvos	comando	args	origem	delegado	contexto	risco	decisão
+leitura-workspace	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	ui	0	-	green	allow
+leitura-area-legivel	fs.read	green	READ_FS	W:D:/docs/x.pdf	1	-	-	ui	0	-	green	allow
+leitura-fora-das-areas	fs.read	green	READ_FS	W:C:/temp/x.txt	1	-	-	ui	0	-	yellow	ask
+leitura-ssh-proibida	fs.read	green	READ_FS	~/.ssh/id_ed25519	1	-	-	ui	0	-	red	deny
+leitura-env-proibida	fs.read	green	READ_FS	W:D:/projetos/app/.env	1	-	-	ui	0	-	red	deny
+leitura-git-proibida	fs.read	green	READ_FS	W:D:/projetos/app/.git/config	1	-	-	ui	0	-	red	deny
+escrita-workspace	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	ui	0	-	yellow	ask
+escrita-windows-workspace	fs.write	yellow	WRITE_FS	W:D:/Projetos/app/README.md	1	-	-	ui	0	-	yellow	ask
+escrita-fora-do-workspace	fs.write	yellow	WRITE_FS	W:D:/docs/a.txt	1	-	-	ui	0	-	red	ask-action
+escrita-instalacao	fs.write	yellow	WRITE_FS	~/.local/share/zordon/lib/core.jar	1	-	-	ui	0	-	red	deny
+escrita-appdata-critico	fs.write	yellow	WRITE_FS	W:C:/Users/u/AppData/Roaming/x.ini	1	-	-	ui	0	-	red	ask-action
+escrita-etc-critico	fs.write	yellow	WRITE_FS	/etc/hosts	1	-	-	ui	0	-	red	ask-action
+escrita-windows-proibida	fs.write	yellow	WRITE_FS	W:C:/Windows/System32/x.dll	1	-	-	ui	0	-	red	deny
+quarentena-43-arquivos	fs.quarantine	red	QUARANTINE_FS	~/dev/app/logs	43	-	-	ui	0	-	red	ask-action
+escrita-por-voz	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	voice	0	-	yellow	ask-action
+automacao-no-escopo	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	automation	0	scope=fs.write	yellow	allow
+automacao-fora-do-escopo	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	automation	0	-	yellow	deny
+automacao-sem-usuario-sobe	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	automation	0	absent,scope=fs.write	red	deny
+automacao-leitura-sem-usuario	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	automation	0	absent,scope=fs.read	yellow	allow
+agente-delegado-sobe	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	ui	1	-	red	ask-action
+agente-delegado-leitura	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	ui	1	-	yellow	ask
+lockdown-nega-escrita	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	ui	0	lockdown	yellow	deny
+lockdown-permite-leitura	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	ui	0	lockdown	green	allow
+disjuntor-aberto	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	ui	0	breaker	green	deny
+contaminado-enviando	http.post	yellow	NETWORK	-	1	-	-	ui	0	tainted	red	ask-action
+contaminado-exportando	export.send	yellow	EXPORT_DATA	-	1	-	-	ui	0	tainted	red	ask-action
+contaminado-lendo	fs.read	green	READ_FS	~/dev/a.txt	1	-	-	ui	0	tainted	green	allow
+mcp-novo-sobe	mcp.docker.list	green	-	-	1	-	-	ui	0	newtool	yellow	ask
+argumento-com-segredo	http.get	green	NETWORK	-	1	-	header=Bearer sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2M3n4	ui	0	-	red	ask-action
+git-status	git.run	green	SPAWN_PROCESS	~/dev/app	1	git status	-	ui	0	-	green	allow
+git-reset-hard	git.run	green	SPAWN_PROCESS	~/dev/app	1	git reset --hard HEAD~3	-	ui	0	-	red	ask-action
+git-push-force	git.run	green	SPAWN_PROCESS	~/dev/app	1	git push origin main --force	-	ui	0	-	red	ask-action
+shell-negado	process.run	yellow	SPAWN_PROCESS	-	1	sh -c whoami	-	ui	0	-	red	deny
+powershell-negado	process.run	yellow	SPAWN_PROCESS	-	1	powershell.exe -Command Get-Process	-	ui	0	-	red	deny
+binario-fora-do-catalogo	process.run	yellow	SPAWN_PROCESS	-	1	/tmp/instalador --sim	-	ui	0	-	red	ask-action
+docker-prune	docker.run	yellow	SPAWN_PROCESS	-	1	docker system prune -a	-	ui	0	-	red	ask-action
+gradle-build	build.run	yellow	SPAWN_PROCESS	~/dev/app	1	gradle build	-	ui	0	-	yellow	ask
+glob-grande-sobe	fs.read	green	READ_FS	~/dev/app	25	-	-	ui	0	-	yellow	ask
+nucleo-de-confianca	self.change	yellow	MODIFY_TRUST_KERNEL	~/dev/zordon/zordon-security	1	-	-	ui	0	-	red	deny
+projeto-vira-yellow	project.change	green	MODIFY_PROJECT	~/dev/app/src	1	-	-	ui	0	-	yellow	ask
+auto-modificacao-vira-yellow	self.change	green	MODIFY_SELF	~/dev/zordon/docs	1	-	-	ui	0	-	yellow	ask
+autonomo-leitura	defense.inspect	green	READ_FS	~/dev/a.txt	1	-	-	autonomous	0	-	green	allow
+autonomo-escrita	defense.write	green	WRITE_FS	~/dev/a.txt	1	-	-	autonomous	0	-	green	deny
+autonomo-yellow	defense.kill	yellow	KILL_PROCESS	-	1	-	-	autonomous	0	-	yellow	deny
+voz-red-pergunta-na-tela	fs.quarantine	red	QUARANTINE_FS	~/dev/app/logs	1	-	-	voice	0	-	red	ask-action
+automacao-red-nega	fs.quarantine	red	QUARANTINE_FS	~/dev/app/logs	1	-	-	automation	0	scope=fs.quarantine	red	deny
+abrir-app-por-voz	app.open	green	SPAWN_PROCESS	-	1	-	-	voice	0	-	green	allow
+origem-agente-sem-escopo	fs.write	yellow	WRITE_FS	~/dev/app/a.txt	1	-	-	agent	0	-	yellow	deny

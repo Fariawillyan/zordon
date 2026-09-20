@@ -28,6 +28,11 @@ public class ZwpMethodException extends RuntimeException {
         this.error = ZwpError.of(kind, message);
     }
 
+    public ZwpMethodException(ZwpError error) {
+        super(error.message());
+        this.error = error;
+    }
+
     public ZwpError error() {
         return error;
     }

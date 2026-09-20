@@ -50,7 +50,8 @@ public final class ChatMethods {
     private Map<String, Object> send(ZwpSession session, Map<String, Object> params) {
         String text = text(params);
         SessionId conversation = conversationFrom(params);
-        TurnId turn = turns.send(conversation, text, source(params));
+        String agent = params.get("agent") instanceof String chosen && !chosen.isBlank() ? chosen : null;
+        TurnId turn = turns.send(conversation, text, source(params), agent);
         return Map.of("turnId", turn.value(), "sessionId", conversation.value());
     }
 

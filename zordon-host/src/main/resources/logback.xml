@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Log do host (SPEC-007 §9): %LOCALAPPDATA%\Zordon\logs\host.log, rotação diária.
+  Sem maxHistory: ele apagaria arquivos, e o Zordon não apaga (ADR-0015). O host
+  escreve poucas linhas por dia. Nenhum byte de áudio vai para cá; nomes de
+  dispositivo só em DEBUG.
+-->
+<configuration>
+  <property name="LOG_DIR" value="${LOCALAPPDATA:-${user.home}}/Zordon/logs"/>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/host.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/host.%d{yyyy-MM-dd}.log</fileNamePattern>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="zordon" level="INFO"/>
+  <logger name="org.java_websocket" level="WARN"/>
+
+  <root level="INFO">
+    <appender-ref ref="FILE"/>
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>

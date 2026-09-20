@@ -87,6 +87,10 @@ void ferramentaAcimaDoTetoDoAgenteNaoEhOferecidaAoModelo() { ... }
 
 Um critério pode ter vários testes; um teste referencia um critério.
 
+No motor Python, a mesma marca fica num comentário imediatamente acima do
+teste: `# @AcceptanceCriteria("SPEC-011/CA-8")`. Os arquivos `voice/**/*.py`
+entram no índice e seus testes rodam em `voiceUnitTest`.
+
 ### Documentação
 
 O front-matter de todo documento carrega `specId` quando ele descreve o resultado

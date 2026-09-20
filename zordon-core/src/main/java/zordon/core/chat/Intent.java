@@ -33,4 +33,11 @@ public sealed interface Intent {
 
     /** Vai para o modelo. */
     record Model(String agentId) implements Intent {}
+
+    /** Uma ferramenta, pelo caminho mediado (SPEC-016): validar, classificar, perguntar, auditar. */
+    record Tool(String tool, java.util.Map<String, Object> args, String rule) implements Intent {
+        public Tool {
+            args = java.util.Map.copyOf(args);
+        }
+    }
 }

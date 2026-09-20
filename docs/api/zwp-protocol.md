@@ -134,7 +134,7 @@ Toda requisição tem timeout. O padrão é 30 s; métodos que sabidamente demor
 
 | Método | Params | Retorno | Notas |
 |---|---|---|---|
-| `chat.send` | `{text, sessionId?, attachments?}` | `{turnId}` | Resposta chega por eventos `AI_RESPONSE` |
+| `chat.send` | `{text, sessionId?, attachments?, agent?}` | `{turnId}` | Resposta chega por eventos `AI_RESPONSE`; `agent` escolhe o agente ([SPEC-022](../specs/agents/SPEC-022-agentes-como-configuracao.md)) |
 | `chat.cancel` | `{turnId}` | `{cancelled}` | Cancela agente, ferramentas e stream |
 | `chat.history` | `{sessionId, before?, limit}` | `{messages[]}` | Paginado, mais recentes primeiro |
 | `chat.newSession` | `{title?}` | `{sessionId}` | |
@@ -143,7 +143,11 @@ Toda requisição tem timeout. O padrão é 30 s; métodos que sabidamente demor
 
 | Método | Params | Retorno |
 |---|---|---|
-| `voice.setMode` | `{mode: "off"\|"wake"\|"push"\|"open"}` | `{mode}` |
+| `voice.status` | `{}` | snapshot do estado da voz ([SPEC-006 §7](../specs/voice/SPEC-006-tela-e-estado-da-voz.md#7-interfaces)) |
+| `voice.setMode` | `{mode: "off"\|"wake"\|"push"\|"open"}` | snapshot — `open` dura 5 min e nunca é persistido |
+| `voice.devices` | `{}` | `{devices[{id, name, default}], selected}` — pergunta ao host; sem host, `ERR_BRIDGE_UNAVAILABLE` |
+| `voice.selectDevice` | `{deviceId}` | snapshot — a escolha é persistida e reaplicada quando o host reconecta |
+| `voice.testMicrophone` | `{seconds?}` (1 a 10, padrão 5) | snapshot com `test.until`; ao fim, `lastTest {verdict, message, peakDbfs, averageDbfs}` ([SPEC-009](../specs/voice/SPEC-009-frames-de-audio-e-teste-do-microfone.md)) |
 | `voice.startListening` | `{reason: "hotkey"\|"ui"}` | `{listenId}` |
 | `voice.stopListening` | `{listenId}` | `{}` |
 | `voice.interrupt` | `{}` | `{}` — para o TTS em andamento (barge-in) |
@@ -152,13 +156,21 @@ Toda requisição tem timeout. O padrão é 30 s; métodos que sabidamente demor
 
 | Método | Params | Retorno |
 |---|---|---|
-| `agent.list` | `{}` | `{agents[]}` |
-| `agent.run` | `{agent, task, budget?}` | `{runId}` (timeout 10 min) |
-| `agent.cancel` | `{runId}` | `{}` |
+| `agent.list` | `{}` | `{agents[{id, name, description, ceiling, role, source}], invalid[{file, reason}]}` ([SPEC-022](../specs/agents/SPEC-022-agentes-como-configuracao.md)) |
+| `agent.run` | `{agent, task}` | `{runId}` na hora; o resultado sai em `AGENT_FINISHED {text}` |
+| `agent.cancel` | `{runId}` | `{cancelled}` |
+| `agent.runs` | `{}` | `{runs[{runId, agent, task, state, steps}]}` |
+| `task.create` | `{goal}` | `{taskId, steps[{id, title, agent}]}` — plano durável ([SPEC-023](../specs/agents/SPEC-023-planos-duraveis-e-verificacao.md)) |
+| `task.list` | `{limit?}` | `{tasks[{taskId, goal, state, reason?, steps, done, createdAt}]}` |
+| `task.get` | `{taskId}` | `{task, steps[{id, title, agent, state, dependsOn, doneWhen, result?}]}` |
+| `task.cancel` | `{taskId}` | `{cancelled}` |
+| `task.resume` | `{taskId}` | `{resumed}` — só de um `desktop` |
+| `task.confirm` | `{taskId, stepId, pass}` | `{state}` — veredito humano; só de um `desktop` |
 | `tool.list` | `{scope?, query?}` | `{tools[]}` |
 | `tool.describe` | `{name}` | `{descriptor}` |
-| `mcp.list` | `{}` | `{servers[]}` |
-| `mcp.connect` / `mcp.disconnect` | `{server}` | `{status}` |
+| `mcp.servers` | `{}` | `{servers[{name, state, tools, drift, error?}]}` ([SPEC-020](../specs/mcp/SPEC-020-cliente-mcp.md)); `state` ∈ `stopped`, `starting`, `connected`, `drift`, `reconnecting`, `failed` |
+| `mcp.approve` | `{server}` | `{approved}`; só de um desktop (`ERR_PERMISSION_DENIED` nos demais) |
+| `mcp.connect` / `mcp.disconnect` | `{server}` | `{status}` (planejado) |
 | `skill.list` | `{}` | `{skills[]}` |
 
 Não existe `tool.invoke` exposto a clientes de UI. Ferramentas são invocadas
@@ -180,13 +192,23 @@ capacidade `debug.invoke` pode fazê-lo, e toda invocação assim é marcada com
 
 | Método | Params | Retorno |
 |---|---|---|
-| `memory.search` | `{query, limit, kinds?}` | `{results[]}` |
-| `security.incidents` | `{since?, severities?}` | `{incidents[]}` |
+| `memory.facts` | `{kind?, subject?, limit?}` | `{facts[{id, kind, subject, content, confidence, observedAt, provenance, source, accessCount, expiresAt?}]}` — fatos ativos ([SPEC-021](../specs/memory/SPEC-021-memoria-de-longo-prazo.md)) |
+| `memory.search` | `{query, limit?}` | `{hits[{fact, score}]}` — busca híbrida com RRF |
+| `memory.export` | `{}` | `{facts[], stats}` — JSON completo dos fatos |
+| `memory.forgetSubject` | `{subject}` | `{forgotten: n}` — só de um `desktop` |
+| `security.findings` | `{since?, severities?, limit?}` | `{findings[{findingId, severity, detector, subject, title, rationale, count, firstSeen, lastSeen, acknowledgedAt?, signals}]}` ([SPEC-026](../specs/defense/SPEC-026-deteccao-e-correlacao.md)) |
+| `security.findingAcknowledge` | `{findingId}` | `{acknowledged}`; só de um `desktop` |
+| `security.events` | `{limit?}` | `{events[]}` — o histórico da defesa, append-only ([SPEC-027](../specs/defense/SPEC-027-resposta-e-disjuntor.md)) |
+| `security.incidents` | `{since?, severities?}` | `{incidents[]}` (planejado) |
 | `security.respond` | `{messageId, choice}` | `{}` — resposta a "comunicar antes de agir" |
-| `security.acknowledge` | `{messageId}` | `{}` — confirma leitura (obrigatório em CRITICAL) |
-| `security.breakers` | `{}` | `{breakers[]}` |
-| `security.breakerRelease` | `{subject, mode}` | `{}` — `mode`: `supervised` \| `closed` |
-| `security.lockdown` | `{enter \| exit, reason}` | `{state}` — sair exige `OPERATOR` |
+| `notify.pending` | `{}` | `{messages[]}` — avisos ainda não confirmados, para a reconexão ([SPEC-015](../specs/security/SPEC-015-pedido-de-permissao-notificacoes-e-kill-switch.md)) |
+| `notify.acknowledge` | `{messageId}` | `{acknowledged}` — confirma leitura (obrigatório em CRITICAL) |
+| `security.status` | `{}` | `{lockdown, audit, pendingNotifications, approver}` |
+| `security.breakers` | `{}` | `{breakers[{subject, state, since, reason, findingId?}]}` ([SPEC-027](../specs/defense/SPEC-027-resposta-e-disjuntor.md)) |
+| `security.breakerRelease` | `{subject, mode}` | `{state}` — `mode`: `supervised` \| `closed`; só de um `desktop` |
+| `security.lockdown` | `{reason}` | `{active, since, reason, trigger}` — "Pausar Zordon": só leitura |
+| `security.resume` | `{}` | `{active: false}` — só de um cliente `desktop`; os demais recebem `ERR_PERMISSION_DENIED` |
+| `tools.list` | `{}` | `{tools[{name, description, risk, effects}]}` ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)) |
 | `security.quarantine.list` | `{}` | `{items[]}` |
 | `security.quarantine.restore` | `{vaultId}` | `{restored}` |
 | `security.exceptions` | `{}` | `{exceptions[]}` — supressões ativas, revogáveis |
@@ -194,11 +216,21 @@ capacidade `debug.invoke` pode fazê-lo, e toda invocação assim é marcada com
 | `change.approve` | `{taskId, decision, scopeAdjustment?}` | `{}` |
 | `change.revert` | `{taskId}` | `{revertCommit}` |
 | `security.policy.get` | `{}` | `{policy}` — **somente leitura; não existe `set`** |
-| `memory.forget` | `{factId}` | `{}` |
-| `automation.list` / `.create` / `.delete` / `.pause` | ... | ... |
-| `system.metrics` | `{}` | snapshot atual |
+| `memory.forget` | `{factId}` | `{forgotten}` — apaga de verdade; só de um `desktop` (`ERR_PERMISSION_DENIED` nos demais) |
+| `automation.list` | `{}` | `{automations[{id, name, trigger, enabled, lastFiredAt?, failures, reason?}], proposals[], invalid[]}` ([SPEC-025](../specs/automation/SPEC-025-automacoes.md)) |
+| `automation.propose` | `{spec}` | `{proposalId, summary, steps[]}` — nada é gravado aqui |
+| `automation.approve` / `automation.reject` | `{proposalId}` | `{id}` / `{rejected}`; só de um `desktop` |
+| `automation.enable` / `automation.disable` | `{id}` | `{enabled}`; só de um `desktop` |
+| `automation.run` | `{id}` | `{taskId}` — dispara agora, pela tela |
+| `rag.status` | `{}` | `{files, chunks, indexedAt, staleFiles, roots}` ([SPEC-028](../specs/rag/SPEC-028-base-de-conhecimento.md)) |
+| `rag.search` | `{query, limit?}` | `{hits[{path, heading, text, score}]}` |
+| `rag.reindex` | `{}` | `{files, chunks, tookMs}`; só de um `desktop` |
+| `usage.summary` | `{days?}` | `{since, inputTokens, outputTokens, calls, byActor, byDay}` ([SPEC-029](../specs/process/SPEC-029-engenharia-preflight-e-uso.md)) |
+| `change.plan` | `{goal}` | `{taskId, goal, touchesTrustCore, tokenBudget, steps[]}` — o preflight de nove passos; não executa nada |
+| `system.metrics` | `{}` | `{cpu, memUsedMb, memTotalMb, memPercent, diskUsedGb, diskTotalGb, diskPercent, netRxKbps, netTxKbps, load, sampledAt, rateHz}` ([SPEC-024](../specs/automation/SPEC-024-monitor-do-sistema.md)) |
+| `monitor.status` | `{}` | `{sampler{rateHz}, docker{state, reason?, events}}` |
 | `system.health` | `{}` | `{status, subsystems{}}` |
-| `system.diagnostics` | `{}` | dados da tela de Diagnostics |
+| `system.diagnostics` | `{}` | `{core{version, startId, startedAt, uptimeSeconds}, events{lastSeq}, clients, turns{active}, providers{id: estado}, roles{papel: {provider, model, ready, reason?}}}` — nunca chave, token ou caminho de secret ([SPEC-005](../specs/ui/SPEC-005-shell-do-desktop.md)) |
 | `session.subscribe` / `.unsubscribe` | `{topics[]}` | `{topics[]}` |
 | `session.ping` | `{}` | `{serverTimeMs}` |
 
@@ -220,24 +252,39 @@ Para um cliente `host`:
 | `bridge.focusWindow` | `{titlePattern \| pid}` | `{focused}` | 5 s |
 | `audio.play` | `{streamId, format}` | `{accepted}` | 5 s |
 | `audio.stop` | `{streamId}` | `{}` | 2 s |
-| `audio.setCaptureEnabled` | `{enabled}` | `{enabled}` | 2 s |
+| `audio.setCaptureEnabled` | `{enabled, streamId?}` — `streamId` do `AUDIO_IN` quando `enabled: true` | `{enabled, reason?}` — o que o host de fato fez; `reason` quando difere do pedido ([SPEC-007](../specs/host/SPEC-007-host-do-windows.md)) | 2 s |
+| `audio.listDevices` | `{}` | `{devices[{id, name, default}], selected}` | 5 s |
+| `audio.selectDevice` | `{deviceId}` | `{selected, name}` | 5 s |
 
 Para um cliente `desktop`:
 
 | Método | Params | Retorno | Timeout |
 |---|---|---|---|
-| `ui.requestPermission` | `{requestId, action, risk, explanation, ttlMs}` | `{decision, scope}` | 60 s |
+| `ui.requestPermission` | `{requestId, tool, summary, risk, origin, targets[], targetCount, perAction, ttlMs}` | `{approval: once \| session \| deny}` | 60 s |
 | `ui.showOverlay` | `{state, text?}` | `{}` | 2 s |
+
+Para um cliente `host` que declarou `windows.apps` ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)):
+
+| Método | Params | Retorno | Timeout |
+|---|---|---|---|
+| `windows.apps` | `{}` | `{apps[{id, name}]}` — atalhos do Menu Iniciar | 5 s |
+| `windows.openApp` | `{id}` | `{opened, name?, reason?}` — só um `id` que o próprio host listou | 5 s |
+
 | `ui.notify` | `{title, body}` | `{}` | 5 s |
 | `ui.securityAlert` | `{messageId, severity, ...8 campos, options[]}` | `{choice?}` | 300 s |
 | `ui.forceForeground` | `{reason}` | `{}` | 5 s — só para CRITICAL |
 
 **`ui.requestPermission` é o método mais sensível do protocolo.** O que ele
 exibe não é texto gerado pelo modelo: é a ação **já resolvida e classificada**
-pelo núcleo. O campo `explanation` pode conter texto do modelo, mas a UI deve
+pelo núcleo. `summary` e `targets` vêm do núcleo; se um dia houver texto do modelo, a UI deve
 renderizá-lo como citação claramente separada da descrição da ação. Sem isso, um
 modelo comprometido poderia induzir o usuário a autorizar outra coisa.
 Ver [UI §6](../specs/ui/design.md#6-diálogo-de-permissão).
+
+Só um cliente `host` que declarou `audio.capture` no hello recebe `audio.*`; um
+`desktop` que declare a capacidade é ignorado. A resposta a um pedido do núcleo
+só vale da mesma sessão, com o mesmo `id` e dentro do prazo; depois dele, é
+descartada. Cliente sem tratador para o método responde `-32601`.
 
 Se nenhum cliente com a capacidade necessária estiver conectado, o núcleo falha
 a operação imediatamente com `ERR_BRIDGE_UNAVAILABLE` ou, no caso de permissão,
@@ -274,11 +321,17 @@ de protocolo.
 
 | Tópico | Evento | Payload essencial |
 |---|---|---|
+| `voice` | `ACTIVITY_STATE` | `{state}` — estado visual do núcleo: `idle`, `listening`, `understanding`, `planning`, `executing`, `agents`, `speaking`, `done`, `attention`, `error` ([SPEC-012](../specs/voice/SPEC-012-voice-first-narracao-e-estados.md)) |
+| `voice` | `VOICE_NARRATION` | `{text, priority, category}` — o que o Zordon fala; só ações reais, nunca raciocínio ([ADR-0029](../adr/ADR-0029-voice-first.md)) |
+| `voice` | `VOICE_STATE` | snapshot de `voice.status` a cada mudança ([SPEC-006](../specs/voice/SPEC-006-tela-e-estado-da-voz.md)) |
 | `voice` | `VOICE_STARTED` | `{listenId, trigger: "wake"\|"hotkey"\|"ui"}` |
 | `voice` | `VOICE_LISTENING` | `{listenId}` |
 | `voice` | `VOICE_PARTIAL` | `{listenId, text}` — transcrição parcial |
-| `voice` | `VOICE_STOPPED` | `{listenId, text, durationMs, confidence}` |
-| `voice` | `VOICE_LEVEL` | `{rms, peak}` — coalescido, ~20 Hz, para o waveform |
+| `voice` | `VOICE_STOPPED` | `{outcome, confidence, durationMs, reason}` e `text` só quando `outcome` é `command`; `low_confidence` e `silence` não levam texto ([SPEC-013](../specs/voice/SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md)) |
+| `tools` | `TOOL_CALLED` | `{callId, tool, risk, decision}` — sem argumentos ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)) |
+| `tools` | `TOOL_RESULT` | `{callId, tool, status, durationMs}` |
+| `voice` | `VOICE_WAKE` | `{score, outcome, bargeIn}` — uma ativação pela palavra "Zordon" e o desfecho; nunca áudio nem texto ([SPEC-013](../specs/voice/SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md)) |
+| `voice` | `VOICE_LEVEL` | `{rms, peak}` em dBFS — no máximo 20 Hz, só durante o teste do microfone ou uma escuta ativa |
 | `voice` | `TTS_STARTED` / `TTS_FINISHED` | `{streamId}` |
 | `chat` | `USER_COMMAND` | `{turnId, text, source: "voice"\|"text"}` |
 | `chat` | `AI_THINKING` | `{turnId, model, agentId}` |
@@ -286,27 +339,29 @@ de protocolo.
 | `chat` | `AI_ERROR` | `{turnId, kind, message, retryable}` |
 | `tools` | `TOOL_STARTED` | `{callId, tool, args, risk}` |
 | `tools` | `TOOL_FINISHED` | `{callId, ok, durationMs, summary, error?}` |
-| `agents` | `AGENT_STARTED` | `{runId, agent, task}` |
-| `agents` | `AGENT_PROGRESS` | `{runId, step, of?, note}` |
-| `agents` | `AGENT_FINISHED` | `{runId, ok, reason, durationMs, usage}` |
+| `agents` | `AGENT_STARTED` | `{runId, agent, task, parent?}` — `parent` numa delegação ([SPEC-022](../specs/agents/SPEC-022-agentes-como-configuracao.md)) |
+| `agents` | `AGENT_PROGRESS` | `{runId, step, note}` |
+| `agents` | `AGENT_FINISHED` | `{runId, agent, ok, reason, durationMs, usage{tokens, steps, toolCalls}, text, parent?}` |
+| `agents` | `TASK_STATE` | `{taskId, stepId?, state, title?, goal?, reason?}` — `planned`, `running`, `verifying`, `done`, `failed`, `waiting_human`, `blocked`, `cancelled` ([SPEC-023](../specs/agents/SPEC-023-planos-duraveis-e-verificacao.md)) |
 | `mcp` | `MCP_CONNECTED` | `{server, tools, resources, prompts}` |
 | `mcp` | `MCP_DISCONNECTED` | `{server, reason, willRetry}` |
 | `permission` | `PERMISSION_REQUIRED` | `{requestId, action, risk}` |
 | `permission` | `PERMISSION_DECIDED` | `{requestId, decision, by: "user"\|"policy"\|"timeout"}` |
-| `system` | `SYSTEM_METRICS` | `{cpu, ram, gpu, disk, net}` — coalescido, 1 Hz |
+| `system` | `SYSTEM_METRICS` | `{cpu, ram, gpu, disk, net}` — planejado; hoje a métrica é puxada por `system.metrics`, para o trace não virar ruído ([SPEC-024](../specs/automation/SPEC-024-monitor-do-sistema.md)) |
+| `system` | `CONTAINER_EVENT` | `{container, image, action, exitCode?, at}` — push do `docker events`, sem polling |
 | `system` | `SYSTEM_ALERT` | `{severity, source, message, data}` |
 | `system` | `SYSTEM_CLOCK_JUMP` | `{deltaMs}` |
 | `system` | `CORE_STARTED` | `{startId, version}` |
-| `automation` | `AUTOMATION_TRIGGERED` | `{automationId, name, trigger}` |
-| `automation` | `AUTOMATION_FINISHED` | `{automationId, ok, summary}` |
-| `memory` | `MEMORY_WRITTEN` | `{kind, id, summary}` |
-| `security` | `SECURITY_FINDING` | `{findingId, severity, detector, subject, rationale}` |
+| `automation` | `AUTOMATION_TRIGGERED` | `{automationId, name, trigger, taskId}` ([SPEC-025](../specs/automation/SPEC-025-automacoes.md)) |
+| `automation` | `AUTOMATION_FINISHED` | `{automationId, ok, summary, taskId}` |
+| `memory` | `MEMORY_WRITTEN` | `{kind, id, summary}` — `summary` com até 80 caracteres ([SPEC-021](../specs/memory/SPEC-021-memoria-de-longo-prazo.md)) |
+| `security` | `SECURITY_FINDING` | `{findingId, severity, detector, subject, title, rationale}` ([SPEC-026](../specs/defense/SPEC-026-deteccao-e-correlacao.md)) |
 | `security` | `SECURITY_ACTION_PROPOSED` | `{messageId, action, affected, reversible, ttlMs}` |
-| `security` | `SECURITY_ACTION_TAKEN` | `{eventId, action, outcome, reversible, rollbackToken}` |
+| `security` | `SECURITY_ACTION_TAKEN` | `{eventId, subject, executed, outcome, reversible}` ([SPEC-027](../specs/defense/SPEC-027-resposta-e-disjuntor.md)) |
 | `security` | `SECURITY_NOTIFICATION` | `{messageId, severity, ...os 8 campos de explicação}` |
 | `security` | `SECURITY_INCIDENT_UPDATED` | `{incidentId, count, lastSeen, severity}` |
-| `security` | `CIRCUIT_BREAKER_OPENED` | `{subject, reason, evidence}` |
-| `security` | `CIRCUIT_BREAKER_CLOSED` | `{subject, by}` |
+| `security` | `CIRCUIT_BREAKER_OPENED` | `{subject, reason, findingId}` |
+| `security` | `CIRCUIT_BREAKER_CLOSED` | `{subject, by, state}` — só o usuário fecha |
 | `security` | `LOCKDOWN_ENTERED` | `{reason, trigger, auto}` |
 | `security` | `LOCKDOWN_EXITED` | `{by}` — sempre `user` |
 | `security` | `QUARANTINE_ADDED` | `{vaultId, originalPath, reason, restorable}` |
@@ -364,6 +419,12 @@ de 8 bytes, big-endian:
 O byte mágico `0x5A` ('Z') existe para falhar alto se um frame binário chegar
 onde não devia.
 
+Implementados na [SPEC-009](../specs/voice/SPEC-009-frames-de-audio-e-teste-do-microfone.md):
+`AUDIO_IN` e `AUDIO_END`, com o crédito abaixo. O `streamId` de áudio de entrada
+vem em `audio.setCaptureEnabled`; frame de outro stream ou de outra sessão que
+não o host ativo é descartado, com no máximo um `SYSTEM_ALERT` por sessão por
+minuto.
+
 Um stream binário é sempre **anunciado por um método JSON antes** (`audio.play`
 devolve o `streamId` que os frames vão usar). Frames com `streamId` desconhecido
 são descartados e geram `SYSTEM_ALERT`.
@@ -374,7 +435,8 @@ são descartados e geram `SYSTEM_ALERT`.
 
 - No `session.hello`, o núcleo informa `audioCreditFrames` (padrão 50 = 1 s).
 - O host pode ter no máximo esse número de frames não confirmados.
-- O núcleo envia `audio.credit {streamId, frames}` conforme consome.
+- O núcleo envia a notificação `audio.credit {streamId, frames}` a cada 10 frames
+  consumidos.
 - Se o host estourar o crédito, ele **descarta os mais antigos**, não bufferiza.
   Áudio velho não tem valor; latência tem.
 

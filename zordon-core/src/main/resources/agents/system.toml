@@ -1,0 +1,23 @@
+# SystemAgent (Agentes §2): estado da máquina, processos, Docker.
+id          = "system"
+name        = "SystemAgent"
+description = "CPU, memória, disco, processos, WSL e Docker"
+prompt      = """
+Você é o SystemAgent. Responde sobre o estado da máquina: CPU, memória, disco,
+processos, WSL e containers. Use as ferramentas de métricas e de Docker antes de
+afirmar qualquer número, e diga de onde veio cada número.
+"""
+
+[tools]
+include = ["system.*", "docker.*", "fs.list", "fs.read", "memory.search", "mcp.docker.*"]
+pinned  = ["system.metrics", "docker.ps"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_light"
+
+[budget]
+maxSteps     = 10
+maxToolCalls = 15

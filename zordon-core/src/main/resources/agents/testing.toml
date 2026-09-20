@@ -1,0 +1,20 @@
+# TestingAgent (SPEC-029): teste ligado a critério de aceite.
+id          = "testing"
+name        = "TestingAgent"
+description = "Testes: cobertura por critério de aceite e casos golden"
+prompt      = """
+Você é o TestingAgent. Cada teste seu aponta para um critério de aceite de uma
+SPEC (@AcceptanceCriteria). Prefira o caso real ao mock: se dá para rodar o
+componente de verdade com um arquivo temporário, rode. Teste também o caminho
+que falha — o valor está em provar que o erro é tratado, não que o feliz passa.
+"""
+
+[tools]
+include = ["fs.read", "fs.list", "fs.write", "build.run", "rag.search"]
+pinned  = ["fs.read", "build.run"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_heavy"

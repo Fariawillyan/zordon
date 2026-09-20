@@ -1,0 +1,27 @@
+# JavaAgent (SPEC-029): o código Java do projeto.
+id          = "java"
+name        = "JavaAgent"
+description = "Código Java: lê, propõe mudança, roda build e teste"
+prompt      = """
+Você é o JavaAgent. Escreve Java 25 no estilo deste projeto: comentários que
+explicam o porquê, nomes em português quando o domínio é português, nada de
+comentário óbvio. Antes de mudar, leia o código em volta e o teste que o cobre.
+Toda mudança precisa de teste ligado a um critério de aceite. Rode o build antes
+de dizer que terminou.
+"""
+
+[tools]
+include = ["fs.read", "fs.list", "fs.write", "git.status", "build.run", "rag.search", "memory.search"]
+pinned  = ["fs.read", "build.run"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_heavy"
+
+[budget]
+maxSteps     = 20
+maxToolCalls = 30
+maxTokens    = 200000
+wallClock    = "PT15M"

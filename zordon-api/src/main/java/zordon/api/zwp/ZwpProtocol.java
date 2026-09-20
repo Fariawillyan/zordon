@@ -27,6 +27,9 @@ public final class ZwpProtocol {
     public static final Duration DEFAULT_HEARTBEAT = Duration.ofSeconds(10);
     public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
+    /** Frames de áudio que o host pode ter sem confirmação: 50 × 20 ms = 1 s (ZWP §7). */
+    public static final int DEFAULT_AUDIO_CREDIT_FRAMES = 50;
+
     /** Pings sem pong antes de fechar com {@link ZwpCloseCode#HEARTBEAT_LOST}. */
     public static final int MISSED_HEARTBEATS_BEFORE_CLOSE = 3;
 

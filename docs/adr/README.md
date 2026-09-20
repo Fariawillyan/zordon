@@ -47,6 +47,19 @@ acerto.
 | [0024](ADR-0024-auto-modificacao-e-nucleo-de-confianca.md) | O Zordon escreve o próprio código, mas não se instala | Aceito |
 | [0025](ADR-0025-modulo-de-transporte-zwp.md) | Módulo de transporte `zordon-zwp`, separado do contrato | Aceito |
 | [0026](ADR-0026-provider-agnostico.md) | O núcleo não pertence a nenhum provider de IA | Aceito |
+| [0027](ADR-0027-supervisor-do-wsl-pelo-agendador.md) | O supervisor do WSL é o agendador do Windows, não o host | Aceito |
+| [0028](ADR-0028-motor-de-voz-como-unit-systemd.md) | O motor de voz é uma unit systemd, não um processo filho | Aceito |
+| [0029](ADR-0029-voice-first.md) | Zordon é voice-first | Aceito |
+| [0030](ADR-0030-origem-da-ordem.md) | A origem da ordem limita o risco que ela pode autorizar | Aceito |
+| [0031](ADR-0031-sandbox-para-codigo-de-agente.md) | Código de agente roda em sandbox, não no computador do usuário | Aceito |
+| [0032](ADR-0032-segredo-se-usa-nao-se-entrega.md) | Segredo se usa, não se entrega | Aceito |
+| [0033](ADR-0033-capacidades-e-roteador-de-modelos.md) | Capacidades, não nomes; o roteador escolhe quem executa | Aceito |
+| [0034](ADR-0034-manifesto-de-extensao-versionado.md) | Toda extensão tem manifesto versionado | Aceito |
+| [0035](ADR-0035-planos-duraveis-e-estado-de-tarefas.md) | Planos são dados duráveis, não texto de conversa | Aceito |
+| [0036](ADR-0036-conclusao-verificada.md) | Conclusão é verificada, não declarada | Aceito |
+| [0037](ADR-0037-relacoes-na-memoria.md) | Relações entre coisas ficam na memória, sem banco de grafo | Aceito |
+| [0038](ADR-0038-palavra-de-ativacao-treinada-aqui.md) | A palavra "Zordon" tem detector próprio, treinado aqui com dados de licença permissiva | Aceito |
+| [0039](ADR-0039-provider-por-assinatura-pelo-cli.md) | Provider por assinatura pelo CLI oficial, pelo caminho mediado e sem ferramentas | Aceito |
 
 ## Decisões que definem o produto
 

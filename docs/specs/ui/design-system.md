@@ -43,6 +43,12 @@ Não usar rosto animado permanente, texto com glow, borda neon em cada cartão,
 scanlines, partículas, frases motivacionais fixas ou relógio grande. A imagem
 inspira a identidade; as necessidades documentadas determinam a interface.
 
+Exceção específica solicitada para a tela de Voz: a
+[SPEC-008](../voice/SPEC-008-console-visual-e-efeitos-sonoros.md) define esfera,
+partículas, anéis e ondas ciano. A decoração é estática em repouso, reage aos sons
+locais quando reproduzidos e oferece movimento reduzido. Os demais destinos
+mantêm as restrições acima; a cena nunca representa captura de microfone.
+
 ## 3. Cores
 
 Os nomes abaixo são os tokens canônicos. Valores hexadecimais são sRGB opacos.

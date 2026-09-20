@@ -316,6 +316,25 @@ tela de Diagnostics passa a sinalizá-lo como resíduo a remover.
 `config.toml` **nunca** contém segredo. Ele contém referências:
 `provider.apiKey = "secret://anthropic-api-key"`.
 
+### Uso intermediado
+
+Agentes e skills nunca recebem o valor de um segredo
+([ADR-0032](../adr/ADR-0032-segredo-se-usa-nao-se-entrega.md)). Eles referenciam
+o segredo por nome (`secret:github-token`, `secret:ssh/work`) e pedem a
+**operação**; o `SecretBroker` a executa:
+
+| Uso | Como o broker faz |
+|---|---|
+| `git push` com SSH | Agente SSH temporário, só dentro do sandbox da tarefa ([Sandbox](sandbox.md)) |
+| Chamada HTTP com token | O broker monta o cabeçalho; o agente vê a resposta, não o token |
+| Token de MCP | Entregue ao processo do servidor MCP na partida, nunca ao modelo |
+
+Cada segredo tem escopo declarado — agentes, destinos e origem máxima
+([Identidade](identity.md)) — e cada uso vira linha no `AuditLog`. Segredo sem
+escopo não pode ser usado por agente nenhum. A chave SSH do usuário não é
+copiada: o broker usa o `ssh-agent` do Windows pelo host ou uma chave dedicada ao
+Zordon, cadastrada pelo usuário.
+
 ### Redação
 
 O `SecretManager` mantém o conjunto de valores de segredo conhecidos e oferece

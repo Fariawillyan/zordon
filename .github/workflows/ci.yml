@@ -38,8 +38,13 @@ jobs:
           # executa código arbitrário em toda build.
           validate-wrappers: true
 
+      # Os testes de janela do desktop (SPEC-005) precisam de um display; sem
+      # ele, são pulados e o portão de layout deixa de existir.
+      - name: Display virtual
+        run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+
       - name: Verificação completa
-        run: ./gradlew verifyAll --stacktrace
+        run: xvfb-run -a ./gradlew verifyAll --stacktrace
 
       - name: Relatórios de teste
         if: always()
@@ -47,6 +52,14 @@ jobs:
         with:
           name: relatorios-de-teste
           path: '**/build/reports/tests/**'
+          retention-days: 7
+
+      - name: Capturas do shell
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-do-shell
+          path: zordon-desktop/build/ui-snapshots/
           retention-days: 7
 
   build-from-scratch:

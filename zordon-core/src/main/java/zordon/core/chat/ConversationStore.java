@@ -28,10 +28,9 @@ import zordon.api.SessionId;
 /**
  * Sessões e mensagens da conversa.
  *
- * <p>Em memória, no núcleo: como o núcleo é um serviço residente, fechar e reabrir
- * a janela preserva o histórico, que é o que o marco M1 exige. A persistência em
- * SQLite — que sobrevive ao reinício do núcleo — é do M5, junto com a memória de
- * longo prazo ([Memória](../../../../../docs/specs/memory/design.md)).
+ * <p>A leitura do turno é da RAM: o núcleo é um serviço residente. Cada sessão e
+ * cada mensagem também vão para o {@link Recorder}, o registro durável no
+ * {@code zordon.db} (SPEC-021), que sobrevive ao reinício.
  */
 public final class ConversationStore {
 
@@ -42,9 +41,33 @@ public final class ConversationStore {
 
     private record Session(SessionId id, String title, Instant startedAt, List<StoredMessage> messages) {}
 
+    /** Onde a conversa fica registrada. Falha de registro não interrompe a conversa. */
+    public interface Recorder {
+        void session(String sessionId, String title, Instant startedAt);
+
+        void message(String sessionId, String turnId, String role, String text, Instant ts);
+    }
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ConversationStore.class);
+    private volatile Recorder recorder;
+
+    public ConversationStore recordTo(Recorder target) {
+        this.recorder = java.util.Objects.requireNonNull(target, "target");
+        return this;
+    }
+
     public SessionId newSession(String title) {
         SessionId id = new SessionId("c_" + Long.toHexString(System.nanoTime()));
-        sessions.put(id, new Session(id, title, Instant.now(), new CopyOnWriteArrayList<>()));
+        Session session = new Session(id, title, Instant.now(), new CopyOnWriteArrayList<>());
+        sessions.put(id, session);
+        Recorder target = recorder;
+        if (target != null) {
+            try {
+                target.session(id.value(), title, session.startedAt());
+            } catch (RuntimeException e) {
+                log.warn("sessão {} não registrada: {}", id.value(), e.getMessage());
+            }
+        }
         return id;
     }
 
@@ -66,6 +89,15 @@ public final class ConversationStore {
             throw new IllegalArgumentException("sessão desconhecida: " + session);
         }
         current.messages().add(message);
+        Recorder target = recorder;
+        if (target != null) {
+            try {
+                target.message(session.value(), message.turn() == null ? null : message.turn().value(), message.role(),
+                        message.text(), message.ts());
+            } catch (RuntimeException e) {
+                log.warn("mensagem da sessão {} não registrada: {}", session.value(), e.getMessage());
+            }
+        }
         while (current.messages().size() > MAX_MESSAGES_PER_SESSION) {
             current.messages().removeFirst();
         }

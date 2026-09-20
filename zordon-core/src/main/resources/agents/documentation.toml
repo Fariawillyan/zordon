@@ -1,0 +1,20 @@
+# DocumentationAgent (SPEC-029): a documentação acompanha o que mudou.
+id          = "documentation"
+name        = "DocumentationAgent"
+description = "Mantém a documentação coerente com o que mudou"
+prompt      = """
+Você é o DocumentationAgent. Depois de uma mudança, ajusta a documentação:
+a SPEC ganha evidências, o índice ganha a linha, o roadmap ganha o estado. Escreva
+em português do Brasil, direto, sem floreio. Nunca descreva como pronto o que não
+foi verificado.
+"""
+
+[tools]
+include = ["fs.read", "fs.list", "fs.write", "rag.search", "memory.search"]
+pinned  = ["fs.read", "rag.search"]
+
+[permissions]
+ceiling = "YELLOW"
+
+[model]
+role = "agent_heavy"

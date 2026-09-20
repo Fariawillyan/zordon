@@ -57,6 +57,9 @@ public final class ZwpClient implements AutoCloseable {
     private final ZwpCodec codec = new ZwpCodec();
     private final AtomicLong nextId = new AtomicLong(1);
     private final Map<Long, CompletableFuture<Map<String, Object>>> pending = new ConcurrentHashMap<>();
+    private final Map<String, RequestHandler> handlers = new ConcurrentHashMap<>();
+    private final Map<String, java.util.function.Consumer<Map<String, Object>>> notifications =
+            new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeouts =
             Executors.newSingleThreadScheduledExecutor(runnable -> {
                 Thread thread = new Thread(runnable, "zwp-client-timeouts");
@@ -91,6 +94,35 @@ public final class ZwpClient implements AutoCloseable {
     public HelloResult connect(HelloParams params, Duration timeout) throws InterruptedException {
         open(timeout);
         return hello(params, timeout);
+    }
+
+    /**
+     * Atende {@code method} quando o núcleo o requisitar. Registre antes de
+     * {@link #connect}: o núcleo pode pedir logo depois do hello.
+     */
+    public ZwpClient handle(String method, RequestHandler handler) {
+        handlers.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        return this;
+    }
+
+    /** Recebe a notificação {@code method} do núcleo (ex.: {@code audio.credit}). */
+    public ZwpClient onNotification(String method, java.util.function.Consumer<Map<String, Object>> handler) {
+        notifications.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        return this;
+    }
+
+    /** Envia um frame binário (ZWP §7). @return se o socket estava aberto para enviar. */
+    public boolean sendBinary(zordon.api.zwp.BinaryFrame frame) {
+        if (!socket.isOpen()) {
+            return false;
+        }
+        try {
+            socket.send(BinaryFrameCodec.encode(frame));
+            return true;
+        } catch (RuntimeException e) {
+            log.debug("frame binário não enviado: {}", e.toString());
+            return false;
+        }
     }
 
     public CompletableFuture<Map<String, Object>> request(String method, Map<String, Object> params) {
@@ -134,11 +166,31 @@ public final class ZwpClient implements AutoCloseable {
         switch (message) {
             case ZwpResponse response -> complete(response);
             case ZwpNotification notification -> dispatch(notification);
-            case ZwpRequest request ->
-                // Requisições do núcleo para o cliente (bridge, permissão) chegam no M3.
-                socket.send(codec.encode(ZwpResponse.failed(
-                        request.id(),
-                        ZwpError.protocol(ZwpError.METHOD_NOT_FOUND, "método não suportado: " + request.method()))));
+            // Fora da thread do socket: um tratador lento não atrasa eventos nem respostas.
+            case ZwpRequest request -> Thread.ofVirtual().name("zwp-handler-" + request.method())
+                    .start(() -> answer(request));
+        }
+    }
+
+    private void answer(ZwpRequest request) {
+        RequestHandler handler = handlers.get(request.method());
+        ZwpResponse response;
+        if (handler == null) {
+            response = ZwpResponse.failed(request.id(), ZwpError.protocol(
+                    ZwpError.METHOD_NOT_FOUND, "método desconhecido: " + request.method()));
+        } else {
+            try {
+                response = ZwpResponse.ok(request.id(), handler.handle(request.params()));
+            } catch (ZwpRemoteException e) {
+                response = ZwpResponse.failed(request.id(), e.error());
+            } catch (Exception e) {
+                log.warn("falha ao atender {} do núcleo: {}", request.method(), e.toString());
+                response = ZwpResponse.failed(request.id(), ZwpError.protocol(
+                        ZwpError.INTERNAL_ERROR, "falha ao atender " + request.method()));
+            }
+        }
+        if (socket.isOpen()) {
+            socket.send(codec.encode(response));
         }
     }
 
@@ -157,7 +209,12 @@ public final class ZwpClient implements AutoCloseable {
 
     private void dispatch(ZwpNotification notification) {
         if (!ZwpNotification.EVENT_METHOD.equals(notification.method())) {
-            log.debug("notificação ignorada: {}", notification.method());
+            java.util.function.Consumer<Map<String, Object>> handler = notifications.get(notification.method());
+            if (handler == null) {
+                log.debug("notificação ignorada: {}", notification.method());
+            } else {
+                handler.accept(notification.params());
+            }
             return;
         }
         Map<String, Object> params = notification.params();
@@ -196,6 +253,15 @@ public final class ZwpClient implements AutoCloseable {
         @Override
         public void onMessage(String message) {
             handle(message);
+        }
+
+        @Override
+        public void onMessage(java.nio.ByteBuffer bytes) {
+            try {
+                listener.onBinary(BinaryFrameCodec.decode(bytes));
+            } catch (ZwpCodecException e) {
+                log.warn("frame binário inválido descartado: {}", e.getMessage());
+            }
         }
 
         @Override

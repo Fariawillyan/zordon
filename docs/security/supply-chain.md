@@ -180,6 +180,20 @@ Dependência nova em `zordon-security` ou `zordon-defense` exige justificativa
 escrita no PR e revisão do CODEOWNER. Esses módulos devem ter a menor árvore
 possível — idealmente, só o JDK.
 
+### Dependências de `zordon-security` ([SPEC-014](../specs/security/SPEC-014-auditoria-validador-e-motor-de-permissao.md))
+
+| Dependência | Licença | Por que não dá para não ter |
+|---|---|---|
+| `org.xerial:sqlite-jdbc` | Apache 2.0 | A auditoria precisa de triggers que recusam `UPDATE`/`DELETE` no próprio banco e de escrita transacional; o SQLite já é o banco da memória ([ADR-0008](../adr/ADR-0008-sqlite-como-memoria.md)). Traz o SQLite nativo, sem dependências transitivas |
+| `jackson-databind` | Apache 2.0 | Serialização canônica (chaves ordenadas) dos argumentos auditados; já é a do núcleo |
+| `tomlj` | Apache 2.0 | Ler `[paths]` e `[programs]` do `config.toml`; já é o leitor da configuração de IA |
+
+### Dependências de `zordon-memory` ([SPEC-021](../specs/memory/SPEC-021-memoria-de-longo-prazo.md))
+
+Nenhuma nova no build: `sqlite-jdbc` (com FTS5 embutido), `jackson-databind` e
+`slf4j-api`, as mesmas de `zordon-security`. A busca vetorial (`sqlite-vec`) é
+extensão nativa e entra só com a sua própria justificativa, no M8.
+
 ## 8. Plugins, MCP e modelos de terceiros
 
 Código de terceiro que roda **no computador do usuário** recebe tratamento

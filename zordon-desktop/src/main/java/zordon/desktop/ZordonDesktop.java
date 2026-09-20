@@ -15,54 +15,48 @@
  */
 package zordon.desktop;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.api.event.EventEnvelope;
+import zordon.api.event.EventType;
 import zordon.api.event.Topic;
 import zordon.api.zwp.ClientInfo;
 import zordon.api.zwp.ClientKind;
 import zordon.api.zwp.HelloResult;
+import zordon.desktop.shell.ComposerTarget;
+import zordon.desktop.shell.DesktopState;
+import zordon.desktop.shell.Destination;
+import zordon.desktop.shell.TurnSummary;
+import zordon.desktop.ui.Fonts;
+import zordon.desktop.ui.ShellActions;
+import zordon.desktop.ui.ZordonShell;
 import zordon.zwp.CoreConnection;
 
 /**
- * A janela do Zordon.
+ * A janela do Zordon: liga a conexão com o núcleo ao estado, e o estado à tela.
  *
  * <p>Fechá-la não encerra nada: o núcleo é um serviço e continua trabalhando. A
  * interface é uma projeção do fluxo de eventos, não a dona do estado.
  */
-public final class ZordonDesktop extends Application {
+public final class ZordonDesktop extends Application implements ShellActions {
 
     private static final Logger log = LoggerFactory.getLogger(ZordonDesktop.class);
     private static final String VERSION = "0.1.0";
 
-    private final Label status = new Label("NÚCLEO OFFLINE");
-    private final Label detail = new Label("procurando o núcleo");
+    private final DesktopState state = new DesktopState();
     private final UiEventPump pump = new UiEventPump(this::apply);
 
-    private ChatView chat;
-    private LogsView logs;
+    private ZordonShell shell;
     private CoreConnection connection;
     private Optional<ZordonTray> tray = Optional.empty();
     private Stage stage;
-    private String sessionId;
 
     public static void main(String[] args) {
         launch(args);
@@ -71,25 +65,17 @@ public final class ZordonDesktop extends Application {
     @Override
     public void start(Stage primary) {
         this.stage = primary;
-        this.chat = new ChatView(this::sendToCore);
-        this.logs = new LogsView();
+        Fonts.load();
+        this.shell = new ZordonShell(state, this);
 
-        TabPane tabs = new TabPane(
-                tab("Chat", chat),
-                tab("Logs", logs));
-        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-
-        BorderPane root = new BorderPane();
-        root.setCenter(tabs);
-        root.setBottom(statusBar());
-        root.getStyleClass().add("root-pane");
-
-        Scene scene = new Scene(root, 900, 640);
-        scene.getStylesheets().add(
-                ZordonDesktop.class.getResource("/zordon/desktop/zordon.css").toExternalForm());
-
+        // Janela compacta da SPEC-010: o console de voz é o conteúdo.
+        Scene scene = new Scene(shell, 960, 720);
+        scene.getStylesheets().add(ZordonDesktop.class.getResource("/zordon/desktop/zordon.css").toExternalForm());
         primary.setTitle("Zordon");
+        primary.setMinWidth(720);
+        primary.setMinHeight(560);
         primary.setScene(scene);
+
         // A janela some para a bandeja; o processo continua para receber eventos.
         Platform.setImplicitExit(false);
         primary.setOnCloseRequest(event -> {
@@ -102,8 +88,20 @@ public final class ZordonDesktop extends Application {
         });
         primary.show();
 
-        tray = ZordonTray.install(this::showWindow, this::shutdown);
-        chat.setComposerEnabled(false, "aguardando o núcleo");
+        tray = ZordonTray.install(this::showWindow, this::shutdown, () -> Platform.runLater(() -> {
+            if (state.lockdownProperty().get()) {
+                resumeZordon();
+            } else {
+                pauseZordon();
+            }
+        }));
+        state.lockdownProperty().addListener((observable, before, now) -> tray.ifPresent(icon -> icon.lockdown(now)));
+        state.connectionProperty().addListener((observable, before, now) -> tray.ifPresent(icon -> icon.show(
+                switch (now) {
+                    case ONLINE -> TrayState.ONLINE;
+                    case CONNECTING -> TrayState.DEGRADED;
+                    case OFFLINE -> TrayState.OFFLINE;
+                })));
         pump.start();
         connect();
     }
@@ -113,28 +111,381 @@ public final class ZordonDesktop extends Application {
         shutdown();
     }
 
-    private Tab tab(String title, javafx.scene.Node content) {
-        Tab tab = new Tab(title, content);
-        tab.setClosable(false);
-        return tab;
+    // ── ações pedidas pelo shell ────────────────────────────────────────────
+
+    @Override
+    public void send(String text, ComposerTarget target) {
+        if (target.newConversation()) {
+            connection.request("chat.newSession", Map.of()).thenAccept(result -> Platform.runLater(() -> {
+                state.sessionIdProperty().set(String.valueOf(result.get("sessionId")));
+                shell.clearChat();
+                state.select(Destination.CHAT);
+                sendToSession(text);
+            })).exceptionally(this::reportFailure);
+        } else {
+            sendToSession(text);
+        }
     }
 
-    private Region statusBar() {
-        status.getStyleClass().add("core-status");
-        detail.getStyleClass().add("core-detail");
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Label version = new Label("Zordon " + VERSION);
-        version.getStyleClass().add("core-detail");
-
-        HBox bar = new HBox(12, status, detail, spacer, version);
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setPadding(new Insets(10, 24, 10, 24));
-        bar.getStyleClass().add("status-bar");
-        return bar;
+    @Override
+    public void newConversation() {
+        connection.request("chat.newSession", Map.of()).thenAccept(result -> Platform.runLater(() -> {
+            state.sessionIdProperty().set(String.valueOf(result.get("sessionId")));
+            shell.clearChat();
+            state.select(Destination.CHAT);
+            shell.focusComposer();
+        })).exceptionally(this::reportFailure);
     }
+
+    @Override
+    public void cancelTurn(String turnId) {
+        if (turnId != null) {
+            // Cancelar preserva o que já chegou e espera a confirmação do núcleo.
+            connection.request("chat.cancel", Map.of("turnId", turnId))
+                    .thenAccept(result -> { })
+                    .exceptionally(this::reportFailure);
+        }
+    }
+
+    @Override
+    public void refreshDiagnostics() {
+        connection.request("system.diagnostics", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.diagnostics(result)))
+                .exceptionally(failure -> {
+                    Platform.runLater(() -> state.diagnosticsFailed(rootMessage(failure)));
+                    return null;
+                });
+    }
+
+    @Override
+    public void setVoiceMode(String mode) {
+        connection.request("voice.setMode", Map.of("mode", mode))
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void loadVoiceDevices() {
+        connection.request("voice.devices", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.voiceDevices(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void selectVoiceDevice(String deviceId) {
+        connection.request("voice.selectDevice", Map.of("deviceId", deviceId))
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void testMicrophone() {
+        connection.request("voice.testMicrophone", Map.of("seconds", 5))
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void startListening() {
+        connection.request("voice.startListening", Map.of("reason", "ui"))
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void stopListening() {
+        connection.request("voice.stopListening", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    @Override
+    public void acknowledge(String messageId) {
+        connection.request("notify.acknowledge", Map.of("messageId", messageId))
+                .exceptionally(failure -> {
+                    log.warn("confirmação do aviso {} não chegou ao núcleo: {}", messageId, rootMessage(failure));
+                    return null;
+                });
+    }
+
+    @Override
+    public void pauseZordon() {
+        connection.request("security.lockdown", Map.of("reason", "pausado pelo usuário na janela"))
+                .thenAccept(result -> Platform.runLater(() -> state.lockdown(true, String.valueOf(
+                        result.getOrDefault("reason", "")))))
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void resumeZordon() {
+        connection.request("security.resume", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.lockdown(false, "")))
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadQuarantine() {
+        connection.request("security.quarantine.list", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.quarantine().clear();
+                    if (result.get("items") instanceof List<?> items) {
+                        items.stream().filter(Map.class::isInstance).forEach(item -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) item;
+                            state.quarantine().add(typed);
+                        });
+                    }
+                }))
+                .exceptionally(failure -> null);
+    }
+
+    @Override
+    public void loadTasks() {
+        // Fora da thread da conexão: aqui se espera outra resposta dela (task.get).
+        connection.request("task.list", Map.of("limit", 10)).thenAcceptAsync(result -> {
+            List<Map<String, Object>> loaded = new java.util.ArrayList<>();
+            if (result.get("tasks") instanceof List<?> tasks) {
+                for (Object item : tasks) {
+                    if (!(item instanceof Map<?, ?> summary)) {
+                        continue;
+                    }
+                    Map<String, Object> task = new java.util.LinkedHashMap<>();
+                    summary.forEach((key, value) -> task.put(String.valueOf(key), value));
+                    try {
+                        Map<String, Object> detail = connection.request("task.get",
+                                Map.of("taskId", String.valueOf(task.get("taskId")))).get(5, java.util.concurrent.TimeUnit.SECONDS);
+                        task.put("stepList", detail.getOrDefault("steps", List.of()));
+                    } catch (Exception e) {
+                        task.put("stepList", List.of());
+                    }
+                    loaded.add(task);
+                }
+            }
+            Platform.runLater(() -> state.tasks().setAll(loaded));
+        }, runnable -> Thread.ofVirtual().name("zordon-tasks").start(runnable)).exceptionally(failure -> null);
+    }
+
+    @Override
+    public void confirmStep(String taskId, String stepId, boolean pass) {
+        connection.request("task.confirm", Map.of("taskId", taskId, "stepId", stepId, "pass", pass))
+                .thenAccept(result -> loadTasks())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void resumeTask(String taskId) {
+        connection.request("task.resume", Map.of("taskId", taskId))
+                .thenAccept(result -> loadTasks())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadAutomations() {
+        connection.request("automation.list", Map.of()).thenAccept(result -> Platform.runLater(() -> {
+            for (String key : List.of("automations", "proposals")) {
+                var target = "automations".equals(key) ? state.automations() : state.automationProposals();
+                if (result.get(key) instanceof List<?> rows) {
+                    List<Map<String, Object>> loaded = new java.util.ArrayList<>();
+                    for (Object row : rows) {
+                        if (row instanceof Map<?, ?> map) {
+                            Map<String, Object> typed = new java.util.LinkedHashMap<>();
+                            map.forEach((k, value) -> typed.put(String.valueOf(k), value));
+                            loaded.add(typed);
+                        }
+                    }
+                    target.setAll(loaded);
+                }
+            }
+        })).exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void approveAutomation(String proposalId) {
+        automationRequest("automation.approve", Map.of("proposalId", proposalId));
+    }
+
+    @Override
+    public void rejectAutomation(String proposalId) {
+        automationRequest("automation.reject", Map.of("proposalId", proposalId));
+    }
+
+    @Override
+    public void enableAutomation(String id, boolean enabled) {
+        automationRequest(enabled ? "automation.enable" : "automation.disable", Map.of("id", id));
+    }
+
+    @Override
+    public void runAutomation(String id) {
+        automationRequest("automation.run", Map.of("id", id));
+    }
+
+    private void automationRequest(String method, Map<String, Object> params) {
+        connection.request(method, params).thenAccept(result -> loadAutomations()).exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadFindings() {
+        connection.request("security.findings", Map.of("limit", 20))
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.findings().clear();
+                    if (result.get("findings") instanceof List<?> findings) {
+                        findings.stream().filter(Map.class::isInstance).forEach(finding -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) finding;
+                            if (typed.get("acknowledgedAt") == null) {
+                                state.findings().add(typed);
+                            }
+                        });
+                    }
+                }))
+                .exceptionally(failure -> null);
+        connection.request("security.breakers", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.breakers().clear();
+                    if (result.get("breakers") instanceof List<?> breakers) {
+                        breakers.stream().filter(Map.class::isInstance).forEach(breaker -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) breaker;
+                            state.breakers().add(typed);
+                        });
+                    }
+                }))
+                .exceptionally(failure -> null);
+    }
+
+    @Override
+    public void releaseBreaker(String subject, String mode) {
+        connection.request("security.breakerRelease", Map.of("subject", subject, "mode", mode))
+                .thenAccept(result -> loadFindings())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void acknowledgeFinding(String findingId) {
+        connection.request("security.findingAcknowledge", Map.of("findingId", findingId))
+                .thenAccept(result -> loadFindings())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadAgents() {
+        connection.request("agent.list", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.agents().clear();
+                    for (String key : List.of("agents", "invalid")) {
+                        if (result.get(key) instanceof List<?> items) {
+                            items.stream().filter(Map.class::isInstance).forEach(item -> {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> typed = (Map<String, Object>) item;
+                                state.agents().add(typed);
+                            });
+                        }
+                    }
+                }))
+                .exceptionally(failure -> null);
+    }
+
+    @Override
+    public void loadMemory() {
+        connection.request("memory.facts", Map.of("limit", 200))
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.memoryFacts().clear();
+                    if (result.get("facts") instanceof List<?> facts) {
+                        facts.stream().filter(Map.class::isInstance).forEach(fact -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) fact;
+                            state.memoryFacts().add(typed);
+                        });
+                    }
+                }))
+                .exceptionally(failure -> null);
+    }
+
+    @Override
+    public void forgetFact(String factId) {
+        connection.request("memory.forget", Map.of("factId", factId))
+                .thenAccept(result -> loadMemory())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadMcp() {
+        connection.request("mcp.servers", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.mcpServers().clear();
+                    if (result.get("servers") instanceof List<?> servers) {
+                        servers.stream().filter(Map.class::isInstance).forEach(server -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) server;
+                            state.mcpServers().add(typed);
+                        });
+                    }
+                }))
+                .exceptionally(failure -> null);
+    }
+
+    @Override
+    public void approveMcp(String server) {
+        connection.request("mcp.approve", Map.of("server", server))
+                .thenAccept(result -> loadMcp())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void restoreQuarantine(String vaultId) {
+        state.quarantineNoticeProperty().set("Restaurando…");
+        connection.request("security.quarantine.restore", Map.of("vaultId", vaultId))
+                .thenAccept(result -> Platform.runLater(() -> {
+                    state.quarantineNoticeProperty().set(String.valueOf(result.getOrDefault("text", "")));
+                    loadQuarantine();
+                }))
+                .exceptionally(failure -> {
+                    Platform.runLater(() -> state.quarantineNoticeProperty().set(rootMessage(failure)));
+                    return null;
+                });
+    }
+
+    /**
+     * {@code ui.requestPermission} (SPEC-015 CA-1, CA-2): a janela vem para a
+     * frente e o diálogo espera a decisão. Qualquer falha aqui é negar.
+     */
+    private Map<String, Object> requestPermission(Map<String, Object> params) {
+        zordon.desktop.shell.SecurityPresentation.Prompt prompt =
+                zordon.desktop.shell.SecurityPresentation.prompt(params);
+        java.util.concurrent.CompletableFuture<String> answer = new java.util.concurrent.CompletableFuture<>();
+        Platform.runLater(() -> {
+            try {
+                showWindowNow();
+                zordon.desktop.ui.PermissionPane.show(stage, prompt, stylesheet())
+                        .whenComplete((approval, failure) -> answer.complete(failure == null ? approval : "deny"));
+            } catch (RuntimeException e) {
+                log.warn("diálogo de permissão falhou: {}", e.toString());
+                answer.complete("deny");
+            }
+        });
+        try {
+            return Map.of("approval", answer.get(prompt.seconds() + 5L, java.util.concurrent.TimeUnit.SECONDS));
+        } catch (Exception e) {
+            return Map.of("approval", "deny");
+        }
+    }
+
+    private static String stylesheet() {
+        return ZordonDesktop.class.getResource("/zordon/desktop/zordon.css").toExternalForm();
+    }
+
+    private void refreshVoice() {
+        connection.request("voice.status", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.voice(result)))
+                .exceptionally(this::voiceFailure);
+    }
+
+    private Void voiceFailure(Throwable failure) {
+        Platform.runLater(() -> state.voiceFailed(rootMessage(failure)));
+        return null;
+    }
+
+    // ── conexão ──────────────────────────────────────────────────────────────
 
     private void connect() {
         connection = new CoreConnection(
@@ -149,7 +500,7 @@ public final class ZordonDesktop extends Application {
 
                     @Override
                     public void onOffline(String reason) {
-                        Platform.runLater(() -> onDisconnected(reason));
+                        Platform.runLater(() -> state.offline(reason));
                     }
 
                     @Override
@@ -157,36 +508,56 @@ public final class ZordonDesktop extends Application {
                         pump.offer(event);
                     }
                 });
+        connection.handle("ui.requestPermission", this::requestPermission);
         connection.start();
     }
 
     private void onConnected(HelloResult hello, boolean resumed) {
-        show(new CoreStatus(CoreConnection.State.ONLINE, "núcleo " + hello.core().version()));
-        chat.setComposerEnabled(true, "");
-        // O log de atividades é uma projeção de tudo, não só da conversa.
-        connection.request("session.subscribe", Map.of("topics", List.of(Topic.CHAT, Topic.SYSTEM)));
-
+        state.online(hello.core().version());
+        connection.request("session.subscribe",
+                Map.of("topics", List.of(Topic.CHAT, Topic.SYSTEM, Topic.VOICE, Topic.SECURITY, Topic.MEMORY, Topic.AGENTS, Topic.AUTOMATION)));
+        // O que ficou para confirmar enquanto a janela estava fora (SPEC-015 CA-4).
+        connection.request("notify.pending", Map.of()).thenAccept(result -> Platform.runLater(() -> {
+            if (result.get("messages") instanceof List<?> messages) {
+                messages.stream().filter(Map.class::isInstance).map(message -> {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> typed = (Map<String, Object>) message;
+                    return typed;
+                }).forEach(this::notified);
+            }
+        })).exceptionally(failure -> null);
+        loadQuarantine();
+        loadMcp();
+        loadMemory();
+        loadAgents();
+        loadTasks();
+        loadFindings();
+        loadAutomations();
+        connection.request("security.status", Map.of()).thenAccept(result -> Platform.runLater(() -> {
+            if (result.get("lockdown") instanceof Map<?, ?> lockdown) {
+                state.lockdown(Boolean.TRUE.equals(lockdown.get("active")),
+                        String.valueOf(lockdown.get("reason") == null ? "" : lockdown.get("reason")));
+            }
+        })).exceptionally(failure -> null);
+        refreshDiagnostics();
+        // Sempre, mesmo retomando: o microfone é o estado que não pode estar velho.
+        refreshVoice();
         if (!resumed) {
-            // Sem continuidade: o cliente descarta o que tinha e recarrega, em vez
-            // de mostrar um estado que o núcleo não reconhece mais (ADR-0011).
-            sessionId = null;
+            // Sem continuidade: descarta o que tinha e recarrega, em vez de mostrar
+            // um estado que o núcleo não reconhece mais (ADR-0011).
+            shell.clearChat();
             loadHistory();
         }
     }
 
-    private void onDisconnected(String reason) {
-        show(CoreStatus.offline(reason));
-        // O rascunho é preservado e o histórico já carregado continua legível:
-        // desconexão não pode apagar o que o usuário estava escrevendo (UI §9).
-        chat.setComposerEnabled(false, "núcleo offline — reconectando");
-        chat.setThinking(false);
-    }
-
     private void loadHistory() {
         connection.request("chat.history", Map.of("limit", 50)).thenAccept(result -> {
-            Object messages = result.get("messages");
-            if (messages instanceof List<?> list) {
-                Platform.runLater(() -> renderHistory(list));
+            if (result.get("messages") instanceof List<?> messages) {
+                Object session = result.get("sessionId");
+                Platform.runLater(() -> {
+                    state.sessionIdProperty().set(messages.isEmpty() ? null : String.valueOf(session));
+                    renderHistory(messages);
+                });
             }
         }).exceptionally(failure -> {
             log.debug("histórico indisponível: {}", failure.getMessage());
@@ -195,113 +566,108 @@ public final class ZordonDesktop extends Application {
     }
 
     private void renderHistory(List<?> messages) {
+        String first = "";
         // O núcleo devolve do mais recente para o mais antigo; a tela lê ao contrário.
         for (int index = messages.size() - 1; index >= 0; index--) {
             if (messages.get(index) instanceof Map<?, ?> message) {
-                String role = String.valueOf(message.get("role"));
                 String text = String.valueOf(message.get("text"));
-                if ("user".equals(role)) {
-                    chat.addUserMessage(text);
+                if ("user".equals(message.get("role"))) {
+                    shell.chatUser(text);
+                    first = first.isEmpty() ? text : first;
                 } else {
-                    chat.completeAssistant("histórico-" + index, text, "");
+                    shell.chatAssistant(text, "");
                 }
             }
         }
+        shell.setLastConversation(first);
     }
 
-    private void sendToCore(String text) {
-        chat.addUserMessage(text);
-        chat.setThinking(true);
-        Map<String, Object> params = sessionId == null
+    private void sendToSession(String text) {
+        shell.chatUser(text);
+        shell.setLastConversation(text);
+        Map<String, Object> params = state.sessionIdProperty().get() == null
                 ? Map.of("text", text)
-                : Map.of("text", text, "sessionId", sessionId);
-
+                : Map.of("text", text, "sessionId", state.sessionIdProperty().get());
         connection.request("chat.send", params)
-                .thenAccept(result -> sessionId = String.valueOf(result.get("sessionId")))
-                .exceptionally(failure -> {
-                    Platform.runLater(() -> chat.showError(rootMessage(failure), true));
-                    return null;
-                });
+                .thenAccept(result -> Platform.runLater(
+                        () -> state.sessionIdProperty().set(String.valueOf(result.get("sessionId")))))
+                .exceptionally(this::reportFailure);
     }
 
     /** Aplica um lote de eventos. Roda na thread da interface, uma vez a cada 33 ms. */
     private void apply(List<EventEnvelope> batch) {
         for (EventEnvelope event : batch) {
-            logs.append(event);
+            state.accept(event);
+            // 20 níveis por segundo afogariam o log; o medidor já os mostra.
+            if (event.type() != EventType.VOICE_LEVEL) {
+                shell.logs().append(event);
+            }
             Map<String, Object> payload = event.payload();
             String turnId = String.valueOf(payload.getOrDefault("turnId", ""));
             switch (event.type()) {
                 case AI_THINKING -> {
-                    chat.setThinking(true);
+                    if (payload.get("notice") instanceof String notice) {
+                        shell.chatNotice(notice.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
+                                + notice.substring(1) + ".");
+                    }
                     // A troca de quem responde é dita enquanto acontece, não depois.
                     if (payload.get("fallbackFrom") instanceof String from) {
-                        chat.showNotice("%s falhou (%s). Quem vai responder é a reserva: %s."
-                                .formatted(from, payload.getOrDefault("reason", "sem motivo"),
-                                        payload.getOrDefault("provider", "?")));
+                        shell.chatNotice("%s falhou (%s). Quem vai responder é a reserva: %s.".formatted(
+                                from, payload.getOrDefault("reason", "sem motivo"), payload.getOrDefault("provider", "?")));
                     }
                 }
-                case AI_RESPONSE -> applyResponse(turnId, payload);
-                case AI_ERROR -> chat.showError(
-                        String.valueOf(payload.get("message")),
-                        Boolean.TRUE.equals(payload.get("retryable")));
-                // USER_COMMAND volta do núcleo por completude do log; a tela já
-                // mostrou a mensagem quando o usuário a enviou.
+                case AI_RESPONSE -> {
+                    if (Boolean.TRUE.equals(payload.get("done"))) {
+                        shell.chatComplete(turnId, String.valueOf(payload.getOrDefault("text", "")),
+                                TurnSummary.fromResponse(payload).map(TurnSummary::footer).orElse(""));
+                    } else if (payload.get("delta") instanceof String delta) {
+                        shell.chatDelta(turnId, delta);
+                    }
+                }
+                case SECURITY_NOTIFICATION -> {
+                    notified(payload);
+                    if (String.valueOf(payload.get("detectedBy")).startsWith("automation:")) {
+                        loadAutomations();
+                    }
+                }
+                case AUTOMATION_TRIGGERED, AUTOMATION_FINISHED -> loadAutomations();
+                case MEMORY_WRITTEN -> loadMemory();
+                case SECURITY_FINDING -> loadFindings();
+                case TASK_STATE -> loadTasks();
+                case SYSTEM_ALERT -> {
+                    if ("mcp".equals(payload.get("source"))) {
+                        loadMcp();
+                    }
+                }
+                case AI_ERROR -> shell.chatError(payload.get("message")
+                        + (Boolean.TRUE.equals(payload.get("retryable")) ? "  ·  dá para tentar de novo" : ""));
                 default -> { }
             }
         }
     }
 
-    private void applyResponse(String turnId, Map<String, Object> payload) {
-        if (Boolean.TRUE.equals(payload.get("done"))) {
-            chat.completeAssistant(turnId, String.valueOf(payload.getOrDefault("text", "")), footer(payload));
-        } else if (payload.get("delta") instanceof String delta) {
-            chat.appendAssistantDelta(turnId, delta);
+    private Void reportFailure(Throwable failure) {
+        Platform.runLater(() -> shell.chatError(rootMessage(failure)));
+        return null;
+    }
+
+    /** Um aviso chegou: CRITICAL abre a janela e pede confirmação de leitura (SPEC-015 CA-7). */
+    private void notified(Map<String, Object> message) {
+        state.notification(message);
+        if (zordon.desktop.shell.SecurityPresentation.critical(String.valueOf(message.get("severity")))) {
+            showWindowNow();
+            zordon.desktop.ui.CriticalNotice.show(stage, message, stylesheet(), id -> {
+                state.acknowledged(id);
+                acknowledge(id);
+            });
         }
     }
 
-    /**
-     * Uso e custo ficam visíveis desde o primeiro turno. Leitura de cache sempre
-     * zero é o sintoma do maior risco deste marco, e número que ninguém vê não é
-     * número (docs/roadmap.md).
-     */
-    static String footer(Map<String, Object> payload) {
-        if (!(payload.get("usage") instanceof Map<?, ?> usage)) {
-            return "";
-        }
-        long input = number(usage.get("inputTokens"));
-        long output = number(usage.get("outputTokens"));
-        long cacheRead = number(usage.get("cacheReadTokens"));
-        if (input + output == 0) {
-            return "resposta local · sem custo";
-        }
-        // "≈" quando o provider não informou o consumo: estimativa exibida como
-        // medida seria mentira com cara de número.
-        String approx = Boolean.TRUE.equals(usage.get("estimated")) ? "≈" : "";
-        String cost = payload.get("costUsd") instanceof String value
-                ? "US$ " + new BigDecimal(value).setScale(4, RoundingMode.HALF_UP).toPlainString()
-                : "—";
-        String who = payload.get("provider") instanceof String provider
-                ? provider + " · " + payload.getOrDefault("model", "?") + " · "
-                : "";
-        String fallback = payload.get("fallbackFrom") instanceof String from ? " · reserva no lugar de " + from : "";
-        return "%s%s%d tok entrada · %s%d tok saída · %d de cache · %s%s"
-                .formatted(who, approx, input, approx, output, cacheRead, cost, fallback);
-    }
-
-    private static long number(Object value) {
-        return value instanceof Number typed ? typed.longValue() : 0L;
-    }
-
-    private void show(CoreStatus current) {
-        status.setText(current.label());
-        status.getStyleClass().removeAll("state-online", "state-offline", "state-connecting");
-        status.getStyleClass().add("state-" + current.state().name().toLowerCase(java.util.Locale.ROOT));
-        detail.setText(current.detail());
-        tray.ifPresent(icon -> icon.show(switch (current.state()) {
-            case ONLINE -> TrayState.ONLINE;
-            case CONNECTING -> TrayState.DEGRADED;
-            case OFFLINE -> TrayState.OFFLINE;
-        }));
+    private void showWindowNow() {
+        stage.setIconified(false);
+        stage.show();
+        stage.toFront();
+        stage.requestFocus();
     }
 
     private void showWindow() {
@@ -313,6 +679,7 @@ public final class ZordonDesktop extends Application {
     }
 
     private void shutdown() {
+        shell.close();
         pump.stop();
         if (connection != null) {
             connection.close();
@@ -321,7 +688,7 @@ public final class ZordonDesktop extends Application {
         Platform.exit();
     }
 
-    private String rootMessage(Throwable failure) {
+    private static String rootMessage(Throwable failure) {
         Throwable cause = failure.getCause() == null ? failure : failure.getCause();
         return String.valueOf(cause.getMessage());
     }

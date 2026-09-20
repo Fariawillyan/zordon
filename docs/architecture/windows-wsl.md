@@ -77,10 +77,11 @@ funcionam depois de reiniciar o PC.
    Isso inicializa a VM; o systemd sobe; `zordon.service` sobe junto. O comando
    retorna em ~2 s e a VM permanece viva porque o systemd tem processos rodando.
 
-2. **Supervisor no `zordon-host`.** O processo Windows headless verifica a saúde
-   do núcleo a cada 15 s. Se não conectar, executa o mesmo `wsl.exe --exec
-   /bin/true` (com backoff exponencial, teto de 5 min) antes de tentar de novo.
-   Isso cobre o caso de o usuário ter dado `wsl --shutdown`.
+2. **Supervisor pelo agendador do Windows.** A mesma tarefa repete o
+   `wsl.exe --exec /bin/true` a cada 5 min, sem instâncias paralelas. Isso cobre
+   o caso de o usuário ter dado `wsl --shutdown`: a distro volta em até 5 min,
+   o mesmo teto de backoff que um supervisor teria. O `zordon-host` não executa
+   processo nenhum ([ADR-0027](../adr/ADR-0027-supervisor-do-wsl-pelo-agendador.md)).
 
 3. **Ociosidade desligada** no `.wslconfig`: `[general] instanceIdleTimeout=-1`
    e `[wsl2] vmIdleTimeout=-1`, para que o WSL não decida desligar a distro nem
@@ -302,6 +303,14 @@ afeta:
   provider de IA.
 - **Auditoria e memória:** carimbos de tempo fora de ordem corrompem a narrativa
   ("o projeto que trabalhamos ontem" depende disso).
+
+**[medido]** Em 2026-09-18, com o Windows acordado, o relógio do WSL deu passos
+a cada ~30 s (`systemd-resolved: Clock change detected`; `journald: Time jumped
+backwards`). O teste do microfone media o prazo no relógio de parede e, quando um
+passo para trás caiu dentro da margem, o microfone ficou ligado até o usuário
+desligá-lo ([SPEC-009](../specs/voice/SPEC-009-frames-de-audio-e-teste-do-microfone.md)).
+Regra: **todo prazo é medido em relógio monotônico**; o relógio de parede serve
+só para exibir horários.
 
 **Mitigação.**
 - O `Scheduler` usa relógio monotônico para intervalos e relógio de parede

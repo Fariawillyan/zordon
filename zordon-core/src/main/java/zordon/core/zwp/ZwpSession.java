@@ -15,9 +15,13 @@
  */
 package zordon.core.zwp;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import zordon.api.event.EventEnvelope;
@@ -30,6 +34,9 @@ public final class ZwpSession {
     private final String id;
     private final Consumer<EventEnvelope> sink;
     private final AtomicReference<ClientInfo> client = new AtomicReference<>();
+    private volatile List<String> capabilities = List.of();
+    private final AtomicLong nextRequestId = new AtomicLong(1);
+    private final Map<Long, CompletableFuture<Map<String, Object>>> outgoing = new ConcurrentHashMap<>();
     private final AtomicReference<Runnable> afterResponse = new AtomicReference<>();
     private final Set<String> topics = ConcurrentHashMap.newKeySet();
 
@@ -53,8 +60,51 @@ public final class ZwpSession {
         return client.get() != null;
     }
 
-    void completeHello(ClientInfo info) {
+    void completeHello(ClientInfo info, List<String> declared) {
+        capabilities = List.copyOf(declared);
         client.set(info);
+    }
+
+    /** O que o cliente declarou saber fazer no {@code session.hello}. */
+    public List<String> capabilities() {
+        return capabilities;
+    }
+
+    public boolean is(zordon.api.zwp.ClientKind kind) {
+        return client().map(info -> info.kind() == kind).orElse(false);
+    }
+
+    /** Reserva um id para um pedido do núcleo a este cliente. */
+    long expect(CompletableFuture<Map<String, Object>> answer) {
+        long id = nextRequestId.getAndIncrement();
+        outgoing.put(id, answer);
+        return id;
+    }
+
+    /**
+     * Entrega a resposta ao pedido desta sessão com o mesmo id. Resposta de outra
+     * sessão nunca chega aqui, e resposta atrasada não acha mais o pedido.
+     */
+    boolean answer(long id, Map<String, Object> result, zordon.api.zwp.ZwpError error) {
+        CompletableFuture<Map<String, Object>> answer = outgoing.remove(id);
+        if (answer == null) {
+            return false;
+        }
+        if (error != null) {
+            answer.completeExceptionally(new ZwpMethodException(error));
+        } else {
+            answer.complete(result);
+        }
+        return true;
+    }
+
+    void forget(long id) {
+        outgoing.remove(id);
+    }
+
+    void failPending(ZwpMethodException cause) {
+        outgoing.keySet().forEach(id -> Optional.ofNullable(outgoing.remove(id))
+                .ifPresent(answer -> answer.completeExceptionally(cause)));
     }
 
     public Set<String> topics() {

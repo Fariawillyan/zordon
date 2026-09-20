@@ -30,4 +30,7 @@ nenhuma pode relaxar uma das
 
 | ID | Nome | Status |
 |---|---|---|
-| — | _nenhuma ainda_ | — |
+| [SPEC-014](SPEC-014-auditoria-validador-e-motor-de-permissao.md) | Auditoria, validador de comandos e motor de permissão | IMPLEMENTING |
+| [SPEC-015](SPEC-015-pedido-de-permissao-notificacoes-e-kill-switch.md) | Pedido de permissão, notificações e kill switch | IMPLEMENTING |
+| [SPEC-016](SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md) | Execução mediada, ferramentas e ponte com o Windows | IMPLEMENTING |
+| [SPEC-017](SPEC-017-cofre-de-quarentena.md) | Cofre de quarentena | IMPLEMENTING |

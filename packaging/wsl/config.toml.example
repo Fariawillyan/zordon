@@ -36,6 +36,16 @@
 # base_url = "http://127.0.0.1:11434/v1"
 # max_tokens_param = "max_tokens"
 
+# Assinatura do Claude (Pro/Max) pelo `claude` CLI: sem chave nenhuma aqui.
+# O CLI roda sem ferramentas e sem memória própria, pelo caminho auditado do
+# Zordon (docs/specs/core/SPEC-018-provider-por-assinatura-claude-cli.md).
+# Antes: npm i -g @anthropic-ai/claude-code && claude   (para entrar)
+# [ai.providers.claude]
+# type = "claude-cli"
+#
+# Para usar na conversa, em [ai.roles] (mais abaixo):
+#   conversation = { provider = "claude", model = "sonnet" }
+
 # Qualquer outro serviço compatível com a API da OpenAI (OpenRouter, Groq,
 # DeepSeek, LM Studio…) segue o mesmo molde:
 # [ai.providers.openrouter]
@@ -57,3 +67,30 @@
 # [ai.roles]
 # conversation = { provider = "anthropic", model = "claude-opus-5", effort = "high" }
 # fallback     = { provider = "ollama",    model = "qwen2.5:7b" }
+
+# ─── Servidores MCP (docs/specs/mcp/SPEC-020-cliente-mcp.md) ──────────────────
+#
+# Cada servidor é um processo filho, pelo mesmo caminho auditado de qualquer
+# programa: sem shell, ambiente mínimo e o programa precisa estar no catálogo
+# (docker, npx, uvx, python3…). Programa fora do catálogo pede confirmação na tela.
+#
+# risk_floor é o piso de risco das ferramentas desse servidor: GREEN, YELLOW ou
+# RED (padrão YELLOW). O servidor só consegue subir o risco, nunca descer.
+# Se as ferramentas mudarem depois de uma atualização, elas ficam suspensas até
+# você aprovar a nova lista na janela do Zordon.
+#
+# [[mcp.server]]
+# name       = "git"
+# command    = ["uvx", "mcp-server-git", "--repository", "/home/voce/dev/projeto"]
+# risk_floor = "YELLOW"
+# autostart  = true
+
+# ─── Base de conhecimento (docs/specs/rag/SPEC-028-base-de-conhecimento.md) ───
+#
+# As pastas de documentação que o Zordon indexa para responder citando a fonte.
+# Só Markdown, só leitura. Sem isto, ele usa o docs/ do repositório do Zordon,
+# se o repositório estiver no disco.
+#
+# [rag]
+# roots = ["~/zordon/docs", "~/dev/aurora/docs"]
+

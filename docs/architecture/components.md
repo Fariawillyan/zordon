@@ -118,6 +118,20 @@ existe para isolar o protocolo com o sidecar Python.
 | `zordon-desktop` | Mostrar e capturar interação | Qualquer decisão de negócio |
 | `zordon-host` | Fazer coisas no Windows | Decidir se deve fazer |
 
+Responsabilidades que chegam com o M3 em diante e ainda não têm módulo próprio
+(ficam no módulo indicado até crescerem):
+
+| Componente | Onde | Responsável por | **Não** é responsável por |
+|---|---|---|---|
+| Identidade/origem | `zordon-security` | Aplicar o teto de risco por origem ([Identidade](../security/identity.md)) | Classificar a ação |
+| `Sandbox` | `zordon-security` | Rodar código de agente isolado ([Sandbox](../security/sandbox.md)) | Aprovar o que roda |
+| `SecretBroker` | `zordon-security` | Usar o segredo sem entregá-lo | Decidir se o uso é permitido |
+| `CapabilityRegistry` + `ModelRouter` | `zordon-ai` | Escolher o modelo ([Capacidades](../specs/core/capabilities-and-routing.md)) | Escolher o agente |
+| `ExtensionRegistry` | `zordon-core` | Manifestos, versões, reversão ([Extensões](extensions.md)) | Executar a extensão |
+| `Planner` + `TaskStore` | `zordon-agents` | Planos duráveis ([Planner](../specs/agents/planner.md)) | Executar passos |
+| `Verifier` / Evaluation Engine | `zordon-agents` | Provar a conclusão ([Avaliação](../specs/agents/evaluation.md)) | Corrigir o que falhou |
+| `KnowledgeGraph` | `zordon-memory` | Relações com fonte | Inferir relação sem fonte |
+
 A coluna da direita é a que importa. Quando alguém for tentado a colocar lógica
 de permissão dentro de uma Skill "porque é mais fácil", é essa tabela que diz não.
 
