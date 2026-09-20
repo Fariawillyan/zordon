@@ -2,6 +2,8 @@
 
 import os
 import sys
+import pathlib
+import types
 import unittest
 from unittest.mock import AsyncMock
 
@@ -37,3 +39,24 @@ class StreamTranscriptTest(unittest.IsolatedAsyncioTestCase):
         self.server.streams.clear()
         await self.server._stream_final(1, b"", "end", False)
         self.server.send.assert_not_called()
+
+
+class WakeThresholdTest(unittest.TestCase):
+    """O limiar ajustável: o dono decide o troco entre acerto e disparo falso (SPEC-034)."""
+
+    def _server(self, override):
+        models = types.SimpleNamespace(wake_ready=True,
+                                       wake_classifier=types.SimpleNamespace(threshold=0.99))
+        return VoiceServer(models, pathlib.Path("/tmp/zordon-voice-test.sock"), override)
+
+    def test_sem_ajuste_vale_o_do_modelo(self):
+        self.assertAlmostEqual(self._server(None).wake_threshold, 0.99)
+
+    def test_ajuste_valido_entra_em_vigor(self):
+        self.assertAlmostEqual(self._server(0.90).wake_threshold, 0.90)
+
+    def test_ajuste_absurdo_eh_recusado_e_volta_ao_do_modelo(self):
+        # Zero dispararia com qualquer ruído; 1.0 nunca dispararia.
+        self.assertAlmostEqual(self._server(0.0).wake_threshold, 0.99)
+        self.assertAlmostEqual(self._server(1.0).wake_threshold, 0.99)
+        self.assertAlmostEqual(self._server(-3.0).wake_threshold, 0.99)

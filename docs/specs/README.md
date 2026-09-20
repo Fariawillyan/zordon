@@ -83,6 +83,7 @@ implementação de produção.
 | [031](ui/SPEC-031-painel-unico-sem-modo-tecnico.md) | Painel único, sem modo técnico | ui | IMPLEMENTING | M8 |
 | [032](ui/SPEC-032-tela-do-zordon.md) | A tela do Zordon | ui | IMPLEMENTING | M8 |
 | [033](ui/SPEC-033-modo-de-voz-no-painel-do-console.md) | O modo de voz onde ele é decidido | ui | IMPLEMENTING | M8 |
+| [034](voice/SPEC-034-fala-resumida-e-limiar-ajustavel.md) | Fala resumida e limiar ajustável | voice | IMPLEMENTING | M8 |
 
 A numeração é **global e sequencial**, não por módulo. Número nunca é
 reutilizado, nem quando a SPEC é rejeitada.

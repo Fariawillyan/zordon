@@ -20,6 +20,10 @@ Environment=PYTHONPATH=@ZORDON_INSTALL_DIR@/voice
 Environment=ZORDON_HOME=@ZORDON_DATA_DIR@
 Environment=ZORDON_VOICE_SOCKET=/run/zordon-voice/voice.sock
 Environment=PYTHONUNBUFFERED=1
+# Limiar da palavra de ativação. Sem isto vale o gravado no modelo (0,99). Baixar
+# faz o Zordon ouvir mais e errar mais; a curva medida está na SPEC-034 §3.
+#   0,99 → 72% de acerto   0,95 → 80%   0,90 → 84%
+# Environment=ZORDON_WAKE_THRESHOLD=0.95
 RuntimeDirectory=zordon-voice
 RuntimeDirectoryMode=0700
 Restart=always
