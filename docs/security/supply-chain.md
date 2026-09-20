@@ -145,11 +145,16 @@ que aprovar conscientemente.
 | Garantia | Como |
 |---|---|
 | Artefatos assinados | Assinatura do MSI e checksums do tarball publicados junto |
-| SBOM por release | CycloneDX, publicado como artefato |
+| SBOM por release | CycloneDX 1.6, `./gradlew sbom` → `build/reports/cyclonedx/bom.json` (74 componentes, 65 com licença, 63 com hash) |
 | Proveniência | Atestação de build (SLSA) gerada pelo CI, não pela máquina do mantenedor |
 | Build reproduzível | Metas: timestamps fixos, ordem determinística. Objetivo, não garantia ainda |
 | Changelog com marcação de segurança | Correções de segurança sinalizadas explicitamente |
 | Sem release manual | Só o CI publica; a máquina do mantenedor não tem credencial de publicação |
+
+**Estado real (2026-09-20):** o SBOM e o changelog existem. Assinatura de
+artefato, atestação SLSA e publicação só-pelo-CI ainda **não** — esta tabela
+descreve o alvo, e o que falta está dito aqui para ninguém confundir plano com
+garantia.
 
 ## 6. Segredos em CI
 

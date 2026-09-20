@@ -43,5 +43,7 @@ by this project with data under the following licenses:
   Piper voices pt_BR faber, cadu, jeff (datasets CC0)
                      https://huggingface.co/rhasspy/piper-voices
 
-Third-party components are listed in docs/security/supply-chain.md,
-in gradle/libs.versions.toml and in the SBOM published with each release.
+Third-party components are listed in docs/security/supply-chain.md, pinned with
+versions in gradle/libs.versions.toml, and enumerated in the CycloneDX SBOM
+published with each release (`./gradlew sbom`). Model files are pinned by URL,
+SHA-256 and size in voice/models.lock.

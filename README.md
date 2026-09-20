@@ -5,9 +5,19 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Status: marco `M1` — conversa de texto com streaming.** O núcleo roda como
-serviço no WSL, a janela conversa com ele e mostra o custo de cada resposta. Voz,
-ações no computador e agentes vêm nos próximos marcos do [Roadmap](docs/roadmap.md).
+**Status: marcos `M0` a `M8` implementados, em revisão.** O núcleo roda como
+serviço no WSL; a janela conversa, escuta pela palavra "Zordon", executa
+ferramentas sob o motor de permissões, lembra, delega a agentes, automatiza
+tarefas, detecta comportamento hostil e consulta a própria documentação. As SPECs
+desses marcos estão em `IMPLEMENTING` — implementadas e testadas, aguardando
+revisão humana. O que ficou de fora, e por quê, está no
+[Roadmap](docs/roadmap.md).
+
+Duas ressalvas honestas: a **palavra de ativação não atinge o critério** que ela
+mesma definiu (71% de acerto contra os 95% pedidos —
+[SPEC-013](docs/specs/voice/SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md)),
+e a **auto-modificação para até o preflight**: o Zordon planeja a mudança do
+próprio código, mas não a executa.
 
 **Quer usar?** Siga os [Primeiros passos](docs/operations/quickstart.md) — uns 15
 minutos, do zero à primeira resposta.

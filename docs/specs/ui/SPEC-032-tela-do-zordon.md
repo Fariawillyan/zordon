@@ -164,7 +164,12 @@ coluna a só ícones em janela estreita, que fica para depois.
 - `oConsoleCabeSemRolagemEAColunaMantemALargura`: verde em 960×720 e 720×560.
 - Captura `voz-repouso-960.png`: console centrado ocupando a janela, os quatro
   cartões embaixo, 14 destinos na coluna sem rótulo cortado.
-- 109 testes do `zordon-desktop` verdes.
+- `OrbHoverTest` (CA-1): o orbe de falar não pinta fundo em `:hover`, `:armed`
+  nem `:pressed`. O tema padrão do JavaFX dá fundo a botão nesses estados e, com
+  a forma de círculo do orbe, isso cobria a marca com um disco escuro — relatado
+  pelo owner em 2026-09-20. O teste foi conferido ao contrário: sem a regra de
+  CSS, ele reprova em `:hover`.
+- 113 testes do `zordon-desktop` verdes.
 
 ## 15. Critérios de aceite
 

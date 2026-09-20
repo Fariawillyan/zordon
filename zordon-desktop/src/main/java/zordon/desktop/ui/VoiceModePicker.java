@@ -44,11 +44,19 @@ final class VoiceModePicker extends VBox {
     private final FlowPane options = new FlowPane(6, 8);
     private final Label note = new Label();
 
+    /**
+     * @param compact no painel do console, onde o espaço é menor
+     *
+     * <p>Cada instância tem id próprio: duas com o mesmo id deixariam
+     * {@code lookup} ambíguo, e um teste passaria achando a errada. A classe de
+     * estilo {@code voice-mode-picker} é o que as une.
+     */
     VoiceModePicker(DesktopState state, ShellActions actions, boolean compact) {
         super(6);
         this.state = state;
         this.actions = actions;
-        setId("voice-mode-picker");
+        setId(compact ? "voice-mode-picker-console" : "voice-mode-picker-settings");
+        getStyleClass().add("voice-mode-picker");
         options.setPrefWrapLength(compact ? 300 : 450);
         note.getStyleClass().add("voice-caption");
         note.setWrapText(true);

@@ -41,3 +41,5 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 [plugins]
 spotless = { id = "com.diffplug.spotless", version = "8.10.2" }
 javafx = { id = "org.openjfx.javafxplugin", version = "0.1.0" }
+# SBOM (SECURITY.md, cadeia de suprimentos). Plugin de build: não entra no binário.
+cyclonedx = { id = "org.cyclonedx.bom", version = "3.0.1" }

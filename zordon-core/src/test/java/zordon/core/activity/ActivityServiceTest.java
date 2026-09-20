@@ -46,7 +46,7 @@ class ActivityServiceTest {
                 Map.of("turnId", "t_18f3a", "sessionId", "s_1", "source", "voice", "text", "que horas são")));
         service.accept(new EventEnvelope(2, clock.instant(), EventType.AI_ERROR,
                 Map.of("turnId", "t_18f3a", "kind", "NO_CREDENTIALS",
-                        "message", "defina ANTHROPIC_API_KEY em /home/faria/.zordon/secrets.env")));
+                        "message", "defina ANTHROPIC_API_KEY em ~/.zordon/secrets.env")));
 
         assertThat(spoken).hasSize(1);
         Map<String, Object> payload = spoken.getFirst().payload();

@@ -18,8 +18,14 @@ Durante a fase pré-1.0, apenas a versão mais recente recebe correções.
 
 **Não abra uma issue pública.**
 
-Use o canal privado do GitHub: **Security → Report a vulnerability**
-(GitHub Private Vulnerability Reporting).
+Use um destes dois canais privados:
+
+- **GitHub**: aba **Security → Report a vulnerability** (Private Vulnerability
+  Reporting), no repositório;
+- **E-mail**: **devfaria.io@gmail.com**.
+
+Os dois chegam à mesma pessoa. Prefira o do GitHub se você já tem conta lá: ele
+mantém o histórico junto do código.
 
 Inclua, se possível:
 

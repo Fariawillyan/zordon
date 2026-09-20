@@ -626,7 +626,16 @@
 .settings-page, .settings-page > .viewport { -fx-background-color: surface-canvas; }
 
 /* A esfera é o botão de falar (SPEC-011): invisível, só o foco aparece. */
+/* O orbe é só a área clicável sobre o desenho do visualizador. O tema padrão do
+   JavaFX pinta :hover e :armed, e como o botão tem forma de círculo esse fundo
+   virava um disco escuro cobrindo a marca. Anular os três é o que o mantém
+   invisível; o retorno ao passar o mouse é o anel, não um preenchimento. */
 .orb-button { -fx-border-color: transparent; -fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 0; }
+.orb-button:hover, .orb-button:armed, .orb-button:pressed, .orb-button:focused {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+.orb-button:hover { -fx-border-color: rgba(124, 234, 255, 0.35); -fx-border-radius: 50%; -fx-border-width: 1; }
 .orb-button:focused { -fx-border-color: rgba(124, 234, 255, 0.5); -fx-border-radius: 50%; -fx-border-width: 1; }
 
 /* ── segurança: permissão, avisos e lockdown (SPEC-015) ──────────────────── */

@@ -1,5 +1,6 @@
 plugins {
     jacoco
+    alias(libs.plugins.cyclonedx)
     id("zordon.docs-conventions")
 }
 
@@ -48,5 +49,23 @@ val coverage = tasks.register<JacocoReport>("coverage") {
         xml.outputLocation = layout.buildDirectory.file("reports/coverage/coverage.xml")
         html.required = true
         html.outputLocation = layout.buildDirectory.dir("reports/coverage/html")
+    }
+}
+
+/**
+ * O SBOM que o [SECURITY.md] promete publicar em cada release.
+ *
+ * <p>O plugin é de build: ele não entra no binário nem no classpath do produto.
+ * A lista completa, com transitivas, fica em `build/reports/cyclonedx/bom.json`;
+ * `cyclonedx-direct` traz só as dependências declaradas.
+ */
+tasks.register("sbom") {
+    group = "verification"
+    description = "Gera o SBOM CycloneDX das dependências distribuídas."
+    dependsOn("cyclonedxBom")
+    val bom = layout.buildDirectory.file("reports/cyclonedx/bom.json")
+    outputs.file(bom)
+    doLast {
+        logger.lifecycle("SBOM em {}", bom.get().asFile)
     }
 }
