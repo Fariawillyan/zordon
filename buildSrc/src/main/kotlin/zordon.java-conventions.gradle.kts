@@ -2,6 +2,7 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 
 plugins {
     `java-library`
+    jacoco
     id("com.diffplug.spotless")
 }
 
@@ -44,6 +45,14 @@ tasks.withType<Test>().configureEach {
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
+// Cobertura por módulo. O relatório XML é o que o agregador do raiz consome.
+tasks.withType<JacocoReport>().configureEach {
+    reports {
+        xml.required = true
+        html.required = true
     }
 }
 

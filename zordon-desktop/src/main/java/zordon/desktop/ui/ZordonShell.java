@@ -44,13 +44,16 @@ public final class ZordonShell extends StackPane {
     private final NavigationPane rail;
     private final VoiceView voice;
     private final VoiceSettingsView settings;
-    private final HomeView home;
     private final ChatView chat;
     private final ComposerBar composer;
     private final VBox conversation;
+    /** A tela do Zordon, que é a tela principal do trabalho (SPEC-032). */
+    private final javafx.scene.Node voiceScreen;
     private final LogsView logs = new LogsView();
     private final VBox logsPage;
     private final DiagnosticsView diagnostics;
+    /** Uma tela por destino (SPEC-030): o Painel deixou de prometer o que já existe. */
+    private final java.util.Map<Destination, DestinationPage> pages = new java.util.EnumMap<>(Destination.class);
     private final StackPane screens = new StackPane();
     private final Label notice = new Label();
 
@@ -61,8 +64,8 @@ public final class ZordonShell extends StackPane {
         this.rail = new NavigationPane(state, this::navigate);
         this.voice = new VoiceView(state, actions);
         this.settings = new VoiceSettingsView(state, actions);
-        this.home = new HomeView(state, this::navigate, actions::newConversation);
-        this.chat = new ChatView(actions::newConversation, state.technicalModeProperty());
+        // Sem modo técnico (SPEC-031): os metadados da resposta aparecem sempre.
+        this.chat = new ChatView(actions::newConversation, new javafx.beans.property.SimpleBooleanProperty(true));
         this.composer = new ComposerBar(state, actions);
         this.diagnostics = new DiagnosticsView(state, actions::refreshDiagnostics);
 
@@ -72,16 +75,33 @@ public final class ZordonShell extends StackPane {
         conversation.getStyleClass().add("conversation");
         this.logsPage = page("Logs", logs);
 
-        screens.getChildren().addAll(voice, home, conversation, settings, logsPage, diagnostics);
+        pages.put(Destination.TASKS, new TasksView(state, actions));
+        pages.put(Destination.AGENTS, new AgentsView(state, actions));
+        pages.put(Destination.MCP, new McpView(state, actions));
+        pages.put(Destination.SKILLS, new SkillsView(state, actions));
+        pages.put(Destination.AUTOMATIONS, new AutomationsView(state, actions));
+        pages.put(Destination.MEMORY, new MemoryView(state, actions));
+        pages.put(Destination.KNOWLEDGE, new KnowledgeView(state, actions));
+        pages.put(Destination.SYSTEM, new SystemView(state, actions));
+        pages.put(Destination.USAGE, new UsageView(state, actions));
+        pages.put(Destination.SECURITY, new SecurityView(state, actions));
+
+        // A Voz é só o Zordon: os ajustes têm destino próprio (SPEC-032).
+        this.voiceScreen = voice;
+
+        screens.getChildren().addAll(voice, conversation, settings, logsPage, diagnostics);
+        screens.getChildren().addAll(pages.values());
         screens.setMinSize(0, 0);
         notice.getStyleClass().add("notice");
         notice.setVisible(false);
         notice.setWrapText(true);
         notice.setMaxWidth(520);
+        notice.setMaxHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
         StackPane.setAlignment(notice, Pos.TOP_CENTER);
         StackPane.setMargin(notice, new Insets(16));
-        NotificationBar alerts = new NotificationBar(state, actions);
-        StackPane.setAlignment(alerts, Pos.TOP_CENTER);
+        NotificationBar alerts = new NotificationBar(state, actions,
+                () -> state.select(Destination.SECURITY));
+        StackPane.setAlignment(alerts, Pos.TOP_RIGHT);
         StackPane.setMargin(alerts, new Insets(12, 16, 0, 16));
         StackPane work = new StackPane(screens, notice, alerts);
         work.setMinSize(0, 0);
@@ -152,7 +172,7 @@ public final class ZordonShell extends StackPane {
     }
 
     public void setLastConversation(String preview) {
-        home.setLastConversation(preview);
+        // O Painel saiu (SPEC-032); a última conversa volta pela própria Conversa.
     }
 
     public void focusComposer() {
@@ -166,15 +186,20 @@ public final class ZordonShell extends StackPane {
     }
 
     private void show(Destination destination) {
-        Node visible = switch (destination) {
-            case VOICE -> voice;
+        Node chosen = switch (destination) {
+            case VOICE -> voiceScreen;
             case CHAT -> conversation;
             case SETTINGS -> settings;
             case LOGS -> logsPage;
             case DIAGNOSTICS -> diagnostics;
-            default -> home;
+            default -> pages.get(destination);
         };
+        Node visible = chosen == null ? voiceScreen : chosen;
         screens.getChildren().forEach(node -> node.setVisible(node == visible));
+        // A carga sai ao abrir, e só na primeira vez (SPEC-030 CA-3).
+        if (visible instanceof DestinationPage opened) {
+            opened.opened();
+        }
     }
 
     private void showNotice(String text) {

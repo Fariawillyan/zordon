@@ -69,7 +69,7 @@ require_windows_java() {
 
 # Cria ou atualiza um atalho do menu Iniciar do usuário (sem elevação).
 create_shortcut() {
-  local name="$1" target="$2" arguments="$3" workdir="$4" description="$5" programs
+  local name="$1" target="$2" arguments="$3" workdir="$4" description="$5" icon="${6:-$2}" programs
   programs="$(windows_folder Programs)"
   [ -n "${programs}" ] || { warn "pasta do menu Iniciar não encontrada; atalho não criado"; return 1; }
   powershell.exe -NoProfile -NonInteractive -Command "
@@ -78,6 +78,7 @@ create_shortcut() {
     \$s.Arguments = '${arguments}';
     \$s.WorkingDirectory = '${workdir}';
     \$s.Description = '${description}';
+    \$s.IconLocation = '${icon},0';
     \$s.Save()" >/dev/null 2>&1 ||
     { warn "não foi possível criar o atalho ${name}"; return 1; }
   log "atalho no menu Iniciar: ${name}"

@@ -190,6 +190,12 @@ Duas linhas de auditoria por chamada e o tempo da chamada no log.
   declarado resolve para a assinatura enquanto `embeddings` continua sem resolver.
 - `SystemMethodsTest`: o diagnóstico mostra `conversation` em `claude` e
   `fallback` em `anthropic`.
+- CA-4: com um `CliRunner` que diz que `claude` não está no catálogo, o provider
+  não é montado, o motivo cita o comando de instalação, e ele some da ordem de
+  preferência.
+- O `config.toml.example` é entrada declarada do `:zordon-ai:test` (2026-09-20):
+  sem isso o Gradle dava o teste do exemplo como up-to-date depois de editá-lo, e
+  o guarda contra documentação falsa dormia.
 - Sem provider nenhum, o turno falha dizendo o motivo de cada um — o do CLI e o
   da chave — e não só o do primeiro.
 

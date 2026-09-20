@@ -61,6 +61,7 @@ val windowsDist by tasks.registering(Sync::class) {
     val javafx = windowsJavafx
     into(windowsDistDir)
     from(appJar) { into("lib") }
+    from("src/main/resources/zordon/desktop/icons/zordon.ico")
     from(libraries) { into("lib") }
     from(javafx) { into("javafx") }
     doLast {

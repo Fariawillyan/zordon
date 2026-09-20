@@ -80,7 +80,7 @@ class ShellLayoutTest {
 
     @AcceptanceCriteria("SPEC-010/CA-1")
     @Test
-    void aJanelaTemSoOTrilhoEATelaEAbreNaVoz() throws Exception {
+    void aJanelaTemSoAColunaEATelaEAbreNaVoz() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
@@ -96,7 +96,7 @@ class ShellLayoutTest {
             // A única caixa de texto é a da Conversa, que não está visível na Voz.
             assertThat(shell.lookupAll(".text-area")).allSatisfy(node -> assertThat(node.isVisible()
                     && node.getParent().isVisible() && isShowing(node)).isFalse());
-            assertThat(shell.rail().lookupAll(".rail-item")).hasSize(4);
+            assertThat(shell.rail().lookupAll(".nav-item")).hasSize(zordon.desktop.shell.Destination.values().length);
             shell.close();
             stage.close();
             return null;
@@ -106,7 +106,7 @@ class ShellLayoutTest {
     @AcceptanceCriteria("SPEC-010/CA-8")
     @ParameterizedTest(name = "{0}×{1}")
     @CsvSource({"960, 720", "720, 560"})
-    void oConsoleCabeSemRolagemEOTrilhoMantem56(int width, int height) throws Exception {
+    void oConsoleCabeSemRolagemEAColunaMantemALargura(int width, int height) throws Exception {
         onFx(() -> {
             ZordonShell shell = new ZordonShell(onlineWithConversation(), NO_ACTIONS);
             Stage stage = new Stage();
@@ -114,11 +114,140 @@ class ShellLayoutTest {
             stage.show();
             shell.applyCss();
             shell.layout();
-            assertThat(shell.rail().getWidth()).isEqualTo(56);
-            assertThat(shell.voice().getWidth()).isLessThanOrEqualTo(width - 56.0 + 0.5);
-            assertThat(shell.voice().getBoundsInParent().getMaxX()).isLessThanOrEqualTo(width - 56.0 + 0.5);
+            assertThat(shell.rail().getWidth()).isEqualTo(NavigationPane.WIDTH);
+            assertThat(shell.voice().getWidth()).isLessThanOrEqualTo(width - NavigationPane.WIDTH + 0.5);
+            assertThat(shell.voice().getBoundsInParent().getMaxX()).isLessThanOrEqualTo(width - NavigationPane.WIDTH + 0.5);
             shell.close();
             stage.close();
+            return null;
+        });
+    }
+
+    @ParameterizedTest(name = "aviso compacto {0}×{1}")
+    @CsvSource({"960, 720", "720, 560"})
+    void notificacaoFicaCompactaComTextoLongoEAbreOsAvisos(int width, int height) throws Exception {
+        onFx(() -> {
+            DesktopState state = onlineWithConversation();
+            state.notification(Map.of("messageId", "first", "severity", "warning",
+                    "title", "43621: host.new-listener — " + "detalhe longo ".repeat(30),
+                    "actionTaken", "O que a defesa fez está no histórico da tela de Segurança. ".repeat(20)));
+            state.notification(Map.of("messageId", "second", "severity", "high",
+                    "title", "Outro aviso", "actionTaken", "Aguardando sua leitura."));
+            ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
+            Stage stage = new Stage();
+            try {
+                stage.setScene(FxTestSupport.styledScene(shell, width, height));
+                stage.show();
+                shell.applyCss();
+                shell.layout();
+                NotificationBar bar = (NotificationBar) shell.lookup("#notification-bar");
+                assertThat(bar.getHeight()).isPositive().isLessThan(190);
+                assertThat(bar.getWidth()).isLessThanOrEqualTo(460);
+                javafx.scene.control.Button ack = (javafx.scene.control.Button) bar.lookup("#notification-ack");
+                assertThat(ack.getWidth()).isGreaterThanOrEqualTo(ack.prefWidth(-1));
+                assertThat(bar.localToScene(bar.getBoundsInLocal()).getMaxX()).isLessThanOrEqualTo(width);
+                assertThat(((javafx.scene.control.Label) bar.lookup(".notification-count")).getText())
+                        .isEqualTo("+1 pendente");
+                FxTestSupport.save(stage.getScene(), SNAPSHOTS.resolve("aviso-compacto-" + width + ".png"));
+                ((javafx.scene.control.Button) bar.lookup("#notification-details")).fire();
+                shell.layout();
+                assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.SECURITY);
+                assertThat(isShowing(shell.lookup("#notification-list"))).isTrue();
+                assertThat(state.notifications()).hasSize(2);
+                assertThat(bar.isVisible()).isFalse();
+                ((javafx.scene.control.Button) shell.lookup("#notification-read-first")).fire();
+                assertThat(state.notifications()).hasSize(1);
+                state.select(zordon.desktop.shell.Destination.VOICE);
+                assertThat(bar.isVisible()).isTrue();
+                assertThat(bar.text()).contains("Outro aviso");
+                ack.fire();
+                assertThat(bar.isManaged()).isFalse();
+            } finally {
+                shell.close();
+                stage.close();
+            }
+            return null;
+        });
+    }
+
+    @ParameterizedTest(name = "ajustes compactos {0}×{1}")
+    @CsvSource({"960, 720", "720, 560"})
+    void categoriasLimitamAAlturaEAsAcoesCabem(int width, int height) throws Exception {
+        onFx(() -> {
+            DesktopState state = onlineWithConversation();
+            for (int i = 0; i < 30; i++) {
+                state.findings().add(Map.of("findingId", "f" + i, "severity", "warning",
+                        "title", (43621 + i) + ": host.new-listener",
+                        "rationale", "host.new-listener. Peso somado 0.40 na janela de 60 s."));
+            }
+            state.mcpServers().add(Map.of("name", "Servidor de desenvolvimento com nome longo",
+                    "state", "drift", "tools", List.of(), "drift", true));
+            ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
+            state.select(zordon.desktop.shell.Destination.AUTOMATIONS);
+            Stage stage = new Stage();
+            try {
+                stage.setScene(FxTestSupport.styledScene(shell, width, height));
+                stage.show();
+                shell.applyCss();
+                shell.layout();
+                assertThat(isShowing(shell.lookup("#automation-list"))).isTrue();
+                assertThat(isShowing(shell.lookup("#finding-list"))).isFalse();
+                FxTestSupport.save(stage.getScene(), SNAPSHOTS.resolve("aplicativos-" + width + ".png"));
+                state.select(zordon.desktop.shell.Destination.SECURITY);
+                shell.applyCss();
+                shell.layout();
+                javafx.scene.control.ScrollPane list = settingsList(shell.lookup("#finding-list"));
+                assertThat(settingsList(shell.lookup("#notification-list")).getHeight()).isLessThan(50);
+                assertThat(list.getHeight()).isLessThanOrEqualTo(260);
+                javafx.scene.control.Button ack = (javafx.scene.control.Button) shell.lookup("#finding-ack-f0");
+                assertThat(ack.getWidth()).isGreaterThanOrEqualTo(ack.prefWidth(-1));
+                FxTestSupport.save(stage.getScene(), SNAPSHOTS.resolve("seguranca-" + width + ".png"));
+            } finally {
+                shell.close();
+                stage.close();
+            }
+            return null;
+        });
+    }
+
+    private static javafx.scene.control.ScrollPane settingsList(javafx.scene.Node content) {
+        javafx.scene.Parent parent = content.getParent();
+        while (!(parent instanceof javafx.scene.control.ScrollPane)) parent = parent.getParent();
+        return (javafx.scene.control.ScrollPane) parent;
+    }
+
+    @Test
+    void botaoDoRodapeMostraStatusAoVivoEAbreDiagnostico() throws Exception {
+        onFx(() -> {
+            DesktopState state = onlineWithConversation();
+            ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
+            Stage stage = new Stage();
+            try {
+                stage.setScene(FxTestSupport.styledScene(shell, 720, 560));
+                stage.show();
+                shell.applyCss();
+                shell.layout();
+                var button = (javafx.scene.control.Button) shell.lookup("#core-status-button");
+                assertThat(button.isFocusTraversable()).isTrue();
+                button.fire();
+                var menu = button.getContextMenu();
+                assertThat(menu.isShowing()).isTrue();
+                var info = (javafx.scene.control.CustomMenuItem) menu.getItems().getFirst();
+                var connection = (javafx.scene.control.Label) info.getContent().lookup("#core-status-connection");
+                assertThat(connection.getText()).contains("conectado");
+                state.offline("Conexão encerrada");
+                assertThat(connection.getText()).contains("offline");
+                assertThat(button.getAccessibleText()).contains("offline");
+                menu.hide();
+                button.fire();
+                assertThat(menu.isShowing()).isTrue();
+                menu.getItems().getLast().fire();
+                assertThat(menu.isShowing()).isFalse();
+                assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.DIAGNOSTICS);
+            } finally {
+                shell.close();
+                stage.close();
+            }
             return null;
         });
     }
@@ -173,7 +302,7 @@ class ShellLayoutTest {
                     zordon.api.event.EventType.VOICE_STOPPED,
                     Map.of("text", "quais containers estão rodando", "confidence", 0.94)));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
-            state.select(zordon.desktop.shell.Destination.SETTINGS);
+            state.select(zordon.desktop.shell.Destination.VOICE);
             Stage stage = new Stage();
             stage.setScene(FxTestSupport.styledScene(shell, 1600, 900));
             stage.show();
@@ -205,7 +334,7 @@ class ShellLayoutTest {
                     "lastTest", Map.of("verdict", "low", "message", "sinal baixo: aproxime-se ou aumente o ganho",
                             "peakDbfs", -38.2, "averageDbfs", -51.0)));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
-            state.select(zordon.desktop.shell.Destination.SETTINGS);
+            state.select(zordon.desktop.shell.Destination.VOICE);
             state.accept(new zordon.api.event.EventEnvelope(10, java.time.Instant.now(),
                     zordon.api.event.EventType.VOICE_LEVEL, Map.of("rms", -24.0, "peak", -9.5)));
             Stage stage = new Stage();
@@ -246,7 +375,7 @@ class ShellLayoutTest {
             shell.layout();
             FxTestSupport.save(shell.getScene(), SNAPSHOTS.resolve("voz-repouso-" + width + ".png"));
             assertThat(shell.voice().pillVisible()).isFalse();
-            assertThat(shell.rail().getWidth()).isEqualTo(56);
+            assertThat(shell.rail().getWidth()).isEqualTo(NavigationPane.WIDTH);
             shell.close();
             stage.close();
             return null;
@@ -259,7 +388,7 @@ class ShellLayoutTest {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
-            javafx.scene.Node core = shell.rail().lookup(".rail-core");
+            javafx.scene.Node core = shell.rail().coreIndicator();
 
             assertThat(core.getStyleClass()).contains("core-online");
             assertThat(shell.rail().coreText()).startsWith("Núcleo conectado");
@@ -275,28 +404,25 @@ class ShellLayoutTest {
         });
     }
 
-    @AcceptanceCriteria("SPEC-010/CA-5")
+    @AcceptanceCriteria("SPEC-032/CA-2")
     @Test
-    void oPainelLevaALogsEDiagnosticoEMostraOsFuturosComOMarco() throws Exception {
+    void aColunaLevaDiretoAQualquerDestinoSemPainel() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
-            // O Painel é do modo técnico (SPEC-012 CA-8).
-            state.technicalModeProperty().set(true);
-            state.select(zordon.desktop.shell.Destination.HOME);
-            javafx.scene.Parent content = (javafx.scene.Parent)
-                    ((javafx.scene.control.ScrollPane) shell.lookup(".page")).getContent();
 
-            javafx.scene.control.Button logs = (javafx.scene.control.Button) content.lookup("#tile-logs");
-            javafx.scene.control.Button mcp = (javafx.scene.control.Button) content.lookup("#tile-mcp");
-            assertThat(mcp.getText()).contains("M4");
-            assertThat(mcp.getStyleClass()).contains("tile-unavailable");
+            // O Painel era um atalho para o que a coluna já mostra; ele saiu.
+            assertThat(zordon.desktop.shell.Destination.values())
+                    .noneSatisfy(destination -> assertThat(destination.label()).isEqualTo("Painel"));
+            assertThat(zordon.desktop.shell.Destination.inGroup(
+                    zordon.desktop.shell.Destination.Group.WORK))
+                    .containsExactly(zordon.desktop.shell.Destination.VOICE,
+                            zordon.desktop.shell.Destination.CHAT);
 
-            logs.fire();
+            shell.rail().item(zordon.desktop.shell.Destination.LOGS).fire();
             assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.LOGS);
-            assertThat(state.destinationProperty().get().railOwner()).isEqualTo(zordon.desktop.shell.Destination.HOME);
-            mcp.fire();
-            assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.LOGS);
+            shell.rail().item(zordon.desktop.shell.Destination.MCP).fire();
+            assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.MCP);
             shell.close();
             return null;
         });
@@ -418,34 +544,29 @@ class ShellLayoutTest {
         });
     }
 
-    @AcceptanceCriteria("SPEC-012/CA-8")
+    @AcceptanceCriteria("SPEC-031/CA-2")
     @Test
-    void oModoTecnicoComecaDesligadoEEscondeOPainelEOsMetadados() throws Exception {
+    void todaANavegacaoEstaVisivelSemModoTecnico() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
-            shell.chatAssistant("São 15h40.", "local · 12 ms · 0 tokens");
-            javafx.scene.Node panel = shell.rail().lookupAll(".rail-item").stream()
-                    .filter(node -> "Painel".equals(node.getAccessibleText())).findFirst().orElseThrow();
 
-            assertThat(state.technicalModeProperty().get()).isFalse();
-            assertThat(panel.isVisible()).isFalse();
-            assertThat(state.select(zordon.desktop.shell.Destination.LOGS)).isFalse();
-
-            state.technicalModeProperty().set(true);
-            assertThat(panel.isVisible()).isTrue();
-            assertThat(state.select(zordon.desktop.shell.Destination.DIAGNOSTICS)).isTrue();
-
-            state.technicalModeProperty().set(false);
-            assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.VOICE);
+            // O modo técnico deixou de existir: Painel, Logs e Diagnóstico abrem
+            // como qualquer outro destino (SPEC-031 supera SPEC-012 CA-8).
+            for (zordon.desktop.shell.Destination destination : zordon.desktop.shell.Destination.values()) {
+                javafx.scene.Node item = shell.rail().item(destination);
+                assertThat(item).as("%s não está na coluna", destination).isNotNull();
+                assertThat(item.isVisible()).as("%s escondido", destination).isTrue();
+                assertThat(state.select(destination)).as("%s não abriu", destination).isTrue();
+            }
             shell.close();
             return null;
         });
     }
 
-    @AcceptanceCriteria("SPEC-012/CA-8")
+    @AcceptanceCriteria("SPEC-031/CA-3")
     @Test
-    void osMetadadosDaRespostaSoAparecemNoModoTecnico() throws Exception {
+    void osMetadadosDaRespostaAparecemSempre() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
@@ -457,10 +578,6 @@ class ShellLayoutTest {
             shell.applyCss();
             shell.layout();
 
-            assertThat(visibleMeta(shell)).isEmpty();
-            state.technicalModeProperty().set(true);
-            shell.applyCss();
-            shell.layout();
             assertThat(visibleMeta(shell)).contains("local · 12 ms · 0 tokens");
             shell.close();
             stage.close();

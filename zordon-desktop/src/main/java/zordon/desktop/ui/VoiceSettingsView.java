@@ -16,10 +16,12 @@
 package zordon.desktop.ui;
 
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
@@ -27,9 +29,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import zordon.api.trace.Spec;
 import zordon.desktop.shell.DesktopState;
@@ -49,9 +52,10 @@ import zordon.desktop.shell.VoiceStatus;
 @Spec("SPEC-010")
 final class VoiceSettingsView extends ScrollPane {
 
-    static final List<String> MODES = List.of("off", "wake", "push", "open");
 
-    private final VBox content = new VBox(16);
+    private final VBox content = new VBox(12);
+    private final Map<String, VBox> sections = new LinkedHashMap<>();
+    private final Map<String, ToggleButton> sectionButtons = new LinkedHashMap<>();
     private final VBox modeArea = new VBox(8);
     private final VBox details = new VBox(12);
     private final DesktopState state;
@@ -67,11 +71,13 @@ final class VoiceSettingsView extends ScrollPane {
         content.setPadding(new Insets(16, 16, 24, 16));
         content.setFillWidth(true);
         setHbarPolicy(ScrollBarPolicy.NEVER);
-        Label title = new Label("Ajustes da voz");
-        title.getStyleClass().add("page-title");
-        content.getChildren().setAll(title, modeArea, details, security(state, actions), quarantine(state, actions),
-                automations(state, actions), tasks(state, actions), memory(state, actions), agents(state, actions), mcp(state, actions),
-                technicalMode(state));
+        content.getChildren().addAll(modeArea, details);
+        // Sem isto, o conteúdo dita a largura mínima e o console transborda na
+        // janela de 720 (SPEC-010 CA-2). O laço das abas fazia isso por seção.
+        content.setMinWidth(0);
+        modeArea.setMinWidth(0);
+        details.setMinWidth(0);
+        setMinWidth(0);
         setContent(content);
         state.voiceProperty().addListener((observable, before, now) -> {
             render();
@@ -81,6 +87,88 @@ final class VoiceSettingsView extends ScrollPane {
         state.voiceDevices().addListener((ListChangeListener<VoiceDevice>) change -> render());
         state.transcriptions().addListener((ListChangeListener<String>) change -> render());
         render();
+    }
+
+    static Node notifications(DesktopState state, ShellActions actions) {
+        VBox list = new VBox(6);
+        list.setId("notification-list");
+        Runnable render = () -> {
+            list.getChildren().clear();
+            if (state.notifications().isEmpty()) list.getChildren().add(muted("Nenhum aviso pendente."));
+            for (Map<String, Object> message : state.notifications()) {
+                String id = String.valueOf(message.get("messageId"));
+                Label title = new Label(String.valueOf(message.getOrDefault("title", "Aviso")));
+                title.getStyleClass().add("card-title");
+                title.setWrapText(true);
+                VBox body = new VBox(5, title);
+                for (String key : List.of("whatHappened", "whySuspicious", "detectedBy", "affectedResource",
+                        "actionTaken", "currentState")) {
+                    Object value = message.get(key);
+                    if (value != null && !value.toString().isBlank()) body.getChildren().add(muted(value.toString()));
+                }
+                Button read = new Button("Entendi");
+                read.setId("notification-read-" + id);
+                read.setOnAction(event -> {
+                    state.acknowledged(id);
+                    actions.acknowledge(id);
+                });
+                body.getChildren().add(read);
+                body.getStyleClass().add("settings-row");
+                list.getChildren().add(body);
+            }
+        };
+        state.notifications().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
+        render.run();
+        return Cards.section("Avisos", boundedList(list, 230));
+    }
+
+    /** Listas extensas têm rolagem própria, sem empurrar todos os outros controles. */
+    private static ScrollPane boundedList(VBox list, double height) {
+        ScrollPane scroll = new ScrollPane(list) {
+            @Override
+            public javafx.geometry.Orientation getContentBias() {
+                return javafx.geometry.Orientation.HORIZONTAL;
+            }
+
+            @Override
+            protected double computePrefHeight(double width) {
+                double available = width < 0 ? list.prefWidth(-1) : Math.max(1, width - 16);
+                return Math.min(height, list.prefHeight(available) + 2);
+            }
+        };
+        scroll.getStyleClass().add("settings-list");
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollBarPolicy.NEVER);
+        scroll.setMinHeight(0);
+        scroll.setMaxHeight(height);
+        return scroll;
+    }
+
+    private static VBox section(String title, VBox body, Button refresh) {
+        Label heading = new Label(title);
+        heading.getStyleClass().add("card-title");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        refresh.setMinWidth(Region.USE_PREF_SIZE);
+        HBox header = new HBox(10, heading, spacer, refresh);
+        header.setAlignment(Pos.CENTER_LEFT);
+        VBox card = new VBox(8, header, body);
+        card.getStyleClass().add("card");
+        return card;
+    }
+
+    private static HBox row(Label line, Button... buttons) {
+        line.setMinWidth(0);
+        line.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(line, Priority.ALWAYS);
+        HBox row = new HBox(10, line);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("settings-row");
+        for (Button button : buttons) {
+            button.setMinWidth(Region.USE_PREF_SIZE);
+            row.getChildren().add(button);
+        }
+        return row;
     }
 
     private void render() {
@@ -102,14 +190,14 @@ final class VoiceSettingsView extends ScrollPane {
         details.getChildren().addAll(
                 Inspector.rows("Pedido", screen.desired(), "Em vigor", screen.effective()),
                 microphone(voice, screen),
-                HomeView.section("Motor de voz", new VBox(8,
+                Cards.section("Motor de voz", new VBox(8,
                         Inspector.rows("Estado", screen.engine()),
                         muted("VAD, palavra de ativação, transcrição e fala. Chega com o sidecar zordon-voice."))),
                 transcriptions());
     }
 
     /** O kill switch (SPEC-015 CA-6): pausar é um clique; retomar também, mas só daqui ou da bandeja. */
-    private static javafx.scene.Node security(DesktopState state, ShellActions actions) {
+    static javafx.scene.Node security(DesktopState state, ShellActions actions) {
         Label status = new Label();
         status.setWrapText(true);
         javafx.scene.control.Button toggle = new javafx.scene.control.Button();
@@ -149,12 +237,10 @@ final class VoiceSettingsView extends ScrollPane {
                 Label line = new Label(String.valueOf(finding.get("severity")).toUpperCase(java.util.Locale.ROOT)
                         + " · " + finding.get("title") + "\n" + finding.get("rationale"));
                 line.setWrapText(true);
-                javafx.scene.control.Button seen = new javafx.scene.control.Button("Li");
+                javafx.scene.control.Button seen = new javafx.scene.control.Button("Entendi");
                 seen.setId("finding-ack-" + id);
                 seen.setOnAction(event -> actions.acknowledgeFinding(id));
-                javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12, line, seen);
-                row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
+                HBox row = row(line, seen);
                 list.getChildren().add(row);
             }
         };
@@ -175,9 +261,7 @@ final class VoiceSettingsView extends ScrollPane {
                 javafx.scene.control.Button closed = new javafx.scene.control.Button("Liberar");
                 closed.setId("breaker-closed-" + subject);
                 closed.setOnAction(event -> actions.releaseBreaker(subject, "closed"));
-                javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12, line, supervised, closed);
-                row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
+                HBox row = row(line, supervised, closed);
                 open.getChildren().add(row);
             }
         };
@@ -185,16 +269,18 @@ final class VoiceSettingsView extends ScrollPane {
         breakers.run();
         Label hint = muted("O que a defesa achou: cada item diz por que foi considerado suspeito. Disjuntor aberto"
                 + " só fecha por decisão sua.");
-        return HomeView.section("Segurança", new VBox(10, status, toggle, hint, open, list, refresh));
+        return section("Proteção", new VBox(8, status, toggle, hint, open, boundedList(list, 260)), refresh);
     }
 
     /** A quarentena (SPEC-017): o que foi "apagado" continua aqui até ser restaurado. */
-    private static javafx.scene.Node quarantine(DesktopState state, ShellActions actions) {
+    static javafx.scene.Node quarantine(DesktopState state, ShellActions actions) {
         VBox list = new VBox(8);
         list.setId("quarantine-list");
         Label notice = new Label();
         notice.setWrapText(true);
         notice.textProperty().bind(state.quarantineNoticeProperty());
+        notice.visibleProperty().bind(notice.textProperty().isNotEmpty());
+        notice.managedProperty().bind(notice.visibleProperty());
         javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
         refresh.setId("quarantine-refresh");
         refresh.setOnAction(event -> actions.loadQuarantine());
@@ -214,53 +300,19 @@ final class VoiceSettingsView extends ScrollPane {
                 String id = String.valueOf(item.get("vaultId"));
                 restore.setId("restore-" + id);
                 restore.setOnAction(event -> actions.restoreQuarantine(id));
-                javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12, line, restore);
-                row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
+                HBox row = row(line, restore);
                 list.getChildren().add(row);
             }
         };
         state.quarantine().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
         render.run();
         Label hint = muted("O Zordon não apaga: o que você mandou para a quarentena fica guardado e volta com um clique.");
-        return HomeView.section("Quarentena", new VBox(10, hint, list, notice, refresh));
+        return section("Quarentena", new VBox(8, hint, list, notice), refresh);
     }
 
-    /** A memória (SPEC-021): o que o Zordon sabe, de onde veio, e o botão de esquecer. */
-    private static javafx.scene.Node memory(DesktopState state, ShellActions actions) {
-        VBox list = new VBox(8);
-        list.setId("memory-list");
-        javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
-        refresh.setId("memory-refresh");
-        refresh.setOnAction(event -> actions.loadMemory());
-        Runnable render = () -> {
-            list.getChildren().clear();
-            if (state.memoryFacts().isEmpty()) {
-                list.getChildren().add(muted("Nada lembrado ainda. Diga \"Zordon, lembre que…\"."));
-            }
-            for (Map<String, Object> fact : state.memoryFacts()) {
-                String id = String.valueOf(fact.get("id"));
-                Label line = new Label(kindLabel(String.valueOf(fact.get("kind"))) + " · " + fact.get("subject") + ": "
-                        + fact.get("content") + " · " + String.valueOf(fact.get("observedAt")).replaceAll("T.*", ""));
-                line.setWrapText(true);
-                javafx.scene.control.Button forget = new javafx.scene.control.Button("Esquecer");
-                forget.setId("forget-" + id);
-                forget.setOnAction(event -> actions.forgetFact(id));
-                javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12, line, forget);
-                row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
-                list.getChildren().add(row);
-            }
-        };
-        state.memoryFacts().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
-        render.run();
-        Label hint = muted("O Zordon lembra o que você pediu, os projetos em que trabalhou e o que foi decidido nas"
-                + " conversas. Esquecer apaga de verdade.");
-        return HomeView.section("Memória", new VBox(10, hint, list, refresh));
-    }
 
     /** As tarefas (SPEC-023): etapas, o que espera você e o que foi interrompido. */
-    private static javafx.scene.Node tasks(DesktopState state, ShellActions actions) {
+    static javafx.scene.Node tasks(DesktopState state, ShellActions actions) {
         VBox list = new VBox(10);
         list.setId("task-list");
         javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
@@ -287,9 +339,7 @@ final class VoiceSettingsView extends ScrollPane {
                         Label line = new Label("  " + taskLabel(String.valueOf(step.get("state"))) + " · "
                                 + step.get("title"));
                         line.setWrapText(true);
-                        javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(8, line);
-                        row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                        javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
+                        HBox row = row(line);
                         if ("waiting_human".equals(step.get("state"))) {
                             javafx.scene.control.Button pass = new javafx.scene.control.Button("Confirmar");
                             pass.setId("confirm-" + taskId + "-" + stepId);
@@ -297,6 +347,8 @@ final class VoiceSettingsView extends ScrollPane {
                             javafx.scene.control.Button fail = new javafx.scene.control.Button("Reprovar");
                             fail.setId("reject-" + taskId + "-" + stepId);
                             fail.setOnAction(event -> actions.confirmStep(taskId, stepId, false));
+                            pass.setMinWidth(Region.USE_PREF_SIZE);
+                            fail.setMinWidth(Region.USE_PREF_SIZE);
                             row.getChildren().addAll(pass, fail);
                         }
                         box.getChildren().add(row);
@@ -315,7 +367,7 @@ final class VoiceSettingsView extends ScrollPane {
         render.run();
         Label hint = muted("Uma etapa só conta como concluída depois de conferida. Tarefa interrompida espera você"
                 + " decidir: nada é repetido sozinho.");
-        return HomeView.section("Tarefas", new VBox(10, hint, list, refresh));
+        return section("Tarefas", new VBox(8, hint, list), refresh);
     }
 
     static String taskLabel(String state) {
@@ -335,7 +387,7 @@ final class VoiceSettingsView extends ScrollPane {
     static javafx.scene.Node automations(DesktopState state, ShellActions actions) {
         VBox list = new VBox(12);
         list.setId("automation-list");
-        javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar automações");
+        javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
         refresh.setId("automation-refresh");
         refresh.setOnAction(event -> actions.loadAutomations());
         Runnable render = () -> {
@@ -380,35 +432,11 @@ final class VoiceSettingsView extends ScrollPane {
         state.automations().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
         state.automationProposals().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
         render.run();
-        VBox controls = new VBox(10, list, refresh);
+        VBox controls = section("Automações", new VBox(8, list), refresh);
         controls.disableProperty().bind(state.connectionProperty().isNotEqualTo(zordon.zwp.CoreConnection.State.ONLINE));
-        return HomeView.section("Automações", controls);
+        return controls;
     }
 
-    /** Os agentes (SPEC-022): criar um é criar um arquivo em ~/.zordon/agents/. */
-    private static javafx.scene.Node agents(DesktopState state, ShellActions actions) {
-        VBox list = new VBox(6);
-        list.setId("agent-list");
-        javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
-        refresh.setId("agent-refresh");
-        refresh.setOnAction(event -> actions.loadAgents());
-        Runnable render = () -> {
-            list.getChildren().clear();
-            for (Map<String, Object> agent : state.agents()) {
-                Label line = new Label(agent.containsKey("reason")
-                        ? "Arquivo ignorado: " + agent.get("file") + " · " + agent.get("reason")
-                        : agent.get("id") + " · teto " + agent.get("ceiling") + " · " + agent.get("description")
-                                + ("builtin".equals(agent.get("source")) ? "" : " · seu"));
-                line.setWrapText(true);
-                list.getChildren().add(line);
-            }
-        };
-        state.agents().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
-        render.run();
-        Label hint = muted("Diga \"pergunta pro developer: …\" para escolher um agente. Para criar um, ponha um"
-                + " arquivo .toml em ~/.zordon/agents/.");
-        return HomeView.section("Agentes", new VBox(10, hint, list, refresh));
-    }
 
     static String breakerLabel(String state) {
         return switch (state) {
@@ -428,43 +456,6 @@ final class VoiceSettingsView extends ScrollPane {
         };
     }
 
-    /** Os servidores MCP (SPEC-020): estado, ferramentas e a aprovação de uma superfície nova. */
-    private static javafx.scene.Node mcp(DesktopState state, ShellActions actions) {
-        VBox list = new VBox(8);
-        list.setId("mcp-list");
-        javafx.scene.control.Button refresh = new javafx.scene.control.Button("Atualizar");
-        refresh.setId("mcp-refresh");
-        refresh.setOnAction(event -> actions.loadMcp());
-        Runnable render = () -> {
-            list.getChildren().clear();
-            if (state.mcpServers().isEmpty()) {
-                list.getChildren().add(muted("Nenhum servidor declarado no config.toml."));
-            }
-            for (Map<String, Object> server : state.mcpServers()) {
-                String name = String.valueOf(server.get("name"));
-                int tools = server.get("tools") instanceof List<?> declared ? declared.size() : 0;
-                Object error = server.get("error");
-                Label line = new Label(name + " · " + stateLabel(String.valueOf(server.get("state"))) + " · " + tools
-                        + " ferramentas" + (error == null ? "" : " · " + error));
-                line.setWrapText(true);
-                javafx.scene.layout.HBox row = new javafx.scene.layout.HBox(12, line);
-                row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-                javafx.scene.layout.HBox.setHgrow(line, javafx.scene.layout.Priority.ALWAYS);
-                if (Boolean.TRUE.equals(server.get("drift"))) {
-                    javafx.scene.control.Button approve = new javafx.scene.control.Button("Aprovar mudança");
-                    approve.setId("mcp-approve-" + name);
-                    approve.setOnAction(event -> actions.approveMcp(name));
-                    row.getChildren().add(approve);
-                }
-                list.getChildren().add(row);
-            }
-        };
-        state.mcpServers().addListener((ListChangeListener<Map<String, Object>>) change -> render.run());
-        render.run();
-        Label hint = muted("Servidores MCP trazem ferramentas novas sem mudar o Zordon. Se um servidor mudar o que"
-                + " oferece, as ferramentas dele ficam suspensas até você aprovar aqui.");
-        return HomeView.section("Servidores MCP", new VBox(10, hint, list, refresh));
-    }
 
     static String stateLabel(String state) {
         return switch (state) {
@@ -477,23 +468,6 @@ final class VoiceSettingsView extends ScrollPane {
         };
     }
 
-    /**
-     * O modo técnico (SPEC-012 CA-8): o único caminho para Painel, Logs, Diagnóstico e
-     * os metadados das respostas. Voice-first: desligado por padrão (ADR-0029).
-     */
-    private static javafx.scene.Node technicalMode(DesktopState state) {
-        ToggleButton toggle = new ToggleButton();
-        toggle.setId("technical-mode");
-        toggle.getStyleClass().add("mode-option");
-        toggle.selectedProperty().bindBidirectional(state.technicalModeProperty());
-        toggle.textProperty().bind(javafx.beans.binding.Bindings.when(toggle.selectedProperty())
-                .then("Modo técnico ligado").otherwise("Ligar modo técnico"));
-        Label hint = new Label("Mostra o Painel, os Logs, o Diagnóstico e os detalhes técnicos das respostas."
-                + " O registro completo fica sempre em ~/.zordon/trace.");
-        hint.setWrapText(true);
-        hint.getStyleClass().add("muted");
-        return HomeView.section("Modo técnico", new VBox(10, toggle, hint));
-    }
 
     private void showLevel(double[] level) {
         if (level == null || liveMeter == null) {
@@ -532,7 +506,7 @@ final class VoiceSettingsView extends ScrollPane {
         liveLevel = testing ? level : null;
 
         Label hint = muted(card.hint());
-        VBox body = new VBox(8, new HBox(12, start, hint), meter, level);
+        VBox body = new VBox(8, row(hint, start), meter, level);
         if (!card.result().isEmpty()) {
             Label result = new Label(card.result());
             result.setId("microphone-result");
@@ -540,29 +514,12 @@ final class VoiceSettingsView extends ScrollPane {
             result.getStyleClass().add(card.resultOk() ? "body-text" : "warning-text");
             body.getChildren().add(result);
         }
-        return HomeView.section("Teste do microfone", body);
+        return Cards.section("Teste do microfone", body);
     }
 
     private Node mode(VoiceStatus voice, VoicePresentation.Screen screen) {
-        ToggleGroup group = new ToggleGroup();
-        FlowPane options = new FlowPane(6, 8);
-        options.setPrefWrapLength(450);
-        for (String mode : MODES) {
-            ToggleButton option = new ToggleButton(VoicePresentation.modeLabel(mode));
-            option.getStyleClass().add("mode-option");
-            option.setToggleGroup(group);
-            option.setSelected(voice != null && mode.equals(voice.mode()));
-            option.setDisable(voice == null);
-            option.setOnAction(event -> {
-                // Keep selection authoritative, even if a selected toggle is clicked twice.
-                group.selectToggle(group.getToggles().stream()
-                        .filter(toggle -> ((ToggleButton) toggle).getText()
-                                .equals(VoicePresentation.modeLabel(voice.mode()))).findFirst().orElse(null));
-                actions.setVoiceMode(mode);
-            });
-            options.getChildren().add(option);
-        }
-        VBox choice = new VBox(8, new Label("Modo"), options);
+        // Um seletor só, usado aqui e no painel do console (SPEC-033).
+        Node choice = new VoiceModePicker(state, actions, false);
         String microphone = voice == null ? "Estado desconhecido"
                 : !voice.hostConnected() ? "Não conectado"
                 : "on".equals(voice.capture()) ? "Ligado · confirmado"
@@ -612,7 +569,7 @@ final class VoiceSettingsView extends ScrollPane {
         refresh.setOnAction(event -> actions.loadVoiceDevices());
         HBox picker = new HBox(8, devices, refresh);
 
-        return HomeView.section("Microfone", new VBox(12,
+        return Cards.section("Microfone", new VBox(12,
                 capture,
                 Inspector.rows("Host do Windows", screen.host(), "Dispositivo", screen.device()),
                 picker));
@@ -630,7 +587,7 @@ final class VoiceSettingsView extends ScrollPane {
                 list.getChildren().add(entry);
             });
         }
-        return HomeView.section("Transcrições desta sessão", list);
+        return Cards.section("Transcrições desta sessão", list);
     }
 
     private static Label muted(String text) {

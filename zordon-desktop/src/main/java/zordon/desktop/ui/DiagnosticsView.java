@@ -66,24 +66,24 @@ final class DiagnosticsView extends ScrollPane {
             content.getChildren().add(error);
         }
         Diagnostics diagnostics = state.diagnosticsProperty().get();
-        content.getChildren().add(HomeView.section("Esta janela", Inspector.rows(
+        content.getChildren().add(Cards.section("Esta janela", Inspector.rows(
                 "Conexão", state.coreLabel().get(),
                 "Quedas nesta sessão", String.valueOf(state.reconnectionsProperty().get()))));
         if (diagnostics == null) {
             return;
         }
-        content.getChildren().add(HomeView.section("Núcleo", Inspector.rows(
+        content.getChildren().add(Cards.section("Núcleo", Inspector.rows(
                 "Versão", diagnostics.version(),
                 "Execução (startId)", diagnostics.startId(),
                 "No ar há", readable(Duration.ofSeconds(diagnostics.uptimeSeconds())),
                 "Eventos publicados", String.valueOf(diagnostics.lastSeq()),
                 "Clientes conectados", String.valueOf(diagnostics.clients()),
                 "Turnos em andamento", String.valueOf(diagnostics.activeTurns()))));
-        content.getChildren().add(HomeView.section("Providers", pairs(diagnostics.providers())));
+        content.getChildren().add(Cards.section("Providers", pairs(diagnostics.providers())));
         VBox roles = new VBox(8);
         diagnostics.roles().forEach((role, value) -> roles.getChildren().add(Inspector.rows(
                 role, value.provider() + " · " + value.model() + (value.ready() ? " — pronto" : " — " + value.reason()))));
-        content.getChildren().add(HomeView.section("Papéis", roles));
+        content.getChildren().add(Cards.section("Papéis", roles));
     }
 
     private static javafx.scene.Node pairs(Map<String, String> values) {

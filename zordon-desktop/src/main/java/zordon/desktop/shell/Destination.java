@@ -26,31 +26,32 @@ import java.util.List;
  * indisponível e com o marco. Nunca abre uma tela que simule função.
  */
 public enum Destination {
-    HOME(Group.WORK, "Painel", "grid", null),
-    CHAT(Group.WORK, "Conversa", "doc", null),
+    /** A tela do Zordon: é ela o trabalho, não um painel de atalhos (SPEC-032). */
     VOICE(Group.WORK, "Voz", "wave", null),
-    AGENTS(Group.RESOURCES, "Agentes", "chip", "M5"),
-    MCP(Group.RESOURCES, "MCP", "plug", "M4"),
-    SKILLS(Group.RESOURCES, "Skills", "tool", "M3"),
-    AUTOMATIONS(Group.RESOURCES, "Automações", "clock", "M6"),
-    MEMORY(Group.RESOURCES, "Memória", "brain", "M5"),
-    KNOWLEDGE(Group.RESOURCES, "Conhecimento", "book", "M8"),
-    SYSTEM(Group.OPERATION, "Sistema", "cpu", "M3"),
-    USAGE(Group.OPERATION, "Uso", "coin", "M8"),
+    CHAT(Group.WORK, "Conversa", "doc", null),
+    // Os nove abaixo deixaram de ser promessa em 2026-09-20 (SPEC-030): os marcos
+    // M3 a M8 entraram, e o selo dizia "chega no M5" de um recurso que já rodava.
+    AGENTS(Group.RESOURCES, "Agentes", "chip", null),
+    MCP(Group.RESOURCES, "MCP", "plug", null),
+    SKILLS(Group.RESOURCES, "Skills", "tool", null),
+    AUTOMATIONS(Group.RESOURCES, "Automações", "clock", null),
+    /** Veio da aba "Aplicativos" dos Ajustes, que deixou de existir (SPEC-031). */
+    TASKS(Group.RESOURCES, "Tarefas", "check", null),
+    MEMORY(Group.RESOURCES, "Memória", "brain", null),
+    KNOWLEDGE(Group.RESOURCES, "Conhecimento", "book", null),
+    SYSTEM(Group.OPERATION, "Sistema", "cpu", null),
+    USAGE(Group.OPERATION, "Uso", "coin", null),
     LOGS(Group.OPERATION, "Logs", "list", null),
-    SECURITY(Group.OPERATION, "Segurança", "shield", "M3"),
+    SECURITY(Group.OPERATION, "Segurança", "shield", null),
     DIAGNOSTICS(Group.OPERATION, "Diagnóstico", "pulse", null),
-    SETTINGS(Group.FOOTER, "Ajustes", "settings", null);
-
-    /** Os ícones do trilho, na ordem da imagem de referência (SPEC-010 §3). */
-    public static final List<Destination> RAIL = List.of(VOICE, HOME, CHAT, SETTINGS);
+    /** Os ajustes de voz e do microfone: um destino, não uma segunda tela. */
+    SETTINGS(Group.OPERATION, "Ajustes", "settings", null);
 
     /** Grupos da navegação, com o rótulo exibido. */
     public enum Group {
         WORK("TRABALHO"),
         RESOURCES("RECURSOS"),
-        OPERATION("OPERAÇÃO"),
-        FOOTER("");
+        OPERATION("OPERAÇÃO");
 
         private final String label;
 
@@ -101,15 +102,7 @@ public enum Destination {
         if (pendingUntil == null) {
             return "";
         }
-        if (this == SETTINGS) {
-            return "Ainda sem tela: edite ~/.zordon/config.toml e reinicie o núcleo.";
-        }
         return label + " chega no " + pendingUntil + ".";
-    }
-
-    /** Qual ícone do trilho acende: Logs e Diagnóstico abrem pelo Painel. */
-    public Destination railOwner() {
-        return RAIL.contains(this) ? this : HOME;
     }
 
     public static List<Destination> inGroup(Group group) {

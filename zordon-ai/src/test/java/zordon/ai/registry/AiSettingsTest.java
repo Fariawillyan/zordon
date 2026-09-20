@@ -155,9 +155,11 @@ class AiSettingsTest {
         AiSettings settings = AiSettings.load(write(uncommented));
 
         assertThat(settings.rejected()).isEmpty();
-        assertThat(settings.providers()).containsKeys("anthropic", "openai", "ollama", "openrouter");
-        assertThat(settings.roles().forRole(ModelRole.CONVERSATION).provider()).isEqualTo("anthropic");
-        assertThat(settings.roles().forRole(ModelRole.FALLBACK).provider()).isEqualTo("ollama");
+        assertThat(settings.providers()).containsKeys("claude", "anthropic", "openai", "ollama", "openrouter");
+        // O exemplo ensina a ordem de preferência: a conversa pela assinatura, e a
+        // chave paga por uso só como reserva (SPEC-018 §3).
+        assertThat(settings.roles().forRole(ModelRole.CONVERSATION).provider()).isEqualTo("claude");
+        assertThat(settings.roles().forRole(ModelRole.FALLBACK).provider()).isEqualTo("anthropic");
         assertThat(settings.providers().get("ollama").maxTokensParam()).isEqualTo("max_tokens");
     }
 

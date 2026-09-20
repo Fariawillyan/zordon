@@ -100,4 +100,22 @@ public interface ShellActions {
 
     /** Esquece um fato de verdade. Só a tela faz isso. */
     default void forgetFact(String factId) {}
+
+    /** {@code tools.list} (SPEC-019): o que o modelo pode pedir. */
+    default void loadSkills() {}
+
+    /** {@code rag.status} e {@code rag.roots} (SPEC-028). */
+    default void loadKnowledge() {}
+
+    /** {@code rag.reindex} (SPEC-028): só pela tela, e só quando o usuário manda. */
+    default void reindexKnowledge() {}
+
+    /** {@code usage.summary} (SPEC-029). */
+    default void loadUsage() {}
+
+    /** {@code system.metrics} e {@code monitor.status} (SPEC-024). */
+    default void loadSystem() {}
+
+    /** {@code security.events} (SPEC-027): o que foi feito, e por quê. */
+    default void loadSecurityEvents() {}
 }

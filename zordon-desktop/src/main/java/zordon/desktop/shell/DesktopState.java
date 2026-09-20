@@ -76,7 +76,6 @@ public final class DesktopState {
      * Modo técnico (SPEC-012 CA-8): desligado por padrão. Voice-first — detalhes
      * técnicos só aparecem quando o usuário pede (ADR-0029).
      */
-    private final BooleanProperty technicalMode = new SimpleBooleanProperty(false);
     private final StringProperty voiceError = new SimpleStringProperty("");
     /** Kill switch (SPEC-015): o núcleo está em só leitura. */
     private final BooleanProperty lockdown = new SimpleBooleanProperty(false);
@@ -108,6 +107,27 @@ public final class DesktopState {
     public javafx.collections.ObservableList<Map<String, Object>> automations() { return automations; }
     public javafx.collections.ObservableList<Map<String, Object>> automationProposals() { return automationProposals; }
 
+    /** As ferramentas que o modelo pode pedir, com risco e efeitos (SPEC-019). */
+    private final javafx.collections.ObservableList<Map<String, Object>> skills =
+            javafx.collections.FXCollections.observableArrayList();
+    /** Os últimos eventos de segurança: o que foi feito, e por quê (SPEC-027). */
+    private final javafx.collections.ObservableList<Map<String, Object>> securityEvents =
+            javafx.collections.FXCollections.observableArrayList();
+    /** {@code rag.status} (SPEC-028), {@code usage.summary} (SPEC-029) e {@code system.metrics} (SPEC-024). */
+    private final ObjectProperty<Map<String, Object>> knowledge = new SimpleObjectProperty<>(Map.of());
+    private final ObjectProperty<Map<String, Object>> usageSummary = new SimpleObjectProperty<>(Map.of());
+    private final ObjectProperty<Map<String, Object>> systemMetrics = new SimpleObjectProperty<>(Map.of());
+
+    public javafx.collections.ObservableList<Map<String, Object>> skills() { return skills; }
+
+    public javafx.collections.ObservableList<Map<String, Object>> securityEvents() { return securityEvents; }
+
+    public ObjectProperty<Map<String, Object>> knowledgeProperty() { return knowledge; }
+
+    public ObjectProperty<Map<String, Object>> usageSummaryProperty() { return usageSummary; }
+
+    public ObjectProperty<Map<String, Object>> systemMetricsProperty() { return systemMetrics; }
+
     /** Servidores MCP declarados e o estado de cada um (SPEC-020). */
     private final javafx.collections.ObservableList<Map<String, Object>> mcpServers =
             javafx.collections.FXCollections.observableArrayList();
@@ -126,11 +146,6 @@ public final class DesktopState {
 
     public DesktopState(Clock clock) {
         this.clock = clock;
-        technicalMode.addListener((observable, before, now) -> {
-            if (!now && technical(destination.get())) {
-                destination.set(Destination.VOICE);
-            }
-        });
         this.composerBlockedReason = Bindings.createStringBinding(
                 () -> switch (connection.get()) {
                     case ONLINE -> "";
@@ -237,7 +252,7 @@ public final class DesktopState {
      * motivo.
      */
     public boolean select(Destination target) {
-        if (!target.isAvailable() || technical(target) && !technicalMode.get()) {
+        if (!target.isAvailable()) {
             return false;
         }
         destination.set(target);
@@ -326,16 +341,6 @@ public final class DesktopState {
 
     public StringProperty activityProperty() {
         return activity;
-    }
-
-    public BooleanProperty technicalModeProperty() {
-        return technicalMode;
-    }
-
-    /** Destinos que só existem no modo técnico: o Painel e o que se abre por ele. */
-    public static boolean technical(Destination destination) {
-        return destination == Destination.HOME || destination == Destination.LOGS
-                || destination == Destination.DIAGNOSTICS;
     }
 
     public ObjectProperty<double[]> voiceLevelProperty() {

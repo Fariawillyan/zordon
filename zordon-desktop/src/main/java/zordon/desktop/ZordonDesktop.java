@@ -72,6 +72,10 @@ public final class ZordonDesktop extends Application implements ShellActions {
         Scene scene = new Scene(shell, 960, 720);
         scene.getStylesheets().add(ZordonDesktop.class.getResource("/zordon/desktop/zordon.css").toExternalForm());
         primary.setTitle("Zordon");
+        for (int size : new int[] {16, 32, 48, 64, 128, 256}) {
+            primary.getIcons().add(new javafx.scene.image.Image(ZordonDesktop.class.getResource(
+                    "/zordon/desktop/icons/zordon-" + size + ".png").toExternalForm()));
+        }
         primary.setMinWidth(720);
         primary.setMinHeight(560);
         primary.setScene(scene);
@@ -422,6 +426,76 @@ public final class ZordonDesktop extends Application implements ShellActions {
                     }
                 }))
                 .exceptionally(failure -> null);
+    }
+
+    /**
+     * As cargas das telas de destino (SPEC-030). Cada uma é um pedido só, feito
+     * quando a tela abre — nunca na inicialização.
+     */
+    @Override
+    public void loadSkills() {
+        fill("tools.list", "tools", state.skills());
+    }
+
+    @Override
+    public void loadSecurityEvents() {
+        fill("security.events", "events", state.securityEvents());
+    }
+
+    @Override
+    public void loadKnowledge() {
+        connection.request("rag.status", Map.of())
+                .thenAccept(result -> Platform.runLater(() -> state.knowledgeProperty().set(Map.copyOf(result))))
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void reindexKnowledge() {
+        connection.request("rag.reindex", Map.of())
+                .thenAccept(result -> loadKnowledge())
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadUsage() {
+        connection.request("usage.summary", Map.of("days", 7))
+                .thenAccept(result -> Platform.runLater(() -> state.usageSummaryProperty().set(Map.copyOf(result))))
+                .exceptionally(this::reportFailure);
+    }
+
+    @Override
+    public void loadSystem() {
+        // Duas respostas numa tela só: as medidas e o estado do monitor (SPEC-024).
+        connection.request("system.metrics", Map.of()).thenAcceptAsync(metrics -> {
+            Map<String, Object> merged = new java.util.LinkedHashMap<>(metrics);
+            try {
+                Map<String, Object> monitor = connection.request("monitor.status", Map.of())
+                        .get(5, java.util.concurrent.TimeUnit.SECONDS);
+                merged.putAll(monitor);
+            } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException e) {
+                merged.put("docker", Map.of("state", "desconhecido", "reason", "o monitor não respondeu"));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            Platform.runLater(() -> state.systemMetricsProperty().set(Map.copyOf(merged)));
+        }).exceptionally(this::reportFailure);
+    }
+
+    /** Uma lista de mapas do núcleo para uma lista observável da tela. */
+    private void fill(String method, String key, javafx.collections.ObservableList<Map<String, Object>> target) {
+        connection.request(method, Map.of())
+                .thenAccept(result -> Platform.runLater(() -> {
+                    target.clear();
+                    if (result.get(key) instanceof List<?> rows) {
+                        rows.stream().filter(Map.class::isInstance).forEach(row -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> typed = (Map<String, Object>) row;
+                            target.add(typed);
+                        });
+                    }
+                }))
+                .exceptionally(this::reportFailure);
     }
 
     @Override

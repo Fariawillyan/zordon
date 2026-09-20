@@ -26,6 +26,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import zordon.api.trace.AcceptanceCriteria;
+import zordon.core.agents.AgentProfile;
+import zordon.core.agents.AgentRegistry;
 import zordon.memory.KnowledgeStore;
 import zordon.memory.SqliteMemoryStore;
 
@@ -123,6 +125,26 @@ class KnowledgeBaseTest {
 
         assertThat(knowledge.status()).containsEntry("staleFiles", 1);
         assertThat(knowledge.answerContext("auditoria", 3)).startsWith("[índice velho: 1 arquivo(s)");
+    }
+
+    @AcceptanceCriteria("SPEC-028/CA-4")
+    @Test
+    void oAgenteRagSoLeEEhObrigadoACitarArquivoESecao() {
+        AgentProfile rag = new AgentRegistry(home.resolve("agents")).find("rag").orElseThrow();
+
+        // O prompt é o que obriga a citação; a ferramenta fixada é o que garante que
+        // ele consulte antes de afirmar (SPEC-028 §3).
+        assertThat(rag.prompt()).contains("cite a fonte em cada").contains("(arquivo › seção)");
+        assertThat(rag.tools().pinned()).contains("rag.search");
+        assertThat(rag.ceiling().wire()).isEqualTo("green");
+        assertThat(List.of("fs.write", "fs.delete", "process.run", "memory.write", "change.plan"))
+                .allSatisfy(tool -> assertThat(rag.tools().allows(tool))
+                        .as("o agente de RAG só lê: %s", tool).isFalse());
+
+        // E a citação que ele recebe traz mesmo arquivo e seção.
+        knowledge.reindex();
+        assertThat(knowledge.answerContext("auditoria append-only", 3))
+                .contains("docs/security/model.md").contains("› 7. Auditoria");
     }
 
     @Test

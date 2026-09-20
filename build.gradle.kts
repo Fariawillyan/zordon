@@ -1,4 +1,5 @@
 plugins {
+    jacoco
     id("zordon.docs-conventions")
 }
 
@@ -24,4 +25,28 @@ tasks.register("verifyAll") {
     dependsOn(
         subprojects.map { "${it.path}:check" } + listOf("validateDocs", "traceability", voiceUnitTest.name)
     )
+}
+
+/**
+ * Cobertura somada de todos os módulos Java.
+ *
+ * <p>Um número por módulo não responde "quanto do projeto está coberto": o
+ * agregador junta as execuções e as classes de todos eles num relatório só.
+ */
+val coverage = tasks.register<JacocoReport>("coverage") {
+    group = "verification"
+    description = "Relatório de cobertura somando todos os módulos."
+    val javaProjects = subprojects.filter { it.plugins.hasPlugin("jacoco") }
+    dependsOn(javaProjects.map { it.tasks.named("test") })
+    executionData.setFrom(files(javaProjects.map {
+        it.layout.buildDirectory.file("jacoco/test.exec")
+    }).filter { it.exists() })
+    sourceDirectories.setFrom(files(javaProjects.map { it.the<SourceSetContainer>()["main"].allSource.srcDirs }))
+    classDirectories.setFrom(files(javaProjects.map { it.the<SourceSetContainer>()["main"].output }))
+    reports {
+        xml.required = true
+        xml.outputLocation = layout.buildDirectory.file("reports/coverage/coverage.xml")
+        html.required = true
+        html.outputLocation = layout.buildDirectory.dir("reports/coverage/html")
+    }
 }

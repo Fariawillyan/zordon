@@ -174,7 +174,7 @@ class PermissionUiTest {
             @Override public void pauseZordon() { asked[0] = true; }
             @Override public void resumeZordon() { asked[1] = true; }
         };
-        VoiceSettingsView settings = onFx(() -> new VoiceSettingsView(state, actions));
+        SecurityView settings = onFx(() -> new SecurityView(state, actions));
         VoiceView voice = onFx(() -> new VoiceView(state, actions));
         try {
             onFx(() -> {
@@ -212,7 +212,7 @@ class PermissionUiTest {
             @Override public void stopListening() {}
             @Override public void approveMcp(String server) { approved.add(server); }
         };
-        VoiceSettingsView settings = onFx(() -> new VoiceSettingsView(state, actions));
+        McpView settings = onFx(() -> new McpView(state, actions));
         onFx(() -> {
             state.mcpServers().setAll(
                     Map.of("name", "git", "state", "connected", "tools", java.util.List.of("mcp.git.log"), "drift", false),
@@ -242,13 +242,13 @@ class PermissionUiTest {
             @Override public void stopListening() {}
             @Override public void forgetFact(String factId) { forgotten.add(factId); }
         };
-        VoiceSettingsView settings = onFx(() -> new VoiceSettingsView(state, actions));
+        MemoryView settings = onFx(() -> new MemoryView(state, actions));
         onFx(() -> {
             state.memoryFacts().setAll(Map.of("id", "f_1", "kind", "PREFERENCE", "subject", "respostas",
                     "content", "prefere respostas curtas", "observedAt", "2026-09-19T15:00:00Z"));
             javafx.scene.Node list = settings.getContent().lookup("#memory-list");
             assertThat(((javafx.scene.layout.VBox) list).getChildren()).hasSize(1);
-            ((Button) settings.getContent().lookup("#forget-f_1")).fire();
+            ((Button) settings.getContent().lookup("#memory-forget-f_1")).fire();
             return null;
         });
         assertThat(forgotten).containsExactly("f_1");

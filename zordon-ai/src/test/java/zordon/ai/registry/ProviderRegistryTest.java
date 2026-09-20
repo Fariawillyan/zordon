@@ -74,6 +74,32 @@ class ProviderRegistryTest {
                 .hasValueSatisfying(reserve -> assertThat(reserve.providerId()).isEqualTo("anthropic"));
     }
 
+    @AcceptanceCriteria("SPEC-018/CA-4")
+    @Test
+    void semOProgramaNoCatalogoOProviderFicaIndisponivelComOMotivo() {
+        // O catálogo é quem autoriza o programa (SPEC-014): sem `claude` nele, o
+        // provider não é montado, e o motivo diz o que fazer.
+        CliRunner semClaude = new CliRunner() {
+            @Override
+            public Result run(List<String> argv, String stdin, Duration timeout) {
+                throw new AssertionError("não deveria rodar: o programa não está no catálogo");
+            }
+
+            @Override
+            public boolean available(String program) {
+                return false;
+            }
+        };
+
+        var registry = ProviderRegistry.build(AiSettings.defaults(), Pricing.defaults(), Map.of(), semClaude);
+
+        assertThat(registry.describe().get("claude"))
+                .startsWith("indisponível")
+                .contains("catálogo de programas")
+                .contains("npm i -g @anthropic-ai/claude-code");
+        assertThat(registry.preference()).doesNotContain("claude");
+    }
+
     @AcceptanceCriteria("SPEC-018/CA-5")
     @Test
     void servidorLocalVemAntesDaChavePagaEDepoisDaAssinatura() {

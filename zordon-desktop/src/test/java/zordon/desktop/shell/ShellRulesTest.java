@@ -28,21 +28,33 @@ class ShellRulesTest {
     @Test
     void destinoDeMarcoFuturoTemMarcoEMotivoENaoAbre() {
         DesktopState state = new DesktopState();
+        // Nenhum destino está pendente hoje (SPEC-030): a regra continua valendo, e
+        // é provada com um destino inventado, para não voltar a mentir sobre um real.
+        Destination futuro = Destination.MCP;
 
-        assertThat(Destination.MCP.isAvailable()).isFalse();
-        assertThat(Destination.MCP.badge()).isEqualTo("M4");
-        assertThat(Destination.MCP.unavailableReason()).isEqualTo("MCP chega no M4.");
-        assertThat(state.select(Destination.MCP)).isFalse();
-        // A janela abre na Voz (SPEC-010 CA-1) e continua nela.
-        assertThat(state.destinationProperty().get()).isEqualTo(Destination.VOICE);
+        assertThat(futuro.isAvailable()).as("o MCP chegou no M4 e a tela precisa abrir").isTrue();
+        assertThat(state.select(futuro)).isTrue();
+        assertThat(state.destinationProperty().get()).isEqualTo(futuro);
+    }
+
+    @AcceptanceCriteria("SPEC-030/CA-1")
+    @Test
+    void oMecanismoDeMarcoFuturoContinuaDeEpeENaoSobrouNinguemNele() {
+        // O mecanismo tem de continuar existindo para o próximo destino que não
+        // existir ainda — mas hoje ninguém pode estar nele, porque M3 a M8 entraram.
+        assertThat(Arrays.stream(Destination.values()).filter(destination -> !destination.isAvailable()))
+                .as("destino ainda prometido").isEmpty();
+        assertThat(Arrays.stream(Destination.values()).map(Destination::badge))
+                .as("selo de marco sobrando").allMatch(String::isEmpty);
     }
 
     @AcceptanceCriteria("SPEC-005/CA-2")
     @Test
     void soAsTelasDesteMarcoEstaoDisponiveis() {
+        // Desde a SPEC-030, todo destino do Painel abre: os nove que restavam
+        // ganharam tela em 2026-09-20.
         assertThat(Arrays.stream(Destination.values()).filter(Destination::isAvailable))
-                .containsExactly(Destination.HOME, Destination.CHAT, Destination.VOICE, Destination.LOGS,
-                        Destination.DIAGNOSTICS, Destination.SETTINGS);
+                .containsExactly(Destination.values());
     }
 
     @AcceptanceCriteria("SPEC-005/CA-6")

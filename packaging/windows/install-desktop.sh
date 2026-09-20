@@ -34,7 +34,7 @@ mkdir -p "${target}"
 cp -r "${REPO_ROOT}/zordon-desktop/build/windows-dist/." "${target}/"
 
 create_shortcut "Zordon" "${javaw}" "@zordon-desktop.args" "${target_windows}" \
-  "Zordon - seu assistente residente" || true
+  "Zordon - seu assistente residente" "${target_windows}\\zordon.ico" || true
 
 # Prova de que os efeitos saem pela placa: os seis sinais, em silêncio.
 log "verificando a saída de áudio do Windows (seis sinais em silêncio, ~12 s)"

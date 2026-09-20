@@ -222,8 +222,12 @@ estados e modo técnico no desktop com e sem display.
   de Voz não mostra texto operacional; com movimento reduzido, só a cor muda.
 - `CA-7` Dada a pílula, então ela não tem texto visível: ícone de microfone e
   botão de desligar, com os rótulos da SPEC-006 como texto acessível.
-- `CA-8` Dado o modo técnico desligado (padrão), então Painel, Logs, Diagnóstico e
-  os metadados técnicos das respostas ficam ocultos; ligado, aparecem.
+- `CA-8` ~~Dado o modo técnico desligado (padrão), então Painel, Logs, Diagnóstico
+  e os metadados técnicos das respostas ficam ocultos; ligado, aparecem.~~
+  **Superado pela [SPEC-031](../ui/SPEC-031-painel-unico-sem-modo-tecnico.md) em
+  2026-09-20**, a pedido do owner: "o modo tecnico deve ser fixo". O modo deixou de
+  existir; toda a navegação e os metadados aparecem sempre. A prova está em
+  `SPEC-031/CA-2` e `SPEC-031/CA-3`.
 - `CA-9` Dado o núcleo no ar, então todo evento, menos `VOICE_LEVEL`, vai para o
   JSONL do dia, com permissões 0600, só acrescentando; o diagnóstico aponta o
   arquivo.

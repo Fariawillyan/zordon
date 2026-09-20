@@ -51,6 +51,8 @@ final class VoiceEffectsPane extends Pane {
     private final Label caption = new Label();
     private final HBox buttons = new HBox(14);
     private final VBox card = new VBox(14);
+    /** Onde o seletor de modo de voz entra, quando a tela o fornece (SPEC-033). */
+    private final VBox modeSlot = new VBox();
     private Node topCenter;
     /** A esfera é o botão de falar (SPEC-011 CA-7): invisível, circular, acessível. */
     private final Button talk = new Button();
@@ -115,7 +117,9 @@ final class VoiceEffectsPane extends Pane {
                 + "\nÁudio local de feedback; não altera nem testa o microfone. Ajustes válidos nesta sessão.");
         help.getStyleClass().add("voice-caption");
         help.setWrapText(true);
-        VBox settingsBody = new VBox(14, new FlowPane(12, 8, new Label("Sinal"), cue, stop), effects, preferences, help);
+        // O modo de voz entra no topo: é o ajuste que o usuário vem procurar aqui.
+        VBox settingsBody = new VBox(14, modeSlot,
+                new FlowPane(12, 8, new Label("Sinal"), cue, stop), effects, preferences, help);
         settingsBody.getStyleClass().add("voice-settings");
         settingsBody.setId("voice-settings");
         card.visibleProperty().bind(settings.selectedProperty());
@@ -198,6 +202,11 @@ final class VoiceEffectsPane extends Pane {
     }
 
     /** Um nó no alto da moldura, centrado no eixo da esfera (a pílula de estado da SPEC-010). */
+    /** Põe o seletor de modo no alto do painel de Ajustes. */
+    void modeControl(Node control) {
+        modeSlot.getChildren().setAll(control);
+    }
+
     void topCenter(Node node) {
         if (topCenter != null) {
             getChildren().remove(topCenter);

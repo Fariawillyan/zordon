@@ -54,7 +54,7 @@ class TraceabilityIndexer(
         }
 
         specs.values.filter { it.status == "DONE" }.forEach { spec ->
-            spec.criteria.filterNot { "${spec.id}/$it" in validations }.sorted().forEach { criterion ->
+            spec.activeCriteria.filterNot { "${spec.id}/$it" in validations }.sorted().forEach { criterion ->
                 problems += "${relative(spec.file)}: ${spec.id} está DONE mas $criterion não tem teste ligado"
             }
         }

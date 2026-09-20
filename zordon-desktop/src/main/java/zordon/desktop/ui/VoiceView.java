@@ -43,6 +43,7 @@ final class VoiceView extends StackPane {
     private final javafx.scene.control.Tooltip pillHint = new javafx.scene.control.Tooltip();
     private final Button turnOff = new Button();
     private final HBox pill;
+    private final VoiceStatusStrip strip;
 
     VoiceView(DesktopState state, ShellActions actions) {
         this.state = state;
@@ -63,7 +64,13 @@ final class VoiceView extends StackPane {
         pill.setMaxSize(HBox.USE_PREF_SIZE, HBox.USE_PREF_SIZE);
         effects.topCenter(pill);
         effects.onTalk(() -> toggleListening(state, actions));
-        getChildren().add(effects);
+        effects.modeControl(new VoiceModePicker(state, actions, true));
+        // O console manda na tela e a faixa de estado fecha embaixo (SPEC-032).
+        this.strip = new VoiceStatusStrip(state);
+        javafx.scene.layout.VBox column = new javafx.scene.layout.VBox(effects, strip);
+        column.setMinSize(0, 0);
+        javafx.scene.layout.VBox.setVgrow(effects, javafx.scene.layout.Priority.ALWAYS);
+        getChildren().add(column);
 
         visibleProperty().addListener((observable, before, now) -> effects.active(now));
         effects.active(isVisible());
@@ -83,6 +90,10 @@ final class VoiceView extends StackPane {
             }
         });
         showPill();
+    }
+
+    VoiceStatusStrip statusStrip() {
+        return strip;
     }
 
     /** Clicar na esfera começa a escuta; clicar de novo, durante ela, encerra (SPEC-011 CA-7). */

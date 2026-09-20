@@ -79,6 +79,10 @@ implementação de produção.
 | [027](defense/SPEC-027-resposta-e-disjuntor.md) | Resposta, disjuntor e comportamento do host | defense | IMPLEMENTING | M7 |
 | [028](rag/SPEC-028-base-de-conhecimento.md) | Base de conhecimento e RAG | rag | IMPLEMENTING | M8 |
 | [029](process/SPEC-029-engenharia-preflight-e-uso.md) | Perfil de engenharia, preflight e uso de tokens | process | IMPLEMENTING | M8 |
+| [030](ui/SPEC-030-telas-proprias-dos-destinos.md) | Telas próprias dos destinos | ui | IMPLEMENTING | M8 |
+| [031](ui/SPEC-031-painel-unico-sem-modo-tecnico.md) | Painel único, sem modo técnico | ui | IMPLEMENTING | M8 |
+| [032](ui/SPEC-032-tela-do-zordon.md) | A tela do Zordon | ui | IMPLEMENTING | M8 |
+| [033](ui/SPEC-033-modo-de-voz-no-painel-do-console.md) | O modo de voz onde ele é decidido | ui | IMPLEMENTING | M8 |
 
 A numeração é **global e sequencial**, não por módulo. Número nunca é
 reutilizado, nem quando a SPEC é rejeitada.

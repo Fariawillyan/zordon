@@ -2,8 +2,8 @@
 document: spec-010
 module: ui
 section: spec
-version: 1
-updatedAt: 2026-09-18
+version: 2
+updatedAt: 2026-09-20
 securityLevel: public
 tags: [spec,desktop,javafx,shell,voz,console,trilho,layout]
 specId: SPEC-010
@@ -57,6 +57,39 @@ compacto da imagem de referência.
 - **Ajustes**: modos de voz, microfone (host, captura, dispositivo), teste do
   microfone e motor — o que saiu da tela de Voz.
 - Janela padrão de 960 × 720, mínima de 720 × 560.
+
+### Ajustes e avisos compactos (2026-09-20)
+
+Correção visual solicitada pelo owner a partir das capturas do desktop:
+controles sem tema, painéis extensos e banner esticado até o fundo da janela.
+
+- Ajustes organizados em **Voz**, **Segurança** (avisos, proteção e quarentena),
+  **Aplicativos** (automações, tarefas, agentes e MCP) e **Sistema** (memória e
+  modo técnico). Só a categoria selecionada ocupa espaço.
+- Botões têm tema escuro de base, foco visível e ações de atualização no
+  cabeçalho dos cartões. Texto de linhas pode quebrar; ações mantêm a largura.
+- Listas de avisos e achados têm rolagem própria, com altura máxima de 230 e
+  260 px. Listas vazias ocupam apenas a altura do texto.
+- O banner no canto superior direito tem largura máxima de 460 px e altura
+  do conteúdo, gravidade, título, resumo, contador de pendentes e **Entendi**.
+  Texto extenso fica resumido no banner, com dica contendo o texto completo.
+- **Ver avisos** abre Segurança com os detalhes completos e recolhe o banner
+  durante essa consulta. Consultar não confirma leitura; **Entendi** confirma
+  um aviso por vez. Ao sair dos Ajustes, pendências voltam ao banner.
+- A ordem dos avisos, os comandos e as regras de segurança permanecem os do
+  núcleo; esta correção altera apresentação e navegação.
+
+Validação: `ShellLayoutTest` monta cenas em 720 × 560 e 960 × 720, verifica
+altura do banner, textos longos, fila, leitura, navegação e altura das listas.
+Capturas em `zordon-desktop/build/ui-snapshots/`: `aplicativos-{720,960}.png`,
+`seguranca-{720,960}.png` e `aviso-compacto-{720,960}.png`.
+
+### Ícone da janela e do Windows
+
+A janela usa a marca geométrica ciano do console em 16, 32, 48, 64, 128 e
+256 px, substituindo o ícone padrão do Java. A distribuição inclui `zordon.ico`
+e o instalador o associa ao atalho do menu Iniciar. Os arquivos são reproduzíveis
+com `java packaging/windows/GenerateIcon.java`, executado na raiz do repositório.
 
 ## 4. Não escopo
 
@@ -162,8 +195,11 @@ com capturas em 960 × 720 e 720 × 560 comparadas com a imagem de referência.
   com a captura ligada, "Desligar"; nunca diz "desligado" sem confirmação.
 - `CA-4` Dado o estado do núcleo, então o indicador do trilho tem uma cor por
   estado e um texto acessível com o detalhe.
-- `CA-5` Dado o Painel, então ele leva a Início, Logs e Diagnóstico e mostra os
-  destinos futuros indisponíveis, com o marco.
+- `CA-5` ~~Dado o Painel, então ele leva a Início, Logs e Diagnóstico e mostra os
+  destinos futuros indisponíveis, com o marco.~~ **Superado pela
+  [SPEC-032](SPEC-032-tela-do-zordon.md) em 2026-09-20:** o Painel saiu por ser
+  redundante — a coluna leva a todos os destinos diretamente. A prova é
+  `SPEC-032/CA-2`.
 - `CA-6` Dada a Conversa, então o composer fica no pé dela e envia para a
   conversa visível.
 - `CA-7` Dados os Ajustes, então eles mostram modos (pedido e em vigor), microfone,

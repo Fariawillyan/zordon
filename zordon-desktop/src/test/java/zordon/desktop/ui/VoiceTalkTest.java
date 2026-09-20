@@ -81,7 +81,7 @@ class VoiceTalkTest {
             DesktopState state = new DesktopState();
             ZordonShell shell = new ZordonShell(state, actions);
             javafx.scene.Scene scene = FxTestSupport.styledScene(shell, 960, 720);
-            state.select(zordon.desktop.shell.Destination.SETTINGS);
+            state.select(zordon.desktop.shell.Destination.VOICE);
 
             Runnable talk = scene.getAccelerators().get(new javafx.scene.input.KeyCodeCombination(
                     javafx.scene.input.KeyCode.SPACE, javafx.scene.input.KeyCombination.CONTROL_DOWN));
