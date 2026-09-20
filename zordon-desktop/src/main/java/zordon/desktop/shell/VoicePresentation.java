@@ -187,7 +187,12 @@ public final class VoicePresentation {
 
     private static String captureLabel(VoiceStatus voice, ZoneId zone) {
         if (!voice.hostConnected()) {
-            return "O Zordon não controla o microfone agora: host do Windows não conectado.";
+            // Dizer a causa sem dizer o conserto deixa o usuário sabendo que está
+            // quebrado e não como arrumar. O host não sobe sozinho até a tarefa
+            // agendada ser registrada (quickstart §6).
+            return "O Zordon não controla o microfone agora: host do Windows não conectado."
+                    + " Rode packaging/windows/install-host.sh no WSL; para ele subir sozinho no logon,"
+                    + " registre a tarefa com packaging/windows/register-tasks.ps1.";
         }
         String at = voice.confirmedAt() == null ? "" : " às " + SECOND.format(voice.confirmedAt().atZone(zone));
         return switch (voice.capture()) {
