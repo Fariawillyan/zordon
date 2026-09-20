@@ -54,9 +54,15 @@ class StreamSession:
 
 
 class VoiceServer:
-    def __init__(self, models, socket_path):
+    #: Limites do limiar ajustável. Abaixo de 0,50 o detector dispara com qualquer
+    #: fala; 0,9999 é o mais estrito que o treino mediu (SPEC-034 §3).
+    MIN_THRESHOLD = 0.50
+    MAX_THRESHOLD = 0.9999
+
+    def __init__(self, models, socket_path, wake_threshold=None):
         self.models = models
         self.socket_path = socket_path
+        self._wake_override = wake_threshold
         self.state = "starting"
         self.reason = None
         self.writer = None
@@ -64,6 +70,20 @@ class VoiceServer:
         self.streams = {}
         self.executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="zordon-voice")
         self._write_lock = asyncio.Lock()
+
+    @property
+    def wake_threshold(self):
+        """O limiar em vigor: o do usuário, se houver e for sensato; senão o do modelo."""
+        baked = self.models.wake_classifier.threshold
+        if self._wake_override is None:
+            return baked
+        if not self.MIN_THRESHOLD <= self._wake_override <= self.MAX_THRESHOLD:
+            log.warning("limiar da palavra %.4f fora de [%.2f, %.4f]; usando o do modelo (%.4f)",
+                        self._wake_override, self.MIN_THRESHOLD, self.MAX_THRESHOLD, baked)
+            return baked
+        if abs(self._wake_override - baked) > 1e-9:
+            log.info("limiar da palavra ajustado para %.4f (o do modelo é %.4f)", self._wake_override, baked)
+        return self._wake_override
 
     async def serve(self):
         self._loop = asyncio.get_running_loop()
@@ -178,7 +198,7 @@ class VoiceServer:
         if reason:
             await self.send({"ev": "stream_end", "id": ident, "reason": reason})
             return
-        threshold = self.models.wake_classifier.threshold if self.models.wake_ready else 1.1
+        threshold = self.wake_threshold if self.models.wake_ready else 1.1
         self.streams[ident] = StreamSession(stream.Stream(mode, threshold), self.models.vad(),
                                             self.models.wake_stream())
         log.info("fluxo %s aberto (%s)", ident, mode)

@@ -182,6 +182,11 @@ models/
 *.safetensors
 *.pt
 *.pth
+
+# Exceção: os goldens do protocolo de voz são fixtures de teste, não modelo.
+# O padrão *.bin acima os escondeu, e o teste que os lê quebrava em qualquer
+# clone novo — inclusive na CI. São 157 bytes somados.
+!voice/tests/golden/*.bin
 *.tflite
 
 # ─── Embeddings e índices do RAG ──────────────────────────────────────────────

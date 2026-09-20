@@ -98,9 +98,12 @@ public final class ActivityInterpreter {
                 if (Boolean.TRUE.equals(payload.get("done"))) {
                     Turn turn = turns.remove(text(payload.get("turnId")));
                     settle(out, ActivityState.DONE, event.ts());
-                    String answer = text(payload.get("text"));
-                    if (turn != null && turn.voice() && !answer.isBlank()) {
-                        out.add(new Say(new Narration(answer, Narration.Priority.HIGH, "resultado")));
+                    // A voz diz o resumo, sem Markdown, e aponta para a tela
+                    // (Comunicação §3). Ler a resposta inteira, com asteriscos,
+                    // era o que acontecia até 2026-09-20 (SPEC-034).
+                    String spoken = SpokenAnswer.of(text(payload.get("text")));
+                    if (turn != null && turn.voice() && !spoken.isBlank()) {
+                        out.add(new Say(new Narration(spoken, Narration.Priority.HIGH, "resultado")));
                     }
                 }
             }

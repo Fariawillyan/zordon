@@ -22,8 +22,11 @@ def main():
     home = Path(os.environ.get("ZORDON_HOME", Path.home() / ".zordon"))
     socket_path = Path(os.environ.get("ZORDON_VOICE_SOCKET", "/run/zordon-voice/voice.sock"))
     threads = int(os.environ.get("ZORDON_VOICE_THREADS", default_threads()))
+    # Limiar da palavra de ativação: sem isto vale o gravado no modelo. Baixar
+    # aumenta o acerto e os disparos falsos — a curva está na SPEC-034 §3.
+    wake = os.environ.get("ZORDON_WAKE_THRESHOLD")
     models = Models(home / "models", threads)
-    asyncio.run(VoiceServer(models, socket_path).serve())
+    asyncio.run(VoiceServer(models, socket_path, float(wake) if wake else None).serve())
 
 
 if __name__ == "__main__":
