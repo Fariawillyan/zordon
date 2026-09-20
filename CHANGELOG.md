@@ -8,11 +8,7 @@ são marcadas com **[SEGURANÇA]**, como o [SECURITY.md](SECURITY.md) promete.
 
 ## [Não publicado]
 
-### Adicionado
-
-- SBOM CycloneDX das dependências distribuídas (`./gradlew sbom`), cumprindo o
-  compromisso do `SECURITY.md`. O plugin é de build e não entra no binário.
-- Cobertura de testes medida (`./gradlew coverage`): 76,4% das linhas do projeto.
+Nada ainda.
 
 ## [0.1.0] — 2026-09-20
 
@@ -45,6 +41,13 @@ estão em `IMPLEMENTING` — implementadas e testadas, aguardando revisão do ow
 - **M8 · Plataforma** — documentação indexada com citação de arquivo e seção,
   agentes de engenharia, preflight de nove passos que termina esperando o dono, e
   contagem de tokens por dia e por ator.
+- **Interface** — uma navegação só, em coluna, com todos os destinos; a tela do
+  Zordon com o console ocupando a janela e a faixa de estado (microfone, voz,
+  modelo, memória); telas próprias para agentes, MCP, skills, automações,
+  tarefas, memória, conhecimento, sistema, uso e segurança.
+- **Ferramentas do projeto** — SBOM CycloneDX (`./gradlew sbom`), cobertura de
+  testes (`./gradlew coverage`, 76,4% das linhas), e o indexador de
+  rastreabilidade entendendo critério de aceite superado.
 
 ### Segurança
 
@@ -56,6 +59,22 @@ estão em `IMPLEMENTING` — implementadas e testadas, aguardando revisão do ow
   leitura.
 - **[SEGURANÇA]** Modelos de voz são fixados por URL, SHA-256 e tamanho em
   `voice/models.lock`; o instalador recusa arquivo que não bata.
+
+### Corrigido
+
+- **A CI reprovava em todo push desde o início.** Os goldens do protocolo de voz
+  estavam escondidos pelo padrão `*.bin` do `.gitignore` e nunca foram
+  versionados, então o teste que os lê falhava em qualquer clone novo; e um job
+  rodava sem tela virtual, pulando os testes de interface e aprovando uma
+  superfície menor que a do outro.
+- **A voz lia a resposta inteira, com os asteriscos do Markdown.** Agora diz o
+  resumo, sem marcação, e aponta para a tela — como a regra de comunicação do
+  projeto já exigia para alertas.
+- **O limiar da palavra de ativação era imutável.** Virou ajustável por
+  `ZORDON_WAKE_THRESHOLD`, com a curva acerto × disparo falso medida sobre o
+  modelo publicado (SPEC-034).
+- A mensagem de microfone sem host passou a dizer **como** resolver, não só a
+  causa.
 
 ### Limitações conhecidas
 
