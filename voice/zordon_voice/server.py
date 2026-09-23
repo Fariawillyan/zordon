@@ -14,7 +14,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from . import endpoint, framing, stream
+from . import endpoint, framing, normalize, stream
 
 log = logging.getLogger("zordon_voice.server")
 
@@ -183,7 +183,8 @@ class VoiceServer:
             self.listening.pop(ident, None)
             self.streams.pop(ident, None)
         elif op == "speak":
-            asyncio.create_task(self._speak(ident, str(header.get("text", ""))))
+            asyncio.create_task(self._speak(ident, str(header.get("text", "")),
+                                            str(header.get("style", "normal"))))
         else:
             log.debug("operação desconhecida: %s", op)
 
@@ -269,21 +270,25 @@ class VoiceServer:
         await self.send({"ev": "final", "id": ident, "text": text, "confidence": round(confidence, 3),
                          "durationMs": duration, "reason": reason})
 
-    async def _speak(self, ident, text):
+    async def _speak(self, ident, text, profile="normal"):
         if self.state != "ready" or not text.strip():
             await self.send({"ev": "tts_end", "id": ident, "reason": "not_ready" if text.strip() else "empty"})
             return
         try:
-            chunks = await asyncio.get_running_loop().run_in_executor(
-                self.executor, lambda: list(self.models.synthesize(text)))
+            loop = asyncio.get_running_loop()
+            # Sintetiza uma sentença por vez. O primeiro áudio sai assim que a
+            # primeira sentença fica pronta, sem esperar o restante da resposta.
+            for sentence in normalize.sentences(text):
+                chunks = await loop.run_in_executor(
+                    self.executor, lambda value=sentence: list(self.models.synthesize(value, profile)))
+                for rate, pcm in chunks:
+                    step = int(rate * TTS_CHUNK_SECONDS) * 2
+                    for start in range(0, len(pcm), step):
+                        await self.send({"ev": "tts", "id": ident, "rate": rate}, pcm[start:start + step])
         except Exception as error:  # noqa: BLE001
             log.warning("síntese falhou: %s", error)
             await self.send({"ev": "tts_end", "id": ident, "reason": "failed"})
             return
-        for rate, pcm in chunks:
-            step = int(rate * TTS_CHUNK_SECONDS) * 2
-            for start in range(0, len(pcm), step):
-                await self.send({"ev": "tts", "id": ident, "rate": rate}, pcm[start:start + step])
         await self.send({"ev": "tts_end", "id": ident})
 
     _loop = None

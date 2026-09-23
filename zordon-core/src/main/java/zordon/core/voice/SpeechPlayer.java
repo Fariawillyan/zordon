@@ -212,7 +212,7 @@ public final class SpeechPlayer implements NarrationSink, AutoCloseable {
         BlockingQueue<Object> audio = new LinkedBlockingQueue<>();
         int[] rate = {0};
         long id = ++lastSpeech;
-        boolean started = engine.speak(id, narration.text(), new VoiceEngine.Speech() {
+        boolean started = engine.speak(id, narration.text(), style(narration), new VoiceEngine.Speech() {
             @Override
             public void chunk(int sampleRate, byte[] pcm) {
                 rate[0] = sampleRate;
@@ -278,6 +278,18 @@ public final class SpeechPlayer implements NarrationSink, AutoCloseable {
             TimeUnit.NANOSECONDS.sleep(remaining);
         }
         log.info("fala tocada: {} ({} ms)", narration.category(), sentBytes * 1000 / bytesPerSecond);
+    }
+
+    private static VoiceEngine.SpeechStyle style(Narration narration) {
+        if (narration.priority() == Narration.Priority.AUTHORIZATION) {
+            return VoiceEngine.SpeechStyle.authorization();
+        }
+        if ("erro".equals(narration.category())) {
+            return VoiceEngine.SpeechStyle.error();
+        }
+        return narration.priority() == Narration.Priority.HIGH
+                ? VoiceEngine.SpeechStyle.high()
+                : VoiceEngine.SpeechStyle.normal();
     }
 
     @Override

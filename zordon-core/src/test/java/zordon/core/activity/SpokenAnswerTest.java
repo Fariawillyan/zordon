@@ -49,22 +49,19 @@ class SpokenAnswerTest {
 
     @AcceptanceCriteria("SPEC-034/CA-2")
     @Test
-    void respostaLongaViraResumoQueApontaParaATela() {
+    void respostaLongaEhFaladaInteira() {
         String frase = "O núcleo está no ar e respondendo normalmente. ";
         String resposta = frase.repeat(20);
 
         String falado = SpokenAnswer.of(resposta);
 
-        assertThat(falado.length()).isLessThan(resposta.length());
-        assertThat(falado).endsWith(SpokenAnswer.ON_SCREEN);
-        // Corta no fim de uma frase: cortar no meio soa como defeito do motor.
-        assertThat(falado.replace(" " + SpokenAnswer.ON_SCREEN, "")).endsWith(".");
-        assertThat(falado.length()).isLessThanOrEqualTo(SpokenAnswer.MAX_CHARS + SpokenAnswer.ON_SCREEN.length() + 2);
+        assertThat(falado).isEqualTo(resposta.strip());
+        assertThat(falado).doesNotContain("O resto está na tela.");
     }
 
     @AcceptanceCriteria("SPEC-034/CA-3")
     @Test
-    void blocoDeCodigoNaoEhDitadoEAVozDizOndeEleEsta() {
+    void blocoDeCodigoNaoEhDitadoNemGeraFraseSobreATela() {
         String resposta = """
                 Para reiniciar, rode:
 
@@ -76,9 +73,9 @@ class SpokenAnswerTest {
         String falado = SpokenAnswer.of(resposta);
 
         assertThat(falado).contains("Para reiniciar, rode")
-                .contains(SpokenAnswer.CODE_ON_SCREEN)
                 .doesNotContain("systemctl")
-                .doesNotContain("```");
+                .doesNotContain("```")
+                .doesNotContain("tela");
     }
 
     @AcceptanceCriteria("SPEC-034/CA-2")
@@ -87,7 +84,6 @@ class SpokenAnswerTest {
         String falado = SpokenAnswer.of("São 15h40.");
 
         assertThat(falado).isEqualTo("São 15h40.");
-        assertThat(falado).doesNotContain(SpokenAnswer.ON_SCREEN);
     }
 
     @Test

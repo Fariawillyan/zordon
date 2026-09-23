@@ -103,7 +103,8 @@ class SidecarVoiceEngineTest {
                 @Override public void end(String reason) { events.add("tts_end"); }
             })).isTrue();
             assertThat(header(SidecarVoiceEngine.read(sidecar))).containsEntry("op", "speak")
-                    .containsEntry("text", "São 15h40.");
+                    .containsEntry("text", "São 15h40.")
+                    .containsEntry("style", "normal");
             write(sidecar, Map.of("ev", "tts", "id", 2, "rate", 22050), new byte[20]);
             write(sidecar, Map.of("ev", "tts_end", "id", 2), null);
             await(() -> events.contains("tts_end"));

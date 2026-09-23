@@ -54,6 +54,33 @@ public interface VoiceEngine {
         }
     }
 
+    /** Perfil de prosódia pedido ao sidecar para uma fala. */
+    record SpeechStyle(String profile) {
+
+        public SpeechStyle {
+            Objects.requireNonNull(profile, "profile");
+            if (profile.isBlank()) {
+                throw new IllegalArgumentException("perfil de fala vazio");
+            }
+        }
+
+        public static SpeechStyle normal() {
+            return new SpeechStyle("normal");
+        }
+
+        public static SpeechStyle high() {
+            return new SpeechStyle("high");
+        }
+
+        public static SpeechStyle authorization() {
+            return new SpeechStyle("authorization");
+        }
+
+        public static SpeechStyle error() {
+            return new SpeechStyle("error");
+        }
+    }
+
     Status status();
 
     Activity activity();
@@ -160,5 +187,10 @@ public interface VoiceEngine {
     /** Sintetiza {@code text}. @return falso se o motor não está pronto. */
     default boolean speak(long id, String text, Speech speech) {
         return false;
+    }
+
+    /** Sintetiza {@code text} com um perfil; motores antigos usam o padrão. */
+    default boolean speak(long id, String text, SpeechStyle style, Speech speech) {
+        return speak(id, text, speech);
     }
 }

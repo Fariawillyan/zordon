@@ -121,9 +121,9 @@ Exemplo de alerta falado:
 > "Willyan, detectei uma possível tentativa de invasão. Bloqueei temporariamente
 > a origem e estou analisando o ocorrido."
 
-A voz sempre diz o **resumo** e aponta para a tela; ela nunca lê a mensagem
-inteira. Detalhe técnico falado não é absorvido, e o usuário precisa ver a
-evidência para decidir.
+Em **alertas de segurança**, a voz diz o **resumo** e aponta para a tela; ela
+não lê a evidência técnica inteira. Respostas de conversa, por outro lado, são
+faladas integralmente depois da limpeza de Markdown.
 
 ## 4. Contrato de explicação
 

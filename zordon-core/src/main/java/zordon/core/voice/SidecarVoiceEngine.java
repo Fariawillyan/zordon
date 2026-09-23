@@ -157,11 +157,21 @@ public final class SidecarVoiceEngine implements VoiceEngine, AutoCloseable {
 
     @Override
     public boolean speak(long id, String text, Speech speech) {
+        return speak(id, text, SpeechStyle.normal(), speech);
+    }
+
+    @Override
+    public boolean speak(long id, String text, SpeechStyle style, Speech speech) {
         if (status.state() != State.READY) {
             return false;
         }
         speeches.put(id, speech);
-        if (!send(Map.of("op", "speak", "id", id, "text", text), null)) {
+        Map<String, Object> request = new java.util.LinkedHashMap<>();
+        request.put("op", "speak");
+        request.put("id", id);
+        request.put("text", text);
+        request.put("style", style == null ? SpeechStyle.normal().profile() : style.profile());
+        if (!send(request, null)) {
             speeches.remove(id);
             return false;
         }

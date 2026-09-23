@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,31 @@ WHISPER_DIR = "faster-whisper-small"
 PIPER_VOICE = "piper/pt_BR-faber-medium.onnx"
 WAKE_DIR = "wake"
 WAKE_MODEL = "zordon-wake-v1.npz"
+
+
+@dataclass(frozen=True)
+class Prosody:
+    """Parâmetros conservadores de síntese para fala conversacional."""
+
+    length_scale: float
+    noise_scale: float
+    noise_w_scale: float
+
+
+# O Piper não expõe pitch/emoção como parâmetros. Estes perfis controlam apenas
+# ritmo e variação, deixando os valores próximos do modelo para não introduzir
+# artefatos audíveis.
+PROSODY = {
+    "normal": Prosody(length_scale=1.03, noise_scale=0.72, noise_w_scale=0.85),
+    "high": Prosody(length_scale=1.00, noise_scale=0.70, noise_w_scale=0.82),
+    "authorization": Prosody(length_scale=1.05, noise_scale=0.64, noise_w_scale=0.78),
+    "error": Prosody(length_scale=1.05, noise_scale=0.68, noise_w_scale=0.82),
+}
+
+
+def prosody_for(profile):
+    """Retorna um perfil conhecido; entrada desconhecida cai no tom normal."""
+    return PROSODY.get(str(profile).lower(), PROSODY["normal"])
 
 
 class StreamingVad:
@@ -134,11 +160,22 @@ class Models:
         log.info("transcrição de %d ms em %.2f s", duration_ms, time.monotonic() - started)
         return text, confidence, duration_ms
 
-    def synthesize(self, text: str):
+    def synthesize(self, text: str, profile="normal"):
         """PCM s16le mono na taxa da voz (22 050 Hz), em pedaços."""
-        spoken = normalize.for_speech(text)
-        for chunk in self.voice.synthesize(spoken):
-            yield chunk.sample_rate, chunk.audio_int16_bytes
+        from piper import SynthesisConfig
+
+        prosody = prosody_for(profile)
+        config = SynthesisConfig(
+            length_scale=prosody.length_scale,
+            noise_scale=prosody.noise_scale,
+            noise_w_scale=prosody.noise_w_scale,
+        )
+        # Cada chamada recebe uma frase completa. Isso preserva a pontuação e
+        # permite que o Piper construa pausas entre frases; os blocos menores
+        # continuam sendo apenas o transporte PCM do protocolo.
+        for sentence in normalize.sentences(text):
+            for chunk in self.voice.synthesize(sentence, syn_config=config):
+                yield chunk.sample_rate, chunk.audio_int16_bytes
 
 
 def default_threads():

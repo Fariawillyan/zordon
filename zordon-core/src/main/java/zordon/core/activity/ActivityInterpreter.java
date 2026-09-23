@@ -118,9 +118,8 @@ public final class ActivityInterpreter {
         }
         Turn turn = turns.remove(text(payload.get("turnId")));
         settle(out, ActivityState.DONE, ts);
-        // A voz diz o resumo, sem Markdown, e aponta para a tela
-        // (Comunicação §3). Ler a resposta inteira, com asteriscos,
-        // era o que acontecia até 2026-09-20 (SPEC-034).
+        // A voz diz a resposta completa, sem Markdown. Blocos de código são
+        // omitidos para que a conversa continue natural.
         String spoken = SpokenAnswer.of(text(payload.get("text")));
         if (turn != null && turn.voice() && !spoken.isBlank()) {
             out.add(new Say(new Narration(spoken, Narration.Priority.HIGH, "resultado")));
@@ -137,7 +136,7 @@ public final class ActivityInterpreter {
     }
 
     private void security(List<Output> out, Map<String, Object> payload) {
-        // A voz diz o resumo e aponta para a tela; nunca lê a mensagem inteira (Comunicação §3).
+        // Alertas críticos continuam usando uma frase curta e exigem atenção na tela.
         if ("critical".equals(payload.get("severity"))) {
             show(out, ActivityState.ATTENTION);
             out.add(new Say(new Narration(text(payload.get("title")) + ". Os detalhes estão na tela.",

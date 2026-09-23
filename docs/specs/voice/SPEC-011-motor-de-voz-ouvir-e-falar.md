@@ -110,7 +110,7 @@ precedido do tamanho (u32 big-endian) e seguido de `bytes` de carga, quando há.
 | sidecar → núcleo | `{"ev":"state","state":"starting\|ready\|failed","reason"?}` |
 | núcleo → sidecar | `{"op":"listen","id"}`, `{"op":"audio","id","bytes"}` + PCM, `{"op":"stop","id"}`, `{"op":"cancel","id"}` |
 | sidecar → núcleo | `{"ev":"speech","id"}`, `{"ev":"final","id","text","confidence","reason"?}` |
-| núcleo → sidecar | `{"op":"speak","id","text"}` |
+| núcleo → sidecar | `{"op":"speak","id","text","style":"normal\|high\|authorization\|error"}` — texto completo, sintetizado por frases |
 | sidecar → núcleo | `{"ev":"tts","id","rate","bytes"}` + PCM, `{"ev":"tts_end","id"}` |
 
 Privacidade: a captura liga só durante uma escuta pedida pelo usuário (como o
