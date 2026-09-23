@@ -180,33 +180,10 @@ public final class TaskRunner {
             }
             Map<String, TaskStore.StepView> byId = new LinkedHashMap<>();
             task.steps().forEach(step -> byId.put(step.id(), step));
-            TaskStore.StepView next = null;
-            for (TaskStore.StepView step : ordered(task.steps())) {
-                if (!"planned".equals(step.state())) {
-                    continue;
-                }
-                Optional<TaskStore.StepView> broken = step.dependsOn().stream().map(byId::get)
-                        .filter(dep -> Set.of("failed", "blocked").contains(dep.state())).findFirst();
-                if (broken.isPresent()) {
-                    store.stepState(taskId, step.id(), "blocked", "a etapa " + broken.get().id() + " não concluiu");
-                    publish(taskId, step.id(), "blocked", step.title(), task.goal(), "dependência não concluída");
-                    next = null;
-                    break;   // relê o estado: o bloqueio pode cascatear
-                }
-                if (step.dependsOn().stream().allMatch(dep -> "done".equals(byId.get(dep).state()))) {
-                    next = step;
-                    break;
-                }
-            }
+            TaskStore.StepView next = nextStep(task, byId);
             if (next == null) {
                 TaskStore.TaskView now = store.task(taskId).orElseThrow();
-                boolean anyPlannedReady = now.steps().stream().anyMatch(step -> "planned".equals(step.state())
-                        && step.dependsOn().stream().allMatch(dep -> now.steps().stream()
-                                .anyMatch(other -> other.id().equals(dep) && "done".equals(other.state()))));
-                boolean anyBlockable = now.steps().stream().anyMatch(step -> "planned".equals(step.state())
-                        && step.dependsOn().stream().anyMatch(dep -> now.steps().stream().anyMatch(other ->
-                                other.id().equals(dep) && Set.of("failed", "blocked").contains(other.state()))));
-                if (anyPlannedReady || anyBlockable) {
+                if (progressPossible(now)) {
                     continue;
                 }
                 settle(now);
@@ -222,6 +199,42 @@ public final class TaskRunner {
                 return;
             }
         }
+    }
+
+    /**
+     * A próxima etapa pronta para rodar, ou {@code null}.
+     *
+     * <p>Bloqueia no caminho a etapa cuja dependência não concluiu e devolve
+     * {@code null}: quem chamou relê o estado, porque o bloqueio pode cascatear.
+     */
+    private TaskStore.StepView nextStep(TaskStore.TaskView task, Map<String, TaskStore.StepView> byId) {
+        for (TaskStore.StepView step : ordered(task.steps())) {
+            if (!"planned".equals(step.state())) {
+                continue;
+            }
+            Optional<TaskStore.StepView> broken = step.dependsOn().stream().map(byId::get)
+                    .filter(dep -> Set.of("failed", "blocked").contains(dep.state())).findFirst();
+            if (broken.isPresent()) {
+                store.stepState(task.id(), step.id(), "blocked", "a etapa " + broken.get().id() + " não concluiu");
+                publish(task.id(), step.id(), "blocked", step.title(), task.goal(), "dependência não concluída");
+                return null;
+            }
+            if (step.dependsOn().stream().allMatch(dep -> "done".equals(byId.get(dep).state()))) {
+                return step;
+            }
+        }
+        return null;
+    }
+
+    /** Ainda há etapa que pode andar, ou que ainda precisa ser bloqueada em cascata. */
+    private static boolean progressPossible(TaskStore.TaskView now) {
+        boolean anyPlannedReady = now.steps().stream().anyMatch(step -> "planned".equals(step.state())
+                && step.dependsOn().stream().allMatch(dep -> now.steps().stream()
+                        .anyMatch(other -> other.id().equals(dep) && "done".equals(other.state()))));
+        boolean anyBlockable = now.steps().stream().anyMatch(step -> "planned".equals(step.state())
+                && step.dependsOn().stream().anyMatch(dep -> now.steps().stream().anyMatch(other ->
+                        other.id().equals(dep) && Set.of("failed", "blocked").contains(other.state()))));
+        return anyPlannedReady || anyBlockable;
     }
 
     /** @return {@code false} quando a tarefa inteira precisa parar (orçamento) */

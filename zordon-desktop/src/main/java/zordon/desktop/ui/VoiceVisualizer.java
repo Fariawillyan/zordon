@@ -321,11 +321,25 @@ final class VoiceVisualizer extends Region {
             energy = Math.max(energy, micEnergy);
         }
         double radius = 150 + energy * 8;
-        g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
+        halo(g);
+        rings(g);
+        arcs(g);
+        glow(g, radius);
+        particles(g, radius);
+        core(g, radius);
+        poles(g, radius);
+        emblem(g);
+    }
+
+    /** O brilho difuso atrás de tudo. */
+    private void halo(GraphicsContext g) {
+g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
                 new Stop(0, col("#00D9EF", 0.05)), new Stop(0.6, col("#00D9EF", 0.04)),
                 new Stop(0.7, col("#00DBFF", 0.10)), new Stop(1, Color.TRANSPARENT)));
         g.fillOval(CX - 260, CY - 260, 520, 520);
+    }
 
+    private void rings(GraphicsContext g) {
         // Anéis concêntricos; o último pontilhado.
         double[] rings = {176, 196, 222, 250, 268};
         for (int i = 0; i < rings.length; i++) {
@@ -338,6 +352,9 @@ final class VoiceVisualizer extends Region {
             g.strokeOval(CX - r, CY - r, r * 2, r * 2);
             g.setLineDashes();
         }
+    }
+
+    private void arcs(GraphicsContext g) {
         // Arco grosso no alto e no pé, e as marcas hachuradas nas diagonais.
         g.setStroke(col("#12E3F7", 1));
         g.setLineWidth(5);
@@ -352,12 +369,18 @@ final class VoiceVisualizer extends Region {
         hatch(g, 128 + sweep, 146 + sweep, 212, col("#12E3F7", 0.75));
         hatch(g, 308 + sweep, 328 + sweep, 212, col("#12E3F7", 0.75));
         satellites(g);
+    }
 
+    private void glow(GraphicsContext g, double radius) {
         for (int glow = 10; glow >= 1; glow--) {
             g.setLineWidth(glow * 2.6);
             g.setStroke(col("#00DBFF", 0.022 + (11 - glow) * 0.006));
             g.strokeOval(CX - radius, CY - radius, radius * 2, radius * 2);
         }
+    }
+
+    /** As partículas em órbita e a poeira ao redor: a mesma semente em todo quadro. */
+    private void particles(GraphicsContext g, double radius) {
         Random random = new Random(19);
         for (int i = 0; i < 2400; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
@@ -378,6 +401,10 @@ final class VoiceVisualizer extends Region {
             g.setFill(col("#50EDFF", 0.15 + random.nextDouble() * 0.55));
             g.fillOval(CX + Math.cos(angle) * r, CY + Math.sin(angle) * r, size, size);
         }
+    }
+
+    /** O miolo escuro, a borda que pulsa e a onda de conclusão. */
+    private void core(GraphicsContext g, double radius) {
         g.setFill(new RadialGradient(0, 0, CX, CY, radius * 0.86, false, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#06151E", 0.99)), new Stop(0.7, Color.web("#06151E", 0.93)),
                 new Stop(1, Color.TRANSPARENT)));
@@ -391,6 +418,9 @@ final class VoiceVisualizer extends Region {
             g.setStroke(col("#7DF6FF", 0.8 * (1 - t / 1.2)));
             g.strokeOval(CX - r, CY - r, r * 2, r * 2);
         }
+    }
+
+    private void poles(GraphicsContext g, double radius) {
         for (int i = 0; i < 2; i++) {
             double y = CY + (i == 0 ? -radius : radius);
             g.setFill(new RadialGradient(0, 0, CX, y, 34, false, CycleMethod.NO_CYCLE,
@@ -398,7 +428,9 @@ final class VoiceVisualizer extends Region {
                     new Stop(1, Color.TRANSPARENT)));
             g.fillOval(CX - 34, y - 34, 68, 68);
         }
+    }
 
+    private void emblem(GraphicsContext g) {
         // O símbolo: triângulo com o triângulo interno aberto, como na referência.
         g.setStroke(col("#12E3F7", 1));
         g.setLineWidth(4.2);

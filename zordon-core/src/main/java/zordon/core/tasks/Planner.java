@@ -138,6 +138,21 @@ public final class Planner {
 
     /** As regras do plano (SPEC-023 §3). */
     List<TaskStore.PlanStep> validate(String answer) {
+        JsonNode steps = steps(answer);
+        List<TaskStore.PlanStep> out = new ArrayList<>();
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonNode step : steps) {
+            out.add(step(step, ids));
+        }
+        checkDependencies(out, ids);
+        if (topological(out) == null) {
+            throw new IllegalArgumentException("o plano tem um ciclo de dependências");
+        }
+        return List.copyOf(out);
+    }
+
+    /** O array {@code steps} de dentro da resposta do modelo, já conferido. */
+    private JsonNode steps(String answer) {
         int start = answer.indexOf('{');
         int end = answer.lastIndexOf('}');
         if (start < 0 || end < start) {
@@ -156,28 +171,33 @@ public final class Planner {
         if (steps.size() > MAX_STEPS) {
             throw new IllegalArgumentException("o plano tem " + steps.size() + " etapas; o máximo é " + MAX_STEPS);
         }
-        List<TaskStore.PlanStep> out = new ArrayList<>();
-        Set<String> ids = new LinkedHashSet<>();
-        for (JsonNode step : steps) {
-            String id = step.path("id").asText("");
-            if (!id.matches("[a-zA-Z0-9_-]{1,20}") || !ids.add(id)) {
-                throw new IllegalArgumentException("id de etapa inválido ou repetido: '" + id + "'");
-            }
-            String title = step.path("title").asText("").strip();
-            if (title.isEmpty() || title.length() > 120) {
-                throw new IllegalArgumentException("a etapa " + id + " precisa de um título de até 120 caracteres");
-            }
-            String agent = agents.find(step.path("agent").asText("")).map(AgentProfile::id)
-                    .orElse(AgentRegistry.GENERAL);
-            List<String> deps = new ArrayList<>();
-            step.path("dependsOn").forEach(dep -> deps.add(dep.asText()));
-            String risk = step.path("risk").asText("yellow").toLowerCase(Locale.ROOT);
-            if (!Set.of("green", "yellow", "red").contains(risk)) {
-                risk = "yellow";
-            }
-            out.add(new TaskStore.PlanStep(id, title, agent, List.copyOf(deps), risk,
-                    doneWhen(id, step.path("doneWhen"), risk)));
+        return steps;
+    }
+
+    /** Uma etapa conferida. {@code ids} acumula, para recusar repetição. */
+    private TaskStore.PlanStep step(JsonNode step, Set<String> ids) {
+        String id = step.path("id").asText("");
+        if (!id.matches("[a-zA-Z0-9_-]{1,20}") || !ids.add(id)) {
+            throw new IllegalArgumentException("id de etapa inválido ou repetido: '" + id + "'");
         }
+        String title = step.path("title").asText("").strip();
+        if (title.isEmpty() || title.length() > 120) {
+            throw new IllegalArgumentException("a etapa " + id + " precisa de um título de até 120 caracteres");
+        }
+        String agent = agents.find(step.path("agent").asText("")).map(AgentProfile::id)
+                .orElse(AgentRegistry.GENERAL);
+        List<String> deps = new ArrayList<>();
+        step.path("dependsOn").forEach(dep -> deps.add(dep.asText()));
+        String risk = step.path("risk").asText("yellow").toLowerCase(Locale.ROOT);
+        if (!Set.of("green", "yellow", "red").contains(risk)) {
+            risk = "yellow";
+        }
+        return new TaskStore.PlanStep(id, title, agent, List.copyOf(deps), risk,
+                doneWhen(id, step.path("doneWhen"), risk));
+    }
+
+    /** Nenhuma etapa depende do que não existe, nem de si mesma. */
+    private static void checkDependencies(List<TaskStore.PlanStep> out, Set<String> ids) {
         for (TaskStore.PlanStep step : out) {
             for (String dep : step.dependsOn()) {
                 if (!ids.contains(dep) || dep.equals(step.id())) {
@@ -186,10 +206,6 @@ public final class Planner {
                 }
             }
         }
-        if (topological(out) == null) {
-            throw new IllegalArgumentException("o plano tem um ciclo de dependências");
-        }
-        return List.copyOf(out);
     }
 
     private String doneWhen(String id, JsonNode node, String risk) {

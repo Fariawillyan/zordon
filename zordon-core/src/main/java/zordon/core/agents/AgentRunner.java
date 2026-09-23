@@ -133,9 +133,14 @@ public final class AgentRunner {
         return result;
     }
 
-    private Result loop(TurnScope scope, String task, String runId, BooleanSupplier cancelled, List<String> evidence) {
+    /** O que as chamadas de ferramenta produziram, e o motivo de parar, se houve. */
+    private record Calls(List<ContentBlock> results, Result stop) {}
+
+    private Result loop(TurnScope scope, String task, String runId, BooleanSupplier cancelled,
+            List<String> evidence) {
         AgentProfile agent = scope.agent();
-        List<AiMessage> messages = new ArrayList<>(List.of(new AiMessage(Role.USER, List.of(new ContentBlock.Text(task)))));
+        List<AiMessage> messages = new ArrayList<>(
+                List.of(new AiMessage(Role.USER, List.of(new ContentBlock.Text(task)))));
         String partial = "";
         while (true) {
             if (cancelled.getAsBoolean()) {
@@ -149,18 +154,9 @@ public final class AgentRunner {
             if (selection == null) {
                 return new Result(false, partial, "nenhum modelo disponível para o agente " + agent.id());
             }
-            List<ToolSpec> offered = tools.offer(task, scope);
-            log.debug("agente {} ({}): oferecidas {}", agent.id(), runId, offered.stream().map(ToolSpec::name).toList());
             AiResponse response;
             try {
-                response = selection.provider().chat(AiRequest.builder(selection.choice().model())
-                        .systemPrompt(prompts.systemPrompt() + "\n\n" + agent.prompt())
-                        .tools(offered)
-                        .messages(List.copyOf(messages))
-                        .effort(selection.choice().effortIfAny().orElse(null))
-                        .maxOutputTokens(MAX_OUTPUT_TOKENS)
-                        .timeout(Duration.ofMinutes(5))
-                        .build());
+                response = ask(selection, agent, task, scope, messages, runId);
             } catch (AiException e) {
                 return new Result(false, partial, e.getMessage());
             }
@@ -182,33 +178,64 @@ public final class AgentRunner {
             }
             bus.publish(EventType.AGENT_PROGRESS, Map.of("runId", runId, "step", scope.meter().steps(),
                     "note", "usando " + String.join(", ", calls.stream().map(ContentBlock.ToolUse::tool).toList())));
-            List<ContentBlock> results = new ArrayList<>();
-            for (ContentBlock.ToolUse call : calls) {
-                if (cancelled.getAsBoolean()) {
-                    return new Result(false, partial, "cancelled");
-                }
-                try {
-                    ContentBlock.ToolResult result = tools.call(call, "agent", runId, scope)
-                            .get(TOOL_WAIT_SECONDS, TimeUnit.SECONDS);
-                    results.add(result);
-                    int used = evidence.stream().mapToInt(String::length).sum();
-                    if (used < EVIDENCE_TOTAL) {
-                        String item = call.tool() + (result.isError() ? " (erro)" : "") + ": " + result.content();
-                        evidence.add(item.substring(0, Math.min(item.length(),
-                                Math.min(EVIDENCE_ITEM, EVIDENCE_TOTAL - used))));
-                    }
-                } catch (Exception e) {
-                    results.add(new ContentBlock.ToolResult(call.callId(), "a ferramenta falhou: " + e.getMessage(),
-                            true));
-                }
-                if (scope.guard().tripped() != null) {
-                    return new Result(false, "Parei: a execução do agente " + agent.id() + " foi suspensa ("
-                            + scope.guard().tripped() + ").", "suspended");
-                }
+            Calls done = runCalls(calls, scope, runId, cancelled, evidence, partial);
+            if (done.stop() != null) {
+                return done.stop();
             }
             messages.add(new AiMessage(Role.ASSISTANT, response.content()));
-            messages.add(new AiMessage(Role.USER, results));
+            messages.add(new AiMessage(Role.USER, done.results()));
         }
+    }
+
+    private AiResponse ask(ProviderRegistry.Selection selection, AgentProfile agent, String task, TurnScope scope,
+            List<AiMessage> messages, String runId) throws AiException {
+        List<ToolSpec> offered = tools.offer(task, scope);
+        log.debug("agente {} ({}): oferecidas {}", agent.id(), runId,
+                offered.stream().map(ToolSpec::name).toList());
+        return selection.provider().chat(AiRequest.builder(selection.choice().model())
+                .systemPrompt(prompts.systemPrompt() + "\n\n" + agent.prompt())
+                .tools(offered)
+                .messages(List.copyOf(messages))
+                .effort(selection.choice().effortIfAny().orElse(null))
+                .maxOutputTokens(MAX_OUTPUT_TOKENS)
+                .timeout(Duration.ofMinutes(5))
+                .build());
+    }
+
+    /** Roda as ferramentas pedidas. Falha de uma vira resultado de erro, não fim do agente. */
+    private Calls runCalls(List<ContentBlock.ToolUse> calls, TurnScope scope, String runId,
+            BooleanSupplier cancelled, List<String> evidence, String partial) {
+        List<ContentBlock> results = new ArrayList<>();
+        for (ContentBlock.ToolUse call : calls) {
+            if (cancelled.getAsBoolean()) {
+                return new Calls(results, new Result(false, partial, "cancelled"));
+            }
+            try {
+                ContentBlock.ToolResult result = tools.call(call, "agent", runId, scope)
+                        .get(TOOL_WAIT_SECONDS, TimeUnit.SECONDS);
+                results.add(result);
+                keepEvidence(evidence, call, result);
+            } catch (Exception e) {
+                results.add(new ContentBlock.ToolResult(call.callId(), "a ferramenta falhou: " + e.getMessage(),
+                        true));
+            }
+            if (scope.guard().tripped() != null) {
+                return new Calls(results, new Result(false, "Parei: a execução do agente " + scope.agent().id()
+                        + " foi suspensa (" + scope.guard().tripped() + ").", "suspended"));
+            }
+        }
+        return new Calls(results, null);
+    }
+
+    /** A evidência do Verifier, dentro do teto: o começo do resultado de cada ferramenta. */
+    private static void keepEvidence(List<String> evidence, ContentBlock.ToolUse call,
+            ContentBlock.ToolResult result) {
+        int used = evidence.stream().mapToInt(String::length).sum();
+        if (used >= EVIDENCE_TOTAL) {
+            return;
+        }
+        String item = call.tool() + (result.isError() ? " (erro)" : "") + ": " + result.content();
+        evidence.add(item.substring(0, Math.min(item.length(), Math.min(EVIDENCE_ITEM, EVIDENCE_TOTAL - used))));
     }
 
     private static Result limit(AgentProfile agent, String partial, String what) {

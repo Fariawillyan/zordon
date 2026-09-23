@@ -153,8 +153,20 @@ public final class SystemSampler implements AutoCloseable {
     /** Uma leitura. Público para os testes rodarem sem esperar o relógio. */
     public synchronized Snapshot sample() {
         Instant now = clock.instant();
-        double cpu = -1;
+        double cpu = cpuPercent();
+        long[] mem = meminfo();
+        double load = loadAverage();
+        double[] disk = diskGigabytes();
+        double[] net = networkKibPerSecond(now);
+        latest = new Snapshot(cpu, mem[0] < 0 || mem[1] < 0 ? -1 : mem[0] - mem[1], mem[0],
+                disk[0], disk[1], net[0], net[1], load, now);
+        return latest;
+    }
+
+    /** Uso desde a amostra anterior; -1 na primeira, que não tem com o que comparar. */
+    private double cpuPercent() {
         long[] cpuNow = cpuTicks();
+        double cpu = -1;
         if (cpuNow != null && lastCpu != null) {
             long total = cpuNow[0] - lastCpu[0];
             long idle = cpuNow[1] - lastCpu[1];
@@ -163,49 +175,61 @@ public final class SystemSampler implements AutoCloseable {
         if (cpuNow != null) {
             lastCpu = cpuNow;
         }
-        long memTotal = -1;
-        long memAvailable = -1;
+        return cpu;
+    }
+
+    /** {@code {total, disponível}} em KiB, ou -1 quando {@code /proc/meminfo} não abre. */
+    private long[] meminfo() {
+        long[] out = {-1, -1};
         try {
             for (String line : Files.readAllLines(proc.resolve("meminfo"))) {
                 if (line.startsWith("MemTotal:")) {
-                    memTotal = kilobytes(line);
+                    out[0] = kilobytes(line);
                 } else if (line.startsWith("MemAvailable:")) {
-                    memAvailable = kilobytes(line);
+                    out[1] = kilobytes(line);
                 }
             }
         } catch (IOException | RuntimeException e) {
             log.debug("meminfo ilegível: {}", e.getMessage());
         }
-        double load = -1;
+        return out;
+    }
+
+    private double loadAverage() {
         try {
-            load = Double.parseDouble(Files.readString(proc.resolve("loadavg")).split(" ")[0]);
+            return Double.parseDouble(Files.readString(proc.resolve("loadavg")).split(" ")[0]);
         } catch (IOException | RuntimeException e) {
             log.debug("loadavg ilegível: {}", e.getMessage());
+            return -1;
         }
-        double diskUsed = -1;
-        double diskTotal = -1;
+    }
+
+    /** {@code {usado, total}} em GB. */
+    private double[] diskGigabytes() {
         try {
             var store = Files.getFileStore(disk);
-            diskTotal = store.getTotalSpace() / 1e9;
-            diskUsed = (store.getTotalSpace() - store.getUsableSpace()) / 1e9;
+            return new double[] {(store.getTotalSpace() - store.getUsableSpace()) / 1e9,
+                    store.getTotalSpace() / 1e9};
         } catch (IOException e) {
             log.debug("disco ilegível: {}", e.getMessage());
+            return new double[] {-1, -1};
         }
-        double rx = -1;
-        double tx = -1;
+    }
+
+    /** {@code {rx, tx}} em KiB/s desde a amostra anterior. */
+    private double[] networkKibPerSecond(Instant now) {
+        double[] out = {-1, -1};
         long[] netNow = netBytes();
         if (netNow != null && lastNet != null && lastNetAt != null) {
             double seconds = Math.max(0.001, Duration.between(lastNetAt, now).toMillis() / 1000.0);
-            rx = Math.max(0, (netNow[0] - lastNet[0]) / 1024.0 / seconds);
-            tx = Math.max(0, (netNow[1] - lastNet[1]) / 1024.0 / seconds);
+            out[0] = Math.max(0, (netNow[0] - lastNet[0]) / 1024.0 / seconds);
+            out[1] = Math.max(0, (netNow[1] - lastNet[1]) / 1024.0 / seconds);
         }
         if (netNow != null) {
             lastNet = netNow;
             lastNetAt = now;
         }
-        latest = new Snapshot(cpu, memTotal < 0 || memAvailable < 0 ? -1 : memTotal - memAvailable, memTotal,
-                diskUsed, diskTotal, rx, tx, load, now);
-        return latest;
+        return out;
     }
 
     /** {total, ocioso} somados da linha {@code cpu} de {@code /proc/stat}. */

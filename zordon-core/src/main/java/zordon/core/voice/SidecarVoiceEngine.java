@@ -219,80 +219,96 @@ public final class SidecarVoiceEngine implements VoiceEngine, AutoCloseable {
         Map<?, ?> header = message.header();
         long id = header.get("id") instanceof Number number ? number.longValue() : -1;
         switch (String.valueOf(header.get("ev"))) {
-            case "state" -> {
-                boolean hasWake = Boolean.TRUE.equals(header.get("wake"));
-                boolean wakeChanged = hasWake != wake;
-                wake = hasWake;
-                boolean changed = change(switch (String.valueOf(header.get("state"))) {
-                    case "ready" -> new Status(State.READY, null);
-                    case "failed" -> new Status(State.FAILED, "o motor de voz falhou: " + header.get("reason"));
-                    default -> new Status(State.STARTING, LOADING);
-                });
-                if (wakeChanged && !changed) {
-                    listeners.forEach(Runnable::run);
-                }
-            }
-            case "wake" -> {
-                Stream stream = streams.get(id);
-                if (stream != null) {
-                    stream.wake(header.get("score") instanceof Number score ? score.doubleValue() : 0);
-                }
-            }
-            case "speech" -> {
-                Listening listening = listens.get(id);
-                if (listening != null) {
-                    listening.speech();
-                }
-                Stream stream = streams.get(id);
-                if (stream != null) {
-                    stream.speech();
-                }
-            }
-            case "end" -> {
-                Listening listening = listens.get(id);
-                if (listening != null) {
-                    listening.ended();
-                }
-                Stream stream = streams.get(id);
-                if (stream != null) {
-                    stream.ended();
-                }
-            }
-            case "final" -> {
-                Transcript transcript = new Transcript(
-                        header.get("text") instanceof String text ? text : "",
-                        header.get("confidence") instanceof Number c ? c.doubleValue() : 0,
-                        header.get("durationMs") instanceof Number d ? d.longValue() : 0,
-                        header.get("reason") instanceof String reason ? reason : "end");
-                Listening listening = listens.remove(id);
-                if (listening != null) {
-                    listening.transcript(transcript);
-                }
-                Stream stream = streams.get(id);
-                if (stream != null) {
-                    stream.transcript(transcript);
-                }
-            }
-            case "stream_end" -> {
-                Stream stream = streams.remove(id);
-                if (stream != null) {
-                    stream.closed(header.get("reason") instanceof String reason ? reason : "lost");
-                }
-            }
-            case "tts" -> {
-                Speech speech = speeches.get(id);
-                if (speech != null) {
-                    speech.chunk(header.get("rate") instanceof Number rate ? rate.intValue() : 22_050,
-                            message.payload());
-                }
-            }
-            case "tts_end" -> {
-                Speech speech = speeches.remove(id);
-                if (speech != null) {
-                    speech.end(header.get("reason") instanceof String reason ? reason : null);
-                }
-            }
+            case "state" -> state(header);
+            case "wake" -> wakeDetected(id, header);
+            case "speech" -> speechStarted(id);
+            case "end" -> speechEnded(id);
+            case "final" -> transcribed(id, header);
+            case "stream_end" -> streamEnded(id, header);
+            case "tts" -> ttsChunk(id, header, message);
+            case "tts_end" -> ttsEnded(id, header);
             default -> log.debug("evento desconhecido do motor: {}", header.get("ev"));
+        }
+    }
+
+    private void state(Map<?, ?> header) {
+        boolean hasWake = Boolean.TRUE.equals(header.get("wake"));
+        boolean wakeChanged = hasWake != wake;
+        wake = hasWake;
+        boolean changed = change(switch (String.valueOf(header.get("state"))) {
+            case "ready" -> new Status(State.READY, null);
+            case "failed" -> new Status(State.FAILED, "o motor de voz falhou: " + header.get("reason"));
+            default -> new Status(State.STARTING, LOADING);
+        });
+        if (wakeChanged && !changed) {
+            listeners.forEach(Runnable::run);
+        }
+    }
+
+    private void wakeDetected(long id, Map<?, ?> header) {
+        Stream stream = streams.get(id);
+        if (stream != null) {
+            stream.wake(header.get("score") instanceof Number score ? score.doubleValue() : 0);
+        }
+    }
+
+    private void speechStarted(long id) {
+        Listening listening = listens.get(id);
+        if (listening != null) {
+            listening.speech();
+        }
+        Stream stream = streams.get(id);
+        if (stream != null) {
+            stream.speech();
+        }
+    }
+
+    private void speechEnded(long id) {
+        Listening listening = listens.get(id);
+        if (listening != null) {
+            listening.ended();
+        }
+        Stream stream = streams.get(id);
+        if (stream != null) {
+            stream.ended();
+        }
+    }
+
+    private void transcribed(long id, Map<?, ?> header) {
+        Transcript transcript = new Transcript(
+                header.get("text") instanceof String text ? text : "",
+                header.get("confidence") instanceof Number c ? c.doubleValue() : 0,
+                header.get("durationMs") instanceof Number d ? d.longValue() : 0,
+                header.get("reason") instanceof String reason ? reason : "end");
+        Listening listening = listens.remove(id);
+        if (listening != null) {
+            listening.transcript(transcript);
+        }
+        Stream stream = streams.get(id);
+        if (stream != null) {
+            stream.transcript(transcript);
+        }
+    }
+
+    private void streamEnded(long id, Map<?, ?> header) {
+        Stream stream = streams.remove(id);
+        if (stream != null) {
+            stream.closed(header.get("reason") instanceof String reason ? reason : "lost");
+        }
+    }
+
+    private void ttsChunk(long id, Map<?, ?> header, Message message) {
+        Speech speech = speeches.get(id);
+        if (speech != null) {
+            speech.chunk(header.get("rate") instanceof Number rate ? rate.intValue() : 22_050,
+                    message.payload());
+        }
+    }
+
+    private void ttsEnded(long id, Map<?, ?> header) {
+        Speech speech = speeches.remove(id);
+        if (speech != null) {
+            speech.end(header.get("reason") instanceof String reason ? reason : null);
         }
     }
 

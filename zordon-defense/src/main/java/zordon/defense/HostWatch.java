@@ -198,6 +198,14 @@ public final class HostWatch implements AutoCloseable {
     }
 
     private void startPersistence() {
+        if (!registerPersistence()) {
+            return;
+        }
+        Thread.ofVirtual().name("zordon-persistencia").start(this::watchPersistence);
+    }
+
+    /** Registra os diretórios vigiados. {@code false} quando nem deu para começar. */
+    private boolean registerPersistence() {
         try {
             watcher = java.nio.file.FileSystems.getDefault().newWatchService();
             Set<Path> dirs = new LinkedHashSet<>();
@@ -208,30 +216,35 @@ public final class HostWatch implements AutoCloseable {
                             java.nio.file.StandardWatchEventKinds.ENTRY_CREATE);
                 }
             }
+            return true;
         } catch (IOException e) {
             error = "persistência: " + e.getMessage();
-            return;
+            return false;
         }
-        Thread.ofVirtual().name("zordon-persistencia").start(() -> {
-            while (watcher != null) {
-                java.nio.file.WatchKey key;
-                try {
-                    key = watcher.take();
-                } catch (InterruptedException | java.nio.file.ClosedWatchServiceException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                for (var event : key.pollEvents()) {
-                    Path dir = (Path) key.watchable();
-                    Path changed = dir.resolve(String.valueOf(event.context()));
-                    if (persistence.stream().anyMatch(watched -> changed.startsWith(watched)
-                            || changed.equals(watched))) {
-                        persistenceChanged(changed);
-                    }
-                }
-                key.reset();
+    }
+
+    private void watchPersistence() {
+        while (watcher != null) {
+            java.nio.file.WatchKey key;
+            try {
+                key = watcher.take();
+            } catch (InterruptedException | java.nio.file.ClosedWatchServiceException e) {
+                Thread.currentThread().interrupt();
+                return;
             }
-        });
+            reportChanges(key);
+            key.reset();
+        }
+    }
+
+    private void reportChanges(java.nio.file.WatchKey key) {
+        for (var event : key.pollEvents()) {
+            Path dir = (Path) key.watchable();
+            Path changed = dir.resolve(String.valueOf(event.context()));
+            if (persistence.stream().anyMatch(watched -> changed.startsWith(watched) || changed.equals(watched))) {
+                persistenceChanged(changed);
+            }
+        }
     }
 
     /** Um arquivo de persistência mudou. Pública para o teste não depender do inotify. */

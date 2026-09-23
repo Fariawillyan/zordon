@@ -30,6 +30,7 @@ import zordon.core.agents.AgentProfile;
 import zordon.core.agents.AgentRegistry;
 import zordon.memory.KnowledgeStore;
 import zordon.memory.SqliteMemoryStore;
+import zordon.memory.ZordonDatabase;
 
 /** A documentação indexada e consultável com citação (SPEC-028). */
 class KnowledgeBaseTest {
@@ -37,13 +38,15 @@ class KnowledgeBaseTest {
     @TempDir
     Path home;
 
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private KnowledgeBase knowledge;
     private Path docs;
 
     @BeforeEach
     void setUp() throws Exception {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), Clock.systemUTC());
+        db = new ZordonDatabase(home.resolve("zordon.db"), Clock.systemUTC());
+        store = db.memory();
         docs = home.resolve("docs/security");
         Files.createDirectories(docs);
         Files.writeString(docs.resolve("model.md"), """
@@ -70,12 +73,12 @@ class KnowledgeBaseTest {
                 O Redactor mascara o segredo antes de qualquer log.
                 """);
         Files.writeString(home.resolve("docs/leia.md"), "# Leia-me\n\nO Zordon é um assistente residente.\n");
-        knowledge = new KnowledgeBase(store, List.of(home.resolve("docs")));
+        knowledge = new KnowledgeBase(db.knowledge(), List.of(home.resolve("docs")));
     }
 
     @AfterEach
     void tearDown() {
-        store.close();
+        db.close();
     }
 
     @AcceptanceCriteria("SPEC-028/CA-1")

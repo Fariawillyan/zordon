@@ -131,10 +131,22 @@ public final class AgentRegistry {
         if (toml.hasErrors()) {
             throw new IllegalArgumentException("TOML inválido: " + toml.errors().getFirst().toString());
         }
+        String id = id(toml);
+        String prompt = prompt(toml);
+        return new AgentProfile(id, toml.getString("name") == null ? id : toml.getString("name"),
+                toml.getString("description") == null ? "" : toml.getString("description"), prompt.strip(),
+                scope(toml), ceiling(toml), role(toml), budget(toml), source);
+    }
+
+    private static String id(TomlParseResult toml) {
         String id = toml.getString("id");
         if (id == null || !id.matches("[a-z0-9-]{1,40}")) {
             throw new IllegalArgumentException("id ausente ou inválido (a-z, 0-9, -, até 40)");
         }
+        return id;
+    }
+
+    private static String prompt(TomlParseResult toml) {
         String prompt = toml.getString("prompt");
         if (prompt == null || prompt.isBlank()) {
             throw new IllegalArgumentException("prompt ausente");
@@ -142,42 +154,49 @@ public final class AgentRegistry {
         if (prompt.length() > 8_000) {
             throw new IllegalArgumentException("prompt maior que 8.000 caracteres");
         }
+        return prompt;
+    }
+
+    private static ToolScope scope(TomlParseResult toml) {
         TomlTable tools = toml.getTable("tools");
-        ToolScope scope = tools == null ? ToolScope.ALL : new ToolScope(
+        return tools == null ? ToolScope.ALL : new ToolScope(
                 strings(tools.getArray("include"), List.of("*")),
                 strings(tools.getArray("exclude"), List.of()),
                 strings(tools.getArray("pinned"), List.of()));
+    }
+
+    private static RiskLevel ceiling(TomlParseResult toml) {
         String ceiling = toml.getString("permissions.ceiling");
-        RiskLevel level;
         try {
-            level = ceiling == null ? RiskLevel.YELLOW : RiskLevel.valueOf(ceiling.toUpperCase(Locale.ROOT));
+            return ceiling == null ? RiskLevel.YELLOW : RiskLevel.valueOf(ceiling.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("permissions.ceiling deve ser GREEN, YELLOW ou RED");
         }
+    }
+
+    private static ModelRole role(TomlParseResult toml) {
         String role = toml.getString("model.role");
-        ModelRole modelRole;
         try {
-            modelRole = role == null ? ModelRole.CONVERSATION : ModelRole.valueOf(role.toUpperCase(Locale.ROOT));
+            return role == null ? ModelRole.CONVERSATION : ModelRole.valueOf(role.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("model.role desconhecido: " + role);
         }
+    }
+
+    private static Budget budget(TomlParseResult toml) {
         Budget defaults = Budget.DEFAULT;
-        Budget budget;
         try {
             Long steps = toml.getLong("budget.maxSteps");
             Long calls = toml.getLong("budget.maxToolCalls");
             Long tokens = toml.getLong("budget.maxTokens");
             String clock = toml.getString("budget.wallClock");
-            budget = new Budget(steps == null ? defaults.maxSteps() : steps.intValue(),
+            return new Budget(steps == null ? defaults.maxSteps() : steps.intValue(),
                     calls == null ? defaults.maxToolCalls() : calls.intValue(),
                     tokens == null ? defaults.maxTokens() : tokens,
                     clock == null ? defaults.wallClock() : Duration.parse(clock));
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("budget.wallClock deve ser uma duração ISO-8601, como PT5M");
         }
-        return new AgentProfile(id, toml.getString("name") == null ? id : toml.getString("name"),
-                toml.getString("description") == null ? "" : toml.getString("description"), prompt.strip(), scope,
-                level, modelRole, budget, source);
     }
 
     private static List<String> strings(TomlArray array, List<String> fallback) {

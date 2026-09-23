@@ -64,20 +64,108 @@ public final class DefaultPermissionEngine implements PermissionEngine {
     @Override
     public Decision evaluate(ActionDescriptor action, Principal actor, PolicyContext ctx) {
         Objects.requireNonNull(actor, "principal");
+        Decision refused = refuseOutright(action, actor, ctx);
+        if (refused != null) {
+            return refused;
+        }
+        Risks risks = new Risks(action.baseRisk());
+        Decision forbidden = classifyPaths(action, risks);
+        if (forbidden != null) {
+            return forbidden;
+        }
+        escalateByAction(action, ctx, risks);
+        escalateByOrigin(actor, ctx, risks);
+        Decision denied = applyCommand(action, risks);
+        if (denied != null) {
+            return denied;
+        }
+        if (ctx.ceiling() != null && risks.intrinsic.compareTo(ctx.ceiling()) > 0) {
+            // Teto do agente é trava dura (Interfaces §7): nem chega a perguntar ao usuário.
+            return new Decision.Deny(risks.intrinsic, "acima do teto do agente (" + ctx.ceiling().wire() + ")");
+        }
+        if (ctx.lockdown() && risks.risk != RiskLevel.GREEN) {
+            return new Decision.Deny(risks.risk, "Zordon em lockdown: só leitura");
+        }
+        return decide(new Request(action, actor, ctx), risks.risk, risks.summary(action));
+    }
+
+    /**
+     * O risco em construção durante uma avaliação.
+     *
+     * <p>São dois números, e a diferença importa: {@code risk} é o do pedido e
+     * decide se o usuário confirma; {@code intrinsic} é o da ação em si, sem o
+     * que a origem acrescenta, e é contra ele que vale o teto do agente. Um
+     * sub-agente de teto GREEN ainda lê; o nível extra da delegação só muda a
+     * confirmação (SPEC-022).
+     */
+    private static final class Risks {
+
+        private RiskLevel risk;
+        private RiskLevel intrinsic;
+        private final List<String> why = new ArrayList<>();
+
+        Risks(RiskLevel base) {
+            this.risk = base;
+            this.intrinsic = base;
+        }
+
+        /** A ação em si ficou mais arriscada: sobe os dois. */
+        void raise(String reason) {
+            risk = risk.raise();
+            intrinsic = intrinsic.raise();
+            why.add(reason);
+        }
+
+        /** Só quem pediu mudou: sobe o do pedido, não o da ação. */
+        void raiseRequest(String reason) {
+            risk = risk.raise();
+            why.add(reason);
+        }
+
+        void red(String reason) {
+            risk = RiskLevel.RED;
+            intrinsic = RiskLevel.RED;
+            why.add(reason);
+        }
+
+        void atLeast(RiskLevel level) {
+            risk = risk.atLeast(level);
+            intrinsic = intrinsic.atLeast(level);
+        }
+
+        /** Piso vindo do validador de comando: só vira motivo se de fato subiu o pedido. */
+        void floor(RiskLevel level, String note) {
+            if (level.compareTo(risk) > 0) {
+                risk = level;
+                why.add(note);
+            }
+            if (level.compareTo(intrinsic) > 0) {
+                intrinsic = level;
+            }
+        }
+
+        String summary(ActionDescriptor action) {
+            return why.isEmpty() ? action.humanSummary() : action.humanSummary() + " (" + String.join("; ", why) + ")";
+        }
+    }
+
+    /** Quem pede o quê, em que contexto: junto porque as três andam sempre juntas. */
+    private record Request(ActionDescriptor action, Principal actor, PolicyContext ctx) {}
+
+    /** As recusas que não dependem de nada mais. {@code null} quando não há. */
+    private static Decision refuseOutright(ActionDescriptor action, Principal actor, PolicyContext ctx) {
         if (action.effects().contains(Effect.MODIFY_TRUST_KERNEL)) {
             return new Decision.Deny(RiskLevel.RED, "núcleo de confiança: só proposto por PR, nunca aplicado");
         }
         if (ctx.breakerOpen()) {
             return new Decision.Deny(action.baseRisk(), "disjuntor aberto para " + actor.actor());
         }
-        List<String> why = new ArrayList<>();
-        RiskLevel risk = action.baseRisk();
-        // O risco da ação em si, sem o que a origem acrescenta: é contra ele que vale o teto do
-        // agente. Um sub-agente de teto GREEN ainda lê; o nível extra da delegação só decide se
-        // o usuário precisa confirmar (SPEC-022).
-        RiskLevel intrinsic = action.baseRisk();
-        boolean writes = action.effects().stream().anyMatch(WRITES::contains);
+        return null;
+    }
 
+    /** Classifica cada caminho tocado. Devolve a recusa, ou {@code null} e sobe o risco. */
+    private Decision classifyPaths(ActionDescriptor action, Risks risks) {
+        boolean writes = action.effects().stream().anyMatch(WRITES::contains);
         for (ZPath path : action.touchedPaths()) {
             PathPolicy.Verdict verdict = paths.classify(path);
             if (verdict.forbidden()) {
@@ -87,97 +175,94 @@ public final class DefaultPermissionEngine implements PermissionEngine {
                 return new Decision.Deny(RiskLevel.RED, "escrita no caminho de instalação do Zordon: " + path);
             }
             if (verdict.critical()) {
-                risk = RiskLevel.RED;
-                intrinsic = RiskLevel.RED;
-                why.add("caminho crítico " + path);
+                risks.red("caminho crítico " + path);
             } else if (writes ? !verdict.workspace() : !verdict.readable()) {
-                risk = risk.raise();
-                intrinsic = intrinsic.raise();
-                why.add("fora das áreas permitidas: " + path);
+                risks.raise("fora das áreas permitidas: " + path);
             }
         }
+        return null;
+    }
+
+    /** O que a ação em si acrescenta ao risco. */
+    private void escalateByAction(ActionDescriptor action, PolicyContext ctx, Risks risks) {
         if (action.targets() > TARGET_LIMIT) {
-            risk = risk.raise();
-            intrinsic = intrinsic.raise();
-            why.add(action.targets() + " alvos");
+            risks.raise(action.targets() + " alvos");
         }
         if (redactor.containsSecret(action.args())) {
-            risk = RiskLevel.RED;
-            intrinsic = RiskLevel.RED;
-            why.add("argumento contém segredo");
+            risks.red("argumento contém segredo");
         }
         if (ctx.newTool()) {
-            risk = risk.raise();
-            intrinsic = intrinsic.raise();
-            why.add("ferramenta nova");
-        }
-        if (actor.origin() == RequestOrigin.AUTOMATION && !ctx.userPresent()) {
-            risk = risk.raise();
-            why.add("automação sem usuário presente");
-        }
-        if (actor.delegated()) {
-            risk = risk.raise();
-            why.add("pedido por agente delegado");
+            risks.raise("ferramenta nova");
         }
         if (action.effects().contains(Effect.MODIFY_SELF) || action.effects().contains(Effect.MODIFY_PROJECT)) {
-            risk = risk.atLeast(RiskLevel.YELLOW);
-            intrinsic = intrinsic.atLeast(RiskLevel.YELLOW);
+            risks.atLeast(RiskLevel.YELLOW);
         }
         if (ctx.tainted() && (action.effects().contains(Effect.EXPORT_DATA)
                 || action.effects().contains(Effect.NETWORK))) {
-            risk = RiskLevel.RED;
-            intrinsic = RiskLevel.RED;
-            why.add("turno contaminado enviando dados");
+            risks.red("turno contaminado enviando dados");
         }
-        if (!action.command().isEmpty()) {
-            switch (commands.validate(action.command())) {
-                case CommandValidator.Validation.Denied denied -> {
-                    return new Decision.Deny(RiskLevel.RED, denied.reason());
-                }
-                case CommandValidator.Validation.Accepted accepted -> {
-                    if (accepted.floor().compareTo(risk) > 0) {
-                        risk = accepted.floor();
-                        why.add(accepted.note());
-                    }
-                    if (accepted.floor().compareTo(intrinsic) > 0) {
-                        intrinsic = accepted.floor();
-                    }
-                }
+    }
+
+    /** O que a origem do pedido acrescenta — sem tocar no risco intrínseco. */
+    private static void escalateByOrigin(Principal actor, PolicyContext ctx, Risks risks) {
+        if (actor.origin() == RequestOrigin.AUTOMATION && !ctx.userPresent()) {
+            risks.raiseRequest("automação sem usuário presente");
+        }
+        if (actor.delegated()) {
+            risks.raiseRequest("pedido por agente delegado");
+        }
+    }
+
+    /** O piso que o validador de comando impõe. Devolve a recusa, ou {@code null}. */
+    private Decision applyCommand(ActionDescriptor action, Risks risks) {
+        if (action.command().isEmpty()) {
+            return null;
+        }
+        return switch (commands.validate(action.command())) {
+            case CommandValidator.Validation.Denied denied -> new Decision.Deny(RiskLevel.RED, denied.reason());
+            case CommandValidator.Validation.Accepted accepted -> {
+                risks.floor(accepted.floor(), accepted.note());
+                yield null;
             }
-        }
-        if (ctx.ceiling() != null && intrinsic.compareTo(ctx.ceiling()) > 0) {
-            // Teto do agente é trava dura (Interfaces §7): nem chega a perguntar ao usuário.
-            return new Decision.Deny(intrinsic, "acima do teto do agente (" + ctx.ceiling().wire() + ")");
-        }
-        if (ctx.lockdown() && risk != RiskLevel.GREEN) {
-            return new Decision.Deny(risk, "Zordon em lockdown: só leitura");
-        }
-        return decide(action, actor, ctx, risk, why.isEmpty() ? action.humanSummary()
-                : action.humanSummary() + " (" + String.join("; ", why) + ")");
+        };
     }
 
     /** O teto de cada origem (identity.md §3). Agente herda a origem de quem o iniciou. */
-    private Decision decide(ActionDescriptor action, Principal actor, PolicyContext ctx, RiskLevel risk, String why) {
-        RequestOrigin origin = actor.origin() == RequestOrigin.AGENT ? RequestOrigin.AUTOMATION : actor.origin();
+    private Decision decide(Request request, RiskLevel risk, String why) {
+        RequestOrigin origin = request.actor().origin() == RequestOrigin.AGENT
+                ? RequestOrigin.AUTOMATION : request.actor().origin();
         return switch (risk) {
-            case GREEN -> origin == RequestOrigin.AUTONOMOUS && action.effects().stream().anyMatch(WRITES::contains)
-                    ? new Decision.Deny(risk, "autônomo só faz contenção reversível")
-                    : new Decision.Allow(risk, why, false);
-            case YELLOW -> switch (origin) {
-                case UI -> sessionGrants.contains(grantKey(action))
-                        ? new Decision.Allow(risk, why + " — permitido nesta sessão", true)
-                        : new Decision.AskUser(risk, why, APPROVAL_TTL, false);
-                case VOICE -> new Decision.AskUser(risk, why + " — confirme na tela", APPROVAL_TTL, true);
-                case AUTOMATION -> ctx.automationScope().contains(action.tool())
-                        ? new Decision.Allow(risk, why + " — no escopo aprovado da automação", false)
-                        : new Decision.Deny(risk, "fora do escopo aprovado da automação");
-                case AUTONOMOUS, AGENT -> new Decision.Deny(risk, "origem sem autoridade para efeito");
-            };
-            case RED -> switch (origin) {
-                case UI, VOICE -> new Decision.AskUser(risk, why, APPROVAL_TTL, true);
-                case AUTOMATION, AUTONOMOUS, AGENT ->
-                        new Decision.Deny(risk, "RED nunca roda sem alguém autorizar na tela");
-            };
+            case GREEN -> green(request.action(), origin, risk, why);
+            case YELLOW -> yellow(request, origin, risk, why);
+            case RED -> red(origin, risk, why);
+        };
+    }
+
+    /** GREEN passa direto, menos para o autônomo, que só contém — e conter não escreve. */
+    private static Decision green(ActionDescriptor action, RequestOrigin origin, RiskLevel risk, String why) {
+        return origin == RequestOrigin.AUTONOMOUS && action.effects().stream().anyMatch(WRITES::contains)
+                ? new Decision.Deny(risk, "autônomo só faz contenção reversível")
+                : new Decision.Allow(risk, why, false);
+    }
+
+    private Decision yellow(Request request, RequestOrigin origin, RiskLevel risk, String why) {
+        return switch (origin) {
+            case UI -> sessionGrants.contains(grantKey(request.action()))
+                    ? new Decision.Allow(risk, why + " — permitido nesta sessão", true)
+                    : new Decision.AskUser(risk, why, APPROVAL_TTL, false);
+            case VOICE -> new Decision.AskUser(risk, why + " — confirme na tela", APPROVAL_TTL, true);
+            case AUTOMATION -> request.ctx().automationScope().contains(request.action().tool())
+                    ? new Decision.Allow(risk, why + " — no escopo aprovado da automação", false)
+                    : new Decision.Deny(risk, "fora do escopo aprovado da automação");
+            case AUTONOMOUS, AGENT -> new Decision.Deny(risk, "origem sem autoridade para efeito");
+        };
+    }
+
+    private static Decision red(RequestOrigin origin, RiskLevel risk, String why) {
+        return switch (origin) {
+            case UI, VOICE -> new Decision.AskUser(risk, why, APPROVAL_TTL, true);
+            case AUTOMATION, AUTONOMOUS, AGENT ->
+                    new Decision.Deny(risk, "RED nunca roda sem alguém autorizar na tela");
         };
     }
 
@@ -189,27 +274,34 @@ public final class DefaultPermissionEngine implements PermissionEngine {
         }
         return current.ask(action, actor, ask.risk(), ask.ttl(), ask.perAction())
                 .orTimeout(ask.ttl().toMillis(), TimeUnit.MILLISECONDS)
-                .handle((approval, failure) -> {
-                    Throwable cause = failure instanceof java.util.concurrent.CompletionException wrapped
-                            && wrapped.getCause() != null ? wrapped.getCause() : failure;
-                    if (cause instanceof java.util.concurrent.TimeoutException || (failure == null && approval == null)) {
-                        return new Decision.Deny(ask.risk(), "sem resposta em " + ask.ttl().toSeconds() + " s");
-                    }
-                    if (failure != null) {
-                        return new Decision.Deny(ask.risk(), "sem tela para autorizar: " + cause.getMessage());
-                    }
-                    return switch (approval) {
-                        case DENY -> new Decision.Deny(ask.risk(), "negado pelo usuário");
-                        case ONCE -> new Decision.Allow(ask.risk(), "autorizado pelo usuário", false);
-                        case SESSION -> {
-                            if (ask.perAction()) {
-                                yield new Decision.Allow(ask.risk(), "autorizado pelo usuário, só desta vez", false);
-                            }
-                            sessionGrants.add(grantKey(action));
-                            yield new Decision.Allow(ask.risk(), "autorizado nesta sessão", true);
-                        }
-                    };
-                });
+                .handle((approval, failure) -> settle(action, ask, approval, failure));
+    }
+
+    /** O que a resposta da tela — ou a falta dela — significa. Sem resposta é negação. */
+    private Decision settle(ActionDescriptor action, Decision.AskUser ask, Approval approval, Throwable failure) {
+        Throwable cause = failure instanceof java.util.concurrent.CompletionException wrapped
+                && wrapped.getCause() != null ? wrapped.getCause() : failure;
+        if (cause instanceof java.util.concurrent.TimeoutException || (failure == null && approval == null)) {
+            return new Decision.Deny(ask.risk(), "sem resposta em " + ask.ttl().toSeconds() + " s");
+        }
+        if (failure != null) {
+            return new Decision.Deny(ask.risk(), "sem tela para autorizar: " + cause.getMessage());
+        }
+        return granted(action, ask, approval);
+    }
+
+    private Decision granted(ActionDescriptor action, Decision.AskUser ask, Approval approval) {
+        return switch (approval) {
+            case DENY -> new Decision.Deny(ask.risk(), "negado pelo usuário");
+            case ONCE -> new Decision.Allow(ask.risk(), "autorizado pelo usuário", false);
+            case SESSION -> {
+                if (ask.perAction()) {
+                    yield new Decision.Allow(ask.risk(), "autorizado pelo usuário, só desta vez", false);
+                }
+                sessionGrants.add(grantKey(action));
+                yield new Decision.Allow(ask.risk(), "autorizado nesta sessão", true);
+            }
+        };
     }
 
     /** Área de uma permissão de sessão: a ferramenta e a pasta do primeiro caminho. */

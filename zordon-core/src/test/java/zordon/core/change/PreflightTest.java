@@ -41,6 +41,7 @@ import zordon.core.notify.ZordonMessage;
 import zordon.core.rag.KnowledgeBase;
 import zordon.core.usage.UsageTracker;
 import zordon.memory.SqliteMemoryStore;
+import zordon.memory.ZordonDatabase;
 import zordon.memory.TaskStore;
 
 /** O preflight de nove passos e a conta de tokens (SPEC-029). */
@@ -50,6 +51,7 @@ class PreflightTest {
     Path home;
 
     private final List<ZordonMessage> notices = new CopyOnWriteArrayList<>();
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private NotificationCenter notifications;
     private KnowledgeBase knowledge;
@@ -57,7 +59,8 @@ class PreflightTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), Clock.systemUTC());
+        db = new ZordonDatabase(home.resolve("zordon.db"), Clock.systemUTC());
+        store = db.memory();
         notifications = new NotificationCenter(home.resolve("notifications.db"), Clock.systemUTC(), notices::add);
         Path docs = home.resolve("docs/specs/mcp");
         Files.createDirectories(docs);
@@ -76,15 +79,15 @@ class PreflightTest {
 
                 O motor de permissão e a auditoria formam o núcleo de confiança.
                 """);
-        knowledge = new KnowledgeBase(store, List.of(home.resolve("docs")));
+        knowledge = new KnowledgeBase(db.knowledge(), List.of(home.resolve("docs")));
         knowledge.reindex();
-        preflight = new Preflight(store, knowledge, new AgentRegistry(home.resolve("agents")), notifications);
+        preflight = new Preflight(db.tasks(), knowledge, new AgentRegistry(home.resolve("agents")), notifications);
     }
 
     @AfterEach
     void tearDown() {
         notifications.close();
-        store.close();
+        db.close();
     }
 
     @AcceptanceCriteria("SPEC-029/CA-1")
@@ -106,7 +109,7 @@ class PreflightTest {
         assertThat(plan.steps().get(5).finding()).contains("codereview");
         assertThat(plan.tokenBudget()).isEqualTo(Preflight.DEFAULT_BUDGET);
 
-        TaskStore.TaskView task = store.task(plan.taskId()).orElseThrow();
+        TaskStore.TaskView task = db.tasks().task(plan.taskId()).orElseThrow();
         assertThat(task.state()).isEqualTo("waiting_human");
         assertThat(task.origin()).isEqualTo("change:preflight");
         assertThat(task.steps()).hasSize(9).allSatisfy(step -> assertThat(step.state()).isEqualTo("done"));
@@ -133,7 +136,7 @@ class PreflightTest {
     @Test
     void usoDeTokensSomaPorDiaEAtorESobreviveAoReinicio() {
         ZordonEventBus bus = new ZordonEventBus("01TESTE00000000000000000000");
-        try (UsageTracker tracker = new UsageTracker(store, bus, Clock.systemUTC())) {
+        try (UsageTracker tracker = new UsageTracker(db.usage(), bus, Clock.systemUTC())) {
             tracker.accept(new EventEnvelope(1, Clock.systemUTC().instant(), EventType.AI_RESPONSE,
                     Map.of("done", true, "provider", "claude", "model", "sonnet",
                             "usage", Map.of("inputTokens", 1000, "outputTokens", 200))));
@@ -154,9 +157,10 @@ class PreflightTest {
         }
         bus.close();
 
-        store.close();
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), Clock.systemUTC());
-        assertThat(store.usageSummary(7)).containsEntry("inputTokens", 1700L);
+        db.close();
+        db = new ZordonDatabase(home.resolve("zordon.db"), Clock.systemUTC());
+        store = db.memory();
+        assertThat(db.usage().usageSummary(7)).containsEntry("inputTokens", 1700L);
     }
 
     @AcceptanceCriteria("SPEC-029/CA-5")

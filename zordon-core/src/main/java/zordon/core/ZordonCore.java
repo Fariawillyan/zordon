@@ -80,53 +80,72 @@ public final class ZordonCore implements AutoCloseable {
     private final ZwpServer server;
     private final ConversationStore conversations = new ConversationStore();
     private final ProviderRegistry providers;
-    private final TurnManager turns;
+    private TurnManager turns;
     private SessionId voiceSession;
-    private final VoiceService voice;
-    private final SidecarVoiceEngine engine;
-    private final SpeechPlayer speech;
+    private VoiceService voice;
+    private SidecarVoiceEngine engine;
+    private SpeechPlayer speech;
     /** Auditoria e motor de permissão (SPEC-014): existem antes da primeira ação com efeito. */
     private final zordon.security.Redactor redactor = new zordon.security.Redactor();
-    private final zordon.security.AuditLog audit;
-    private final zordon.security.PermissionEngine permissions;
+    private zordon.security.AuditLog audit;
+    private zordon.security.PermissionEngine permissions;
     private volatile Map<String, Object> auditState = Map.of("chain", "unverified");
     /** Pedido de permissão, notificações e kill switch (SPEC-015). */
-    private final zordon.core.permission.DesktopApprover approver;
-    private final zordon.core.notify.NotificationCenter notifications;
-    private final zordon.core.permission.LockdownService lockdown;
+    private zordon.core.permission.DesktopApprover approver;
+    private zordon.core.notify.NotificationCenter notifications;
+    private zordon.core.permission.LockdownService lockdown;
     /** Execução mediada (SPEC-016). */
-    private final zordon.core.tools.SkillRuntime tools;
-    private final zordon.core.tools.WindowsBridge windows;
-    private final zordon.security.vault.QuarantineVault vault;
+    private zordon.core.tools.SkillRuntime tools;
+    private zordon.core.tools.WindowsBridge windows;
+    private zordon.security.vault.QuarantineVault vault;
     /** Agentes como configuração (SPEC-022). */
-    private final zordon.core.agents.AgentRegistry agents;
-    private final zordon.core.agents.AgentService agentRuns;
+    private zordon.core.agents.AgentRegistry agents;
+    private zordon.core.agents.AgentService agentRuns;
     /** Detecção e correlação (SPEC-026) e resposta (SPEC-027). */
-    private final zordon.core.defense.DefenseService defense;
-    private final zordon.core.defense.DefenseEngine response;
-    private final zordon.defense.CircuitBreakers breakers;
-    private final zordon.core.defense.IntegrityWatch integrity;
-    private final zordon.defense.HostWatch hostWatch;
+    private zordon.core.defense.DefenseService defense;
+    private zordon.core.defense.DefenseEngine response;
+    private zordon.defense.CircuitBreakers breakers;
+    private zordon.core.defense.IntegrityWatch integrity;
+    private zordon.defense.HostWatch hostWatch;
     /** Preflight e uso de tokens (SPEC-029). */
-    private final zordon.core.change.Preflight preflight;
-    private final zordon.core.usage.UsageTracker usage;
+    private zordon.core.change.Preflight preflight;
+    private zordon.core.usage.UsageTracker usage;
     /** Base de conhecimento (SPEC-028). */
-    private final zordon.core.rag.KnowledgeBase knowledge;
+    private zordon.core.rag.KnowledgeBase knowledge;
     /** Monitor do sistema (SPEC-024). */
-    private final zordon.core.automation.AutomationEngine automations;
-    private final zordon.core.monitor.SystemSampler sampler;
-    private final zordon.core.monitor.DockerEvents dockerEvents;
+    private zordon.core.automation.AutomationEngine automations;
+    private zordon.core.monitor.SystemSampler sampler;
+    private zordon.core.monitor.DockerEvents dockerEvents;
     /** Planos duráveis e conclusão verificada (SPEC-023). */
-    private final zordon.core.tasks.TaskRunner tasks;
+    private zordon.core.tasks.TaskRunner tasks;
     /** Memória de longo prazo e destilação (SPEC-021). */
-    private final zordon.memory.SqliteMemoryStore memory;
-    private final zordon.core.memory.Distiller distiller;
+    private zordon.memory.ZordonDatabase database;
+    private zordon.memory.SqliteMemoryStore memory;
+    private zordon.core.memory.Distiller distiller;
     /** Servidores MCP do {@code config.toml} (SPEC-020). */
-    private final zordon.core.mcp.McpManager mcp;
+    private zordon.core.mcp.McpManager mcp;
+    /**
+     * O andaime da montagem.
+     *
+     * <p>Estes não são {@code final} porque a construção foi dividida em fases
+     * (SPEC-035): um construtor de 195 linhas não cabia no limite do
+     * [padrões §5](../../../../../docs/process/code-standards.md#5-complexidade),
+     * e um método auxiliar não pode atribuir campo {@code final}. São escritos
+     * uma vez, durante a construção, e nunca depois.
+     */
+    private IntentRouter router;
+    private PromptComposer prompts;
+    private zordon.security.Gatekeeper gatekeeper;
+    private zordon.security.ProcessRunner runner;
+    private zordon.api.security.ZPath userHome;
+    private zordon.security.PathPolicy policy;
+    private zordon.core.tools.ModelToolCaller modelTools;
+    private zordon.core.agents.AgentRunner agentRunner;
+
     private final java.util.concurrent.atomic.AtomicReference<zordon.ai.cli.CliRunner> cliRunner =
             new java.util.concurrent.atomic.AtomicReference<>();
-    private final LiveTrace trace;
-    private final ActivityService activity;
+    private LiveTrace trace;
+    private ActivityService activity;
     private final String startId;
     private final Instant startedAt;
     private final String token;
@@ -148,7 +167,18 @@ public final class ZordonCore implements AutoCloseable {
         this.token = EndpointPublisher.newToken();
         this.bus = new ZordonEventBus(startId);
         this.server = new ZwpServer(new InetSocketAddress(config.bindAddress(), config.port()), token);
-        this.providers = ProviderRegistry.build(
+        this.providers = providers(environment);
+        wireChatAndVoice(config, environment);
+        wireSecurity(config, environment);
+        wireMemory(config);
+        wireDefense(config, environment);
+        wireAgentsAndTasks(config, environment);
+        wireAutomation(config, environment);
+        wireTurnCallbacks();
+    }
+
+    private ProviderRegistry providers(Map<String, String> environment) {
+        return ProviderRegistry.build(
                 AiSettings.load(config.home().resolve("config.toml")),
                 Pricing.load(config.home().resolve("pricing.toml")),
                 environment,
@@ -169,8 +199,12 @@ public final class ZordonCore implements AutoCloseable {
                         return securitySettings(environment).catalog().containsKey(program);
                     }
                 });
-        IntentRouter router = new IntentRouter();
-        PromptComposer prompts = new PromptComposer();
+    }
+
+    /** Conversa e voz: o turno, a captura, o motor, a fala e o narrador. */
+    private void wireChatAndVoice(ZordonConfig config, Map<String, String> environment) {
+        this.router = new IntentRouter();
+        this.prompts = new PromptComposer();
         this.turns = new TurnManager(bus, conversations, router, prompts, providers);
         AudioIngest audio = new AudioIngest(
                 server,
@@ -195,6 +229,10 @@ public final class ZordonCore implements AutoCloseable {
         this.speech = new SpeechPlayer(engine, voice, server, server::sendBinary);
         this.activity = new ActivityService(bus, speech, Clock.systemUTC(),
                 Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("activity-ticks").factory()));
+    }
+
+    /** O núcleo de confiança e a execução mediada (SPEC-014 a SPEC-017). */
+    private void wireSecurity(ZordonConfig config, Map<String, String> environment) {
         this.audit = new zordon.security.SqliteAuditLog(config.home().resolve("state").resolve("audit.db"),
                 redactor, Clock.systemUTC());
         this.approver = new zordon.core.permission.DesktopApprover(server);
@@ -203,12 +241,12 @@ public final class ZordonCore implements AutoCloseable {
         this.notifications = new zordon.core.notify.NotificationCenter(
                 config.home().resolve("state").resolve("notifications.db"), Clock.systemUTC(),
                 message -> bus.publish(EventType.SECURITY_NOTIFICATION, message.payload()));
-        zordon.security.Gatekeeper gatekeeper = new zordon.security.Gatekeeper(permissions, audit);
-        zordon.security.ProcessRunner runner = new zordon.security.ProcessRunner(
+        this.gatekeeper = new zordon.security.Gatekeeper(permissions, audit);
+        this.runner = new zordon.security.ProcessRunner(
                 securitySettings(environment).validator());
-        zordon.api.security.ZPath userHome = zordon.api.security.ZPath.ofWsl(
+        this.userHome = zordon.api.security.ZPath.ofWsl(
                 environment.getOrDefault("HOME", System.getProperty("user.home")));
-        zordon.security.PathPolicy policy = securitySettings(environment).paths();
+        this.policy = securitySettings(environment).paths();
         this.windows = new zordon.core.tools.WindowsBridge(server);
         cliRunner.set(new zordon.core.tools.GatekeptCliRunner(gatekeeper, runner, config.home().resolve("cli-work"),
                 program -> securitySettings(environment).catalog().containsKey(program)));
@@ -229,7 +267,12 @@ public final class ZordonCore implements AutoCloseable {
                 .register(zordon.core.tools.ProcessTools.build(policy, userHome, runner))
                 .register(zordon.core.tools.QuarantineTools.quarantine(policy, userHome, vault))
                 .register(zordon.core.tools.QuarantineTools.restore(policy, vault));
-        this.memory = new zordon.memory.SqliteMemoryStore(config.home().resolve("zordon.db"), Clock.systemUTC());
+    }
+
+    /** Memória de longo prazo e destilação (SPEC-021). */
+    private void wireMemory(ZordonConfig config) {
+        this.database = new zordon.memory.ZordonDatabase(config.home().resolve("zordon.db"), Clock.systemUTC());
+        this.memory = database.memory();
         java.util.function.Consumer<zordon.memory.Fact> remembered = fact -> bus.publish(EventType.MEMORY_WRITTEN,
                 Map.of("kind", fact.kind().name(), "id", fact.id(), "summary",
                         fact.content().length() > 80 ? fact.content().substring(0, 80) + "…" : fact.content()));
@@ -251,7 +294,11 @@ public final class ZordonCore implements AutoCloseable {
         turns.onRecall(new zordon.core.memory.MemoryContext(memory, Clock.systemUTC(), java.time.ZoneId.systemDefault()));
         this.distiller = new zordon.core.memory.Distiller(memory, providers, redactor, Clock.systemUTC(),
                 distillEnabled(config.home().resolve("config.toml")), remembered);
-        this.defense = new zordon.core.defense.DefenseService(memory, notifications, bus, redactor, Clock.systemUTC(),
+    }
+
+    /** Detecção, integridade e os servidores MCP que ela vigia (SPEC-020, SPEC-026). */
+    private void wireDefense(ZordonConfig config, Map<String, String> environment) {
+        this.defense = new zordon.core.defense.DefenseService(database.findings(), notifications, bus, redactor, Clock.systemUTC(),
                 System::nanoTime);
         this.integrity = zordon.core.defense.IntegrityWatch.of(config.home(), defense::integrityChanged);
         this.breakers = new zordon.defense.CircuitBreakers(Clock.systemUTC());
@@ -272,17 +319,21 @@ public final class ZordonCore implements AutoCloseable {
                         defense.mcpDrift(String.valueOf(alert.get("server")), String.valueOf(alert.get("detail")));
                     }
                 });
+    }
+
+    /** Agentes, planos, conhecimento e preflight (SPEC-022, SPEC-023, SPEC-028, SPEC-029). */
+    private void wireAgentsAndTasks(ZordonConfig config, Map<String, String> environment) {
         zordon.core.agents.TurnScopes scopes = new zordon.core.agents.TurnScopes();
-        zordon.core.tools.ModelToolCaller modelTools = new zordon.core.tools.ModelToolCaller(tools, scopes);
+        this.modelTools = new zordon.core.tools.ModelToolCaller(tools, scopes);
         this.agents = new zordon.core.agents.AgentRegistry(config.home().resolve("agents"));
-        zordon.core.agents.AgentRunner agentRunner = new zordon.core.agents.AgentRunner(providers, prompts, modelTools,
+        this.agentRunner = new zordon.core.agents.AgentRunner(providers, prompts, modelTools,
                 bus).onSuspended(this::agentSuspended);
         tools.register(new zordon.core.agents.DelegateTool(agents, scopes, agentRunner, System::nanoTime))
                 .register(zordon.core.tools.ProcessTools.dockerPs(userHome, runner))
                 .register(zordon.core.tools.ProcessTools.dockerLogs(userHome, runner));
         this.agentRuns = new zordon.core.agents.AgentService(agents, agentRunner, System::nanoTime);
         zordon.core.tools.SkillRuntime toolsForChecks = tools;
-        this.tasks = new zordon.core.tasks.TaskRunner(memory,
+        this.tasks = new zordon.core.tasks.TaskRunner(database.tasks(),
                 new zordon.core.tasks.Planner(providers, agents, () -> toolsForChecks.list().stream()
                         .filter(row -> "green".equals(row.get("risk")))
                         .map(row -> String.valueOf(row.get("name")))
@@ -290,15 +341,19 @@ public final class ZordonCore implements AutoCloseable {
                         .collect(java.util.stream.Collectors.toSet())),
                 new zordon.core.tasks.Verifier(providers, tools), agents, agentRunner, bus, System::nanoTime);
         tools.register(zordon.core.tasks.TaskTools.create(tasks));
-        this.knowledge = new zordon.core.rag.KnowledgeBase(memory, zordon.core.rag.KnowledgeBase.defaultRoots(
+        this.knowledge = new zordon.core.rag.KnowledgeBase(database.knowledge(), zordon.core.rag.KnowledgeBase.defaultRoots(
                 config.home().resolve("config.toml"), repoRoot(environment)));
         tools.register(zordon.core.rag.RagTools.search(knowledge));
-        this.preflight = new zordon.core.change.Preflight(memory, knowledge, agents, notifications);
-        this.usage = new zordon.core.usage.UsageTracker(memory, bus, Clock.systemDefaultZone());
+        this.preflight = new zordon.core.change.Preflight(database.tasks(), knowledge, agents, notifications);
+        this.usage = new zordon.core.usage.UsageTracker(database.usage(), bus, Clock.systemDefaultZone());
         tools.register(zordon.core.change.ChangeTools.plan(preflight));
+    }
+
+    /** Resposta da defesa, monitor e automações (SPEC-024, SPEC-025, SPEC-027). */
+    private void wireAutomation(ZordonConfig config, Map<String, String> environment) {
         java.util.concurrent.atomic.AtomicReference<zordon.core.automation.AutomationEngine> automationRef =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        this.response = new zordon.core.defense.DefenseEngine(breakers, memory, notifications, bus,
+        this.response = new zordon.core.defense.DefenseEngine(breakers, database.securityEvents(), notifications, bus,
                 new zordon.core.defense.DefenseEngine.Actions() {
                     @Override
                     public boolean isolateMcp(String server) {
@@ -320,10 +375,10 @@ public final class ZordonCore implements AutoCloseable {
                 automationRef.get() != null && automationRef.get().hasConditions());
         zordon.core.automation.AutomationNotifier automationNotifier = new zordon.core.automation.AutomationNotifier(
                 notifications, windows::notify, Clock.systemDefaultZone());
-        zordon.core.automation.WorkflowEngine workflow = new zordon.core.automation.WorkflowEngine(memory, tools,
+        zordon.core.automation.WorkflowEngine workflow = new zordon.core.automation.WorkflowEngine(database.tasks(), database.automations(), tools,
                 agents, agentRunner, automationNotifier, bus, Clock.systemDefaultZone(), System::nanoTime);
-        this.automations = new zordon.core.automation.AutomationEngine(config.home().resolve("automations"), memory,
-                memory, tools, agents, workflow, automationNotifier, bus, lockdown::active, sampler::latest,
+        this.automations = new zordon.core.automation.AutomationEngine(config.home().resolve("automations"), database.automations(),
+                database.tasks(), tools, agents, workflow, automationNotifier, bus, lockdown::active, sampler::latest,
                 Clock.systemDefaultZone(), System::nanoTime);
         automationRef.set(automations);
         tools.register(zordon.core.automation.AutomationTools.propose(automations));
@@ -332,6 +387,10 @@ public final class ZordonCore implements AutoCloseable {
                         payload -> bus.publish(EventType.CONTAINER_EVENT, payload),
                         zordon.core.monitor.DockerEvents.defaultBackoff())
                 : null;
+    }
+
+    /** O que o turno chama de volta: só depois que todo o resto existe. */
+    private void wireTurnCallbacks() {
         turns.onAgents(agents);
         turns.onSuspended(this::agentSuspended);
         router.knowAgents(id -> agents.find(id).isPresent());
@@ -455,6 +514,16 @@ public final class ZordonCore implements AutoCloseable {
     }
 
     public void start() throws InterruptedException {
+        registerMethods();
+        startSubsystems();
+        listenAndAnnounce();
+        startBackground();
+    }
+
+    /** Os métodos que o protocolo expõe. Nada aqui bloqueia. */
+    private void registerMethods() {
+        zordon.core.zwp.MonitorMethods monitor =
+                new zordon.core.zwp.MonitorMethods(sampler, dockerEvents);
         new SessionMethods(bus, version(), startedAt, CAPABILITIES).registerOn(server);
         new ChatMethods(turns, conversations).registerOn(server);
         new SystemMethods(version(), startedAt, bus, turns, providers, server::connectedClients, voice::status,
@@ -464,9 +533,7 @@ public final class ZordonCore implements AutoCloseable {
                                 "programs", securitySettings.catalog().keySet().stream().sorted().toList()))
                 .with("rag", knowledge::status)
                 .with("usage", () -> usage.summary(7))
-                .with("monitor", () -> Map.of("sampler", Map.of("rateHz", sampler.rateHz()),
-                        "docker", dockerEvents == null ? Map.of("state", "unavailable", "reason",
-                                "docker fora do catálogo de programas") : dockerEvents.status()))
+                .with("monitor", monitor::status)
                 .with("automation", automations::diagnostics)
                 .with("defense", () -> {
                     Map<String, Object> out = new java.util.LinkedHashMap<>(defense.diagnostics());
@@ -477,7 +544,7 @@ public final class ZordonCore implements AutoCloseable {
                 })
                 .with("memory", () -> {
                     Map<String, Object> stats = new java.util.LinkedHashMap<>(memory.stats());
-                    stats.put("tasks", memory.taskStats());
+                    stats.put("tasks", database.tasks().taskStats());
                     return stats;
                 })
                 .registerOn(server);
@@ -486,79 +553,16 @@ public final class ZordonCore implements AutoCloseable {
         new zordon.core.zwp.McpMethods(mcp).registerOn(server);
         new zordon.core.zwp.MemoryMethods(memory).registerOn(server);
         new zordon.core.zwp.AgentMethods(agents, agentRuns).registerOn(server);
-        server.register("system.metrics", (session, params) -> {
-            sampler.demand();
-            return sampler.latest().wire(sampler.rateHz());
-        }).register("monitor.status", (session, params) -> Map.of("sampler", Map.of("rateHz", sampler.rateHz()),
-                "docker", dockerEvents == null ? Map.of("state", "unavailable", "reason",
-                        "docker fora do catálogo de programas") : dockerEvents.status()));
-        new zordon.core.zwp.TaskMethods(memory, tasks).automations(automations).registerOn(server);
+        monitor.registerOn(server);
+        new zordon.core.zwp.TaskMethods(database.tasks(), tasks).automations(automations).registerOn(server);
         new zordon.core.zwp.AutomationMethods(automations).registerOn(server);
-        server.register("usage.summary", (session, params) -> usage.summary(
-                params.get("days") instanceof Number days ? days.intValue() : 7))
-                .register("change.plan", (session, params) -> {
-                    if (!(params.get("goal") instanceof String goal) || goal.isBlank()) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_INVALID_ARGUMENT,
-                                "goal é obrigatório");
-                    }
-                    return zordon.core.change.Preflight.wire(preflight.plan(goal));
-                });
-        server.register("rag.status", (session, params) -> knowledge.status())
-                .register("rag.search", (session, params) -> {
-                    if (!(params.get("query") instanceof String query) || query.isBlank()) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_INVALID_ARGUMENT,
-                                "query é obrigatório");
-                    }
-                    return Map.of("hits", knowledge.search(query,
-                            params.get("limit") instanceof Number limit ? limit.intValue() : 8).stream()
-                            .map(hit -> Map.of("path", hit.path(), "heading", hit.heading(), "text", hit.text(),
-                                    "score", hit.score())).toList());
-                })
-                .register("rag.reindex", (session, params) -> {
-                    if (!session.is(zordon.api.zwp.ClientKind.DESKTOP)) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_PERMISSION_DENIED,
-                                "só a janela do Zordon reindexa");
-                    }
-                    zordon.core.rag.KnowledgeBase.Indexed indexed = knowledge.reindex();
-                    return Map.of("files", indexed.files(), "chunks", indexed.chunks(), "tookMs", indexed.tookMs());
-                });
-        server.register("security.breakers", (session, params) -> Map.of("breakers", response.breakers()))
-                .register("security.events", (session, params) -> Map.of("events", response.events(
-                        params.get("limit") instanceof Number limit ? limit.intValue() : 50)))
-                .register("security.breakerRelease", (session, params) -> {
-                    if (!session.is(zordon.api.zwp.ClientKind.DESKTOP)) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_PERMISSION_DENIED,
-                                "só a janela do Zordon libera um disjuntor");
-                    }
-                    if (!(params.get("subject") instanceof String subject) || subject.isBlank()) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_INVALID_ARGUMENT,
-                                "subject é obrigatório");
-                    }
-                    String mode = params.get("mode") instanceof String given ? given : "supervised";
-                    String state = response.release(subject, mode).orElseThrow(() ->
-                            new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_NOT_FOUND,
-                                    "não há disjuntor aberto para " + subject));
-                    if (subject.startsWith("mcp:")) {
-                        mcp.release(subject.substring("mcp:".length()));
-                    }
-                    return Map.of("state", state);
-                });
-        server.register("security.findings", (session, params) -> Map.of("findings", defense.findings(
-                params.get("since") instanceof String since ? Instant.parse(since) : null,
-                params.get("severities") instanceof List<?> severities
-                        ? severities.stream().map(String::valueOf).toList() : List.of(),
-                params.get("limit") instanceof Number limit ? limit.intValue() : 50)))
-                .register("security.findingAcknowledge", (session, params) -> {
-                    if (!session.is(zordon.api.zwp.ClientKind.DESKTOP)) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_PERMISSION_DENIED,
-                                "só a janela do Zordon confirma um achado");
-                    }
-                    if (!(params.get("findingId") instanceof String findingId) || findingId.isBlank()) {
-                        throw new zordon.core.zwp.ZwpMethodException(zordon.api.zwp.ZwpErrorKind.ERR_INVALID_ARGUMENT,
-                                "findingId é obrigatório");
-                    }
-                    return Map.of("acknowledged", defense.acknowledge(findingId));
-                });
+        new zordon.core.zwp.UsageMethods(usage, preflight).registerOn(server);
+        new zordon.core.zwp.RagMethods(knowledge).registerOn(server);
+        new zordon.core.zwp.DefenseMethods(response, defense, mcp).registerOn(server);
+    }
+
+    /** Auditoria conferida, trace, narrador e voz de pé — antes de aceitar conexão. */
+    private void startSubsystems() {
         verifyAudit();
         trace.start(bus);
         activity.start();
@@ -576,6 +580,10 @@ public final class ZordonCore implements AutoCloseable {
         speech.start();
         new VoiceMethods(voice).registerOn(server);
         forwardEventsToClients();
+    }
+
+    /** Escuta, publica o endpoint e só então se declara pronto ao systemd. */
+    private void listenAndAnnounce() throws InterruptedException {
 
         server.start();
         if (!server.awaitListening(LISTEN_TIMEOUT)) {
@@ -592,6 +600,10 @@ public final class ZordonCore implements AutoCloseable {
         systemd.ready();
 
         // Os servidores MCP conectam em segundo plano: o núcleo já está pronto (SPEC-020 CA-1).
+    }
+
+    /** O que sobe depois de pronto: MCP, destilação, monitor e as tarefas interrompidas. */
+    private void startBackground() {
         mcp.start();
         distiller.start();
         sampler.start();
@@ -658,7 +670,7 @@ public final class ZordonCore implements AutoCloseable {
         bus.close();
         audit.close();
         notifications.close();
-        memory.close();
+        database.close();
         // O endpoint.json fica onde está: o Zordon não apaga arquivos (ADR-0015).
         // O cliente descobre que o núcleo saiu pela conexão, não pela ausência do
         // arquivo, e o token deste boot deixa de valer no próximo.

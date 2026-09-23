@@ -157,6 +157,34 @@ public final class ClaudeCliProvider implements AiProvider {
         }
     }
 
+    /** A saída do CLI como JSON. O que não é JSON é falha do programa, não resposta. */
+    private JsonNode parse(CliRunner.Result result) {
+        JsonNode out;
+        try {
+            out = json.readTree(result.stdout().strip());
+        } catch (Exception e) {
+            out = null;
+        }
+        if (out == null || !out.isObject()) {
+            String detail = result.stderr().lines().limit(3).reduce((a, b) -> a + " " + b).orElse("sem detalhes");
+            throw new AiException(AiException.Kind.UNAVAILABLE,
+                    "saída do claude não é JSON (código " + result.exitCode() + "): " + detail);
+        }
+        return out;
+    }
+
+    /** O CLI respondeu, mas recusando: cota, credencial ou outra coisa. */
+    private static void refuseIfError(JsonNode out, String text) {
+        if (!out.path("is_error").asBoolean(false) && "success".equals(out.path("subtype").asText("success"))) {
+            return;
+        }
+        String message = text.isBlank() ? out.path("subtype").asText("erro") : text;
+        String lower = message.toLowerCase(java.util.Locale.ROOT);
+        AiException.Kind kind = lower.contains("limit") ? AiException.Kind.QUOTA_EXHAUSTED
+                : lower.contains("log") ? AiException.Kind.NO_CREDENTIALS : AiException.Kind.UNAVAILABLE;
+        throw new AiException(kind, "o claude recusou: " + message);
+    }
+
     @Override
     public AiResponse chat(AiRequest request) {
         List<String> argv = argv(request);
@@ -175,26 +203,9 @@ public final class ClaudeCliProvider implements AiProvider {
         if (result.timedOut()) {
             throw new AiException(AiException.Kind.TIMEOUT, "o claude não respondeu em " + TIMEOUT.toSeconds() + " s");
         }
-        JsonNode out;
-        try {
-            out = json.readTree(result.stdout().strip());
-        } catch (Exception e) {
-            out = null;
-        }
-        if (out == null || !out.isObject()) {
-            String detail = result.stderr().lines().limit(3).reduce((a, b) -> a + " " + b).orElse("sem detalhes");
-            throw new AiException(result.exitCode() == 127 ? AiException.Kind.UNAVAILABLE : AiException.Kind.UNAVAILABLE,
-                    "saída do claude não é JSON (código " + result.exitCode() + "): " + detail);
-        }
+        JsonNode out = parse(result);
         String text = out.path("result").asText("");
-        if (out.path("is_error").asBoolean(false) || !"success".equals(out.path("subtype").asText("success"))) {
-            String message = text.isBlank() ? out.path("subtype").asText("erro") : text;
-            AiException.Kind kind = message.toLowerCase(java.util.Locale.ROOT).contains("limit")
-                    ? AiException.Kind.QUOTA_EXHAUSTED
-                    : message.toLowerCase(java.util.Locale.ROOT).contains("log")
-                            ? AiException.Kind.NO_CREDENTIALS : AiException.Kind.UNAVAILABLE;
-            throw new AiException(kind, "o claude recusou: " + message);
-        }
+        refuseIfError(out, text);
         JsonNode usage = out.path("usage");
         TokenUsage tokens = new TokenUsage(usage.path("input_tokens").asLong(0), usage.path("output_tokens").asLong(0),
                 usage.path("cache_creation_input_tokens").asLong(0), usage.path("cache_read_input_tokens").asLong(0));

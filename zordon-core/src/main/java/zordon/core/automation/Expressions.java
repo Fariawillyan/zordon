@@ -68,28 +68,38 @@ public final class Expressions {
         }
         String op = matcher.group("op");
         if (op == null) {
-            return left != null && !"false".equals(String.valueOf(left)) && !"0".equals(String.valueOf(left))
-                    && !String.valueOf(left).isEmpty();
+            return truthy(String.valueOf(left));
         }
-        String right = unquote(matcher.group("value").strip());
-        String leftText = left == null ? "" : String.valueOf(left);
+        return compare(String.valueOf(left), op, unquote(matcher.group("value").strip()));
+    }
+
+    /** Sem operador, a condição é a presença de um valor que não seja "vazio". */
+    private static boolean truthy(String value) {
+        return !"false".equals(value) && !"0".equals(value) && !value.isEmpty();
+    }
+
+    /** Ordem só vale entre números; entre textos, apenas igualdade. */
+    private static boolean compare(String leftText, String op, String right) {
         Double leftNumber = number(leftText);
         Double rightNumber = number(right);
         if (leftNumber != null && rightNumber != null) {
-            int compared = Double.compare(leftNumber, rightNumber);
-            return switch (op) {
-                case "==" -> compared == 0;
-                case "!=" -> compared != 0;
-                case ">" -> compared > 0;
-                case "<" -> compared < 0;
-                case ">=" -> compared >= 0;
-                default -> compared <= 0;
-            };
+            return compareNumbers(Double.compare(leftNumber, rightNumber), op);
         }
         return switch (op) {
             case "==" -> leftText.equals(right);
             case "!=" -> !leftText.equals(right);
-            default -> false;   // ordem só entre números
+            default -> false;
+        };
+    }
+
+    private static boolean compareNumbers(int compared, String op) {
+        return switch (op) {
+            case "==" -> compared == 0;
+            case "!=" -> compared != 0;
+            case ">" -> compared > 0;
+            case "<" -> compared < 0;
+            case ">=" -> compared >= 0;
+            default -> compared <= 0;
         };
     }
 

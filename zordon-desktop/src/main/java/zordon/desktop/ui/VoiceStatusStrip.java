@@ -67,7 +67,13 @@ final class VoiceStatusStrip extends HBox {
     private void render() {
         VoiceStatus voice = state.voiceProperty().get();
         boolean online = state.connectionProperty().get() == CoreConnection.State.ONLINE;
+        renderMicrophone(voice);
+        renderSpeech(voice);
+        renderModel(online);
+        set(memory, online ? "Ativa" : "Sem núcleo", online ? OK : OFF);
+    }
 
+    private void renderMicrophone(VoiceStatus voice) {
         if (voice == null || !voice.hostConnected()) {
             set(microphone, "Não conectado", OFF);
         } else if ("on".equals(voice.capture())) {
@@ -75,7 +81,9 @@ final class VoiceStatusStrip extends HBox {
         } else {
             set(microphone, "Desligado", WARN);
         }
+    }
 
+    private void renderSpeech(VoiceStatus voice) {
         if (voice == null) {
             set(speech, "Sem resposta", OFF);
         } else if ("ready".equals(voice.engine())) {
@@ -84,7 +92,9 @@ final class VoiceStatusStrip extends HBox {
             set(speech, voice.engineReason() == null || voice.engineReason().isBlank()
                     ? "Não instalado" : voice.engineReason(), WARN);
         }
+    }
 
+    private void renderModel(boolean online) {
         Diagnostics diagnostics = state.diagnosticsProperty().get();
         var conversation = diagnostics == null ? null : diagnostics.roles().get("conversation");
         if (conversation == null) {
@@ -94,8 +104,6 @@ final class VoiceStatusStrip extends HBox {
         } else {
             set(model, conversation.provider() + " indisponível", WARN);
         }
-
-        set(memory, online ? "Ativa" : "Sem núcleo", online ? OK : OFF);
     }
 
     private static VBox card(String title) {

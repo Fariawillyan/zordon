@@ -107,32 +107,45 @@ public final class PathPolicy {
      * @param base de onde um caminho relativo parte
      */
     public ZPath canonical(String raw, ZPath base) throws IOException {
-        String text = raw.strip();
-        ZPath absolute;
-        if (text.matches("^[A-Za-z]:[\\\\/].*")) {
-            absolute = ZPath.ofWindows(text);
-        } else if (text.equals("~") || text.startsWith("~/")) {
-            absolute = ZPath.ofWsl(home + text.substring(1));
-        } else if (text.startsWith("/")) {
-            absolute = ZPath.ofWsl(text);
-        } else {
-            Objects.requireNonNull(base, "caminho relativo sem diretório de partida: " + raw);
-            absolute = base.origin() == ZPath.Origin.WINDOWS
-                    ? ZPath.ofWindows(base.canonical() + "/" + text)
-                    : ZPath.ofWsl(base.canonical() + "/" + text);
-        }
-        Path wsl = Path.of(absolute.toWsl()).normalize();
-        Path existing = wsl;
-        while (existing != null && !Files.exists(existing)) {
-            existing = existing.getParent();
-        }
-        Path resolved = existing == null ? wsl : existing.toRealPath().resolve(existing.relativize(wsl)).normalize();
+        ZPath absolute = absolute(raw.strip(), base, raw);
+        Path resolved = realPath(Path.of(absolute.toWsl()).normalize());
         String out = resolved.toString();
         if (absolute.origin() == ZPath.Origin.WINDOWS && out.matches("/mnt/[a-z](/.*)?")) {
             String rest = out.length() > 6 ? out.substring(6) : "/";
             return ZPath.ofWindows(Character.toUpperCase(out.charAt(5)) + ":" + rest);
         }
         return ZPath.ofWsl(out);
+    }
+
+    /** De onde o texto parte: unidade do Windows, {@code ~}, raiz do WSL, ou relativo à base. */
+    private ZPath absolute(String text, ZPath base, String raw) {
+        if (text.matches("^[A-Za-z]:[\\\\/].*")) {
+            return ZPath.ofWindows(text);
+        }
+        if (text.equals("~") || text.startsWith("~/")) {
+            return ZPath.ofWsl(home + text.substring(1));
+        }
+        if (text.startsWith("/")) {
+            return ZPath.ofWsl(text);
+        }
+        Objects.requireNonNull(base, "caminho relativo sem diretório de partida: " + raw);
+        return base.origin() == ZPath.Origin.WINDOWS
+                ? ZPath.ofWindows(base.canonical() + "/" + text)
+                : ZPath.ofWsl(base.canonical() + "/" + text);
+    }
+
+    /**
+     * Resolve links no trecho que já existe e recoloca o resto por cima.
+     *
+     * <p>Um caminho que ainda não existe não tem {@code toRealPath}; resolver só o
+     * que existe é o que impede um link simbólico de escapar da política.
+     */
+    private static Path realPath(Path wsl) throws IOException {
+        Path existing = wsl;
+        while (existing != null && !Files.exists(existing)) {
+            existing = existing.getParent();
+        }
+        return existing == null ? wsl : existing.toRealPath().resolve(existing.relativize(wsl)).normalize();
     }
 
     private record Rule(String prefix, PathMatcher glob) {

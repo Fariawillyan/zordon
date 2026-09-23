@@ -297,6 +297,18 @@ public final class AutomationEngine implements AutoCloseable {
         }
     }
 
+    /** Disparo único ou falhas demais desativam a automação. {@code true} para o laço. */
+    private boolean disableIfDone(AutomationSpec spec, boolean ok) {
+        int failures = states.automationFinished(spec.id(), ok);
+        if (!spec.once() && failures < Math.min(20, spec.limits().maxFailures())) {
+            return false;
+        }
+        String reason = spec.once() ? "disparo único concluído" : failures + " falhas seguidas";
+        states.automationDisabled(spec.id(), true, reason);
+        notifier.notify(spec, "Automação desativada", reason, "warning");
+        return true;
+    }
+
     private Optional<String> launch(AutomationSpec spec, List<Map<String, Object>> events, String resumedTask) {
         if (closed || !enabled(spec) || lockdown.getAsBoolean() || active.containsKey(spec.id())) {
             log.info("automação {}: disparo pulado (desativada, lockdown ou execução em curso)", spec.id());
@@ -324,11 +336,7 @@ public final class AutomationEngine implements AutoCloseable {
                     if (Thread.currentThread().isInterrupted()) {
                         break;
                     }
-                    int failures = states.automationFinished(spec.id(), outcome.ok());
-                    if (spec.once() || failures >= Math.min(20, spec.limits().maxFailures())) {
-                        String reason = spec.once() ? "disparo único concluído" : failures + " falhas seguidas";
-                        states.automationDisabled(spec.id(), true, reason);
-                        notifier.notify(spec, "Automação desativada", reason, "warning");
+                    if (disableIfDone(spec, outcome.ok())) {
                         break;
                     }
                 }

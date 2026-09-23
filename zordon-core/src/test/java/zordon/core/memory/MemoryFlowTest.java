@@ -61,6 +61,7 @@ import zordon.memory.Fact;
 import zordon.memory.FactKind;
 import zordon.memory.NewFact;
 import zordon.memory.SqliteMemoryStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
 import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
@@ -87,6 +88,7 @@ class MemoryFlowTest {
     private final Manual clock = new Manual();
     private final List<EventEnvelope> events = new CopyOnWriteArrayList<>();
     private final List<Fact> written = new CopyOnWriteArrayList<>();
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private SqliteAuditLog audit;
     private ZordonEventBus bus;
@@ -95,7 +97,8 @@ class MemoryFlowTest {
 
     @BeforeEach
     void setUp() {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), clock);
+        db = new ZordonDatabase(home.resolve("zordon.db"), clock);
+        store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.CHAT), QueuePolicy.dropOldest(256), events::add);
@@ -117,7 +120,7 @@ class MemoryFlowTest {
 
     @AfterEach
     void tearDown() {
-        store.close();
+        db.close();
         audit.close();
         bus.close();
     }
