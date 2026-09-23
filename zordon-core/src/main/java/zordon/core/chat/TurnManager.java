@@ -86,6 +86,10 @@ public final class TurnManager {
     /** De quem a reserva assumiu, e por quê. A reserva nunca é silenciosa. */
     private record Fallback(String fromProvider, String reason) {}
 
+    /** O turno em curso: quem pediu, para quem foi, e com que reserva. */
+    private record Exchange(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle,
+            Selection selection, Fallback fallback) {}
+
     /**
      * Um turno em andamento, cancelável antes mesmo de o stream existir.
      *
@@ -362,7 +366,7 @@ public final class TurnManager {
         ToolCaller toolCaller = caller;
         List<zordon.ai.ToolSpec> offered = toolCaller == null || messages.isEmpty() ? List.of()
                 : handle.scope == null ? toolCaller.offer(userText) : toolCaller.offer(userText, handle.scope);
-        step(session, turn, intent, handle, selection, fallback, messages, offered);
+        step(new Exchange(session, turn, intent, handle, selection, fallback), messages, offered);
     }
 
     /**
@@ -390,143 +394,174 @@ public final class TurnManager {
     }
 
     /** Uma volta ao modelo. Se ele pedir ferramentas, elas rodam e vem outra volta (SPEC-019). */
-    private void step(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle, Selection selection,
-            Fallback fallback, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered) {
-        AiRequest request = AiRequest.builder(selection.choice().model())
-                .systemPrompt(handle.scope == null ? prompts.systemPrompt()
-                        : prompts.systemPrompt() + "\n\n" + handle.scope.agent().prompt())
+    private void step(Exchange ex, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered) {
+        AiRequest request = AiRequest.builder(ex.selection().choice().model())
+                .systemPrompt(ex.handle().scope == null ? prompts.systemPrompt()
+                        : prompts.systemPrompt() + "\n\n" + ex.handle().scope.agent().prompt())
                 .tools(offered)
                 .messages(messages)
-                .effort(selection.choice().effortIfAny().orElse(null))
+                .effort(ex.selection().choice().effortIfAny().orElse(null))
                 .maxOutputTokens(MAX_OUTPUT_TOKENS)
                 .timeout(Duration.ofMinutes(5))
                 .build();
 
-        TurnListener listener = new TurnListener(turn);
-        AiStream stream = selection.provider().stream(request, listener);
-        handle.attach(stream);
+        TurnListener listener = new TurnListener(bus, ex.turn());
+        AiStream stream = ex.selection().provider().stream(request, listener);
+        ex.handle().attach(stream);
         stream.result().whenComplete((response, failure) -> {
             if (failure == null) {
-                ToolCaller toolCaller = caller;
-                zordon.core.agents.TurnScope scope = handle.scope;
-                if (scope != null) {
-                    scope.meter().tokens(response.usage().inputTokens() + response.usage().outputTokens());
-                }
-                String exceeded = scope == null ? null : scope.meter().exceeded();
-                if (exceeded != null && response.stopReason() == StopReason.TOOL_USE) {
-                    stopAtLimit(session, turn, handle, response, selection, fallback,
-                            zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), exceeded));
-                    return;
-                }
-                if (response.stopReason() == StopReason.TOOL_USE && !response.toolCalls().isEmpty()
-                        && toolCaller != null && !handle.isCancelled()) {
-                    useTools(session, turn, intent, handle, selection, fallback, messages, offered, response, toolCaller);
-                    return;
-                }
-                running.remove(turn);
-                boolean tainted = tainted(turn);
-                endTools(turn);
-                completeTurn(session, turn, response, selection, fallback, tainted);
-                return;
+                answered(ex, messages, offered, response);
+            } else {
+                failed(ex, listener, failure);
             }
-            // Único lugar em que a falha do turno vira evento: publicá-la também
-            // no listener dava dois erros na tela para uma causa só.
-            AiException cause = asAiException(failure);
-            Optional<Selection> reserve = fallback == null
-                            && !listener.producedText()
-                            && !handle.isCancelled()
-                            && FALLBACK_ELIGIBLE.contains(cause.kind())
-                    ? reserveFor(selection)
-                    : Optional.empty();
-            if (reserve.isPresent()) {
-                attempt(session, turn, intent, handle, reserve.get(),
-                        new Fallback(selection.providerId(), cause.getMessage()));
-                return;
-            }
-            running.remove(turn);
-            String message = fallback == null
-                    ? cause.getMessage()
-                    : cause.getMessage() + " (a reserva entrou porque: " + fallback.reason() + ")";
-            publishError(turn, cause.kind(), message, cause.isRetryable());
         });
+    }
+
+    /** O modelo respondeu: ou o teto parou, ou vêm ferramentas, ou o turno acaba. */
+    private void answered(Exchange ex, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered,
+            AiResponse response) {
+        ToolCaller toolCaller = caller;
+        zordon.core.agents.TurnScope scope = ex.handle().scope;
+        if (scope != null) {
+            scope.meter().tokens(response.usage().inputTokens() + response.usage().outputTokens());
+        }
+        String exceeded = scope == null ? null : scope.meter().exceeded();
+        if (exceeded != null && response.stopReason() == StopReason.TOOL_USE) {
+            stopAtLimit(ex, response, zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), exceeded));
+            return;
+        }
+        if (response.stopReason() == StopReason.TOOL_USE && !response.toolCalls().isEmpty()
+                && toolCaller != null && !ex.handle().isCancelled()) {
+            useTools(ex, messages, offered, response, toolCaller);
+            return;
+        }
+        running.remove(ex.turn());
+        boolean tainted = tainted(ex.turn());
+        endTools(ex.turn());
+        completeTurn(ex.session(), ex.turn(), response, ex.selection(), ex.fallback(), tainted);
+    }
+
+    /**
+     * O turno falhou.
+     *
+     * <p>Único lugar em que a falha vira evento: publicá-la também no listener
+     * dava dois erros na tela para uma causa só.
+     */
+    private void failed(Exchange ex, TurnListener listener, Throwable failure) {
+        AiException cause = asAiException(failure);
+        Optional<Selection> reserve = ex.fallback() == null
+                        && !listener.producedText()
+                        && !ex.handle().isCancelled()
+                        && FALLBACK_ELIGIBLE.contains(cause.kind())
+                ? reserveFor(ex.selection())
+                : Optional.empty();
+        if (reserve.isPresent()) {
+            attempt(ex.session(), ex.turn(), ex.intent(), ex.handle(), reserve.get(),
+                    new Fallback(ex.selection().providerId(), cause.getMessage()));
+            return;
+        }
+        running.remove(ex.turn());
+        String message = ex.fallback() == null
+                ? cause.getMessage()
+                : cause.getMessage() + " (a reserva entrou porque: " + ex.fallback().reason() + ")";
+        publishError(ex.turn(), cause.kind(), message, cause.isRetryable());
     }
 
     /**
      * Roda os pedidos de ferramenta do modelo, um de cada vez, e volta ao modelo
      * com os resultados. Tetos: 25 chamadas e 15 voltas por turno (SPEC-019 CA-3).
      */
-    private void useTools(SessionId session, TurnId turn, Intent.Model intent, RunningTurn handle, Selection selection,
-            Fallback fallback, List<zordon.ai.AiMessage> messages, List<zordon.ai.ToolSpec> offered,
-            AiResponse response, ToolCaller toolCaller) {
+    private void useTools(Exchange ex, List<zordon.ai.AiMessage> messages,
+            List<zordon.ai.ToolSpec> offered, AiResponse response, ToolCaller toolCaller) {
         List<zordon.ai.ContentBlock.ToolUse> calls = response.toolCalls();
-        zordon.core.agents.TurnScope scope = handle.scope;
-        if (scope != null) {
-            String over = scope.meter().calls(calls.size());
-            if (over == null) {
-                over = scope.meter().step();   // a volta que vem depois das ferramentas
-            }
-            if (over != null) {
-                stopAtLimit(session, turn, handle, response, selection, fallback,
-                        zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), over));
-                return;
-            }
-        } else if (handle.toolCalls + calls.size() > MAX_TOOL_CALLS || handle.steps + 1 > MAX_STEPS) {
-            stopAtLimit(session, turn, handle, response, selection, fallback, TOOL_LIMIT_NOTICE);
+        zordon.core.agents.TurnScope scope = ex.handle().scope;
+        if (overToolLimit(ex, response, scope, calls.size())) {
             return;
         }
-        handle.toolCalls += calls.size();
-        handle.steps++;
-        Thread.ofVirtual().name("zordon-tools-" + turn.value()).start(() -> {
-            List<zordon.ai.ContentBlock> results = new java.util.ArrayList<>();
-            for (zordon.ai.ContentBlock.ToolUse call : calls) {
-                if (handle.isCancelled()) {
-                    break;
-                }
-                zordon.ai.ContentBlock.ToolResult result;
-                try {
-                    result = (scope == null ? toolCaller.call(call, handle.source, turn.value())
-                            : toolCaller.call(call, handle.source, turn.value(), scope))
-                            .get(PermissionTimeout.SECONDS, java.util.concurrent.TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    result = new zordon.ai.ContentBlock.ToolResult(call.callId(),
-                            "a ferramenta falhou: " + e.getMessage(), true);
-                }
-                results.add(result);
-                if (scope != null && scope.guard().tripped() != null) {
-                    break;
-                }
-            }
-            if (scope != null && scope.guard().tripped() != null && !handle.isCancelled()) {
-                String reason = scope.guard().tripped();
-                log.warn("turno {}: execução do agente {} suspensa — {}", turn.value(), scope.agent().id(), reason);
-                suspended.accept(scope.agent(), reason);
-                stopAtLimit(session, turn, handle, response, selection, fallback, "Parei: a execução do agente "
-                        + scope.agent().id() + " foi suspensa (" + reason + "). Nada mais será feito até você decidir.");
+        ex.handle().toolCalls += calls.size();
+        ex.handle().steps++;
+        Thread.ofVirtual().name("zordon-tools-" + ex.turn().value()).start(() -> {
+            List<zordon.ai.ContentBlock> results = runTools(ex, calls, scope, toolCaller);
+            if (scope != null && scope.guard().tripped() != null && !ex.handle().isCancelled()) {
+                suspend(ex, response, scope);
                 return;
             }
-            if (handle.isCancelled()) {
-                running.remove(turn);
-                endTools(turn);
-                publishCancelled(turn);
+            if (ex.handle().isCancelled()) {
+                running.remove(ex.turn());
+                endTools(ex.turn());
+                publishCancelled(ex.turn());
                 return;
             }
             List<zordon.ai.AiMessage> next = new java.util.ArrayList<>(messages);
             next.add(new zordon.ai.AiMessage(zordon.ai.Role.ASSISTANT, response.content()));
             next.add(new zordon.ai.AiMessage(zordon.ai.Role.USER, results));
-            step(session, turn, intent, handle, selection, fallback, next, offered);
+            step(ex, next, offered);
         });
     }
 
+    /** @return {@code true} quando um teto parou o turno e nada mais deve rodar */
+    private boolean overToolLimit(Exchange ex, AiResponse response, zordon.core.agents.TurnScope scope, int calls) {
+        if (scope == null) {
+            if (ex.handle().toolCalls + calls > MAX_TOOL_CALLS || ex.handle().steps + 1 > MAX_STEPS) {
+                stopAtLimit(ex, response, TOOL_LIMIT_NOTICE);
+                return true;
+            }
+            return false;
+        }
+        String over = scope.meter().calls(calls);
+        if (over == null) {
+            over = scope.meter().step();   // a volta que vem depois das ferramentas
+        }
+        if (over == null) {
+            return false;
+        }
+        stopAtLimit(ex, response, zordon.core.agents.AgentRunner.limitNotice(scope.agent().id(), over));
+        return true;
+    }
+
+    /** Uma ferramenta de cada vez. Falha de uma vira resultado de erro, não fim do turno. */
+    private List<zordon.ai.ContentBlock> runTools(Exchange ex, List<zordon.ai.ContentBlock.ToolUse> calls,
+            zordon.core.agents.TurnScope scope, ToolCaller toolCaller) {
+        List<zordon.ai.ContentBlock> results = new java.util.ArrayList<>();
+        for (zordon.ai.ContentBlock.ToolUse call : calls) {
+            if (ex.handle().isCancelled()) {
+                break;
+            }
+            zordon.ai.ContentBlock.ToolResult result;
+            try {
+                result = (scope == null ? toolCaller.call(call, ex.handle().source, ex.turn().value())
+                        : toolCaller.call(call, ex.handle().source, ex.turn().value(), scope))
+                        .get(PermissionTimeout.SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                result = new zordon.ai.ContentBlock.ToolResult(call.callId(),
+                        "a ferramenta falhou: " + e.getMessage(), true);
+            }
+            results.add(result);
+            if (scope != null && scope.guard().tripped() != null) {
+                break;
+            }
+        }
+        return results;
+    }
+
+    /** O disjuntor do agente abriu no meio das ferramentas: para, avisa e explica. */
+    private void suspend(Exchange ex, AiResponse response, zordon.core.agents.TurnScope scope) {
+        String reason = scope.guard().tripped();
+        log.warn("turno {}: execução do agente {} suspensa — {}", ex.turn().value(), scope.agent().id(), reason);
+        suspended.accept(scope.agent(), reason);
+        stopAtLimit(ex, response, "Parei: a execução do agente " + scope.agent().id()
+                + " foi suspensa (" + reason + "). Nada mais será feito até você decidir.");
+    }
+
     /** Termina o turno com o que já havia e o motivo de parar: nunca em silêncio. */
-    private void stopAtLimit(SessionId session, TurnId turn, RunningTurn handle, AiResponse response,
-            Selection selection, Fallback fallback, String notice) {
-        running.remove(turn);
-        boolean tainted = tainted(turn);
-        endTools(turn);
+    private void stopAtLimit(Exchange ex, AiResponse response, String notice) {
+        running.remove(ex.turn());
+        boolean tainted = tainted(ex.turn());
+        endTools(ex.turn());
         String partial = response.text().isBlank() ? notice : response.text() + " " + notice;
-        completeTurn(session, turn, new AiResponse(List.of(new zordon.ai.ContentBlock.Text(partial)),
+        completeTurn(ex.session(), ex.turn(), new AiResponse(List.of(new zordon.ai.ContentBlock.Text(partial)),
                 StopReason.END_TURN, response.usage(), response.cost(), response.model(), response.latency(), null,
-                response.isUsageEstimated()), selection, fallback, tainted);
+                response.isUsageEstimated()), ex.selection(), ex.fallback(), tainted);
     }
 
     private boolean tainted(TurnId turn) {
@@ -659,39 +694,4 @@ public final class TurnManager {
     }
 
     /** Traduz o fluxo do provider em eventos do barramento. */
-    private final class TurnListener implements AiStreamListener {
-
-        private final TurnId turn;
-        private volatile boolean producedText;
-
-        private TurnListener(TurnId turn) {
-            this.turn = turn;
-        }
-
-        /** Depois do primeiro fragmento não há reserva: não dá para emendar dois modelos numa frase. */
-        boolean producedText() {
-            return producedText;
-        }
-
-        @Override
-        public void onTextDelta(String delta) {
-            producedText = true;
-            bus.publish(EventType.AI_RESPONSE, Map.of("turnId", turn.value(), "delta", delta, "done", false));
-        }
-
-        @Override
-        public void onThinking(String summary) {
-            bus.publish(EventType.AI_THINKING, Map.of("turnId", turn.value(), "summary", summary));
-        }
-
-        /**
-         * Só registra. Se a falha encerra o turno, ela chega pelo resultado do
-         * stream; se não encerra (argumento de ferramenta inválido), o turno segue
-         * e não há erro para mostrar ao usuário.
-         */
-        @Override
-        public void onError(AiException e) {
-            log.debug("turno {}: {} — {}", turn.value(), e.kind(), e.getMessage());
-        }
-    }
 }
