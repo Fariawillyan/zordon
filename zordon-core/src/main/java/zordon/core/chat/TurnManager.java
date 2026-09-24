@@ -29,7 +29,6 @@ import zordon.ai.AiException;
 import zordon.ai.AiRequest;
 import zordon.ai.AiResponse;
 import zordon.ai.AiStream;
-import zordon.ai.AiStreamListener;
 import zordon.ai.ModelRole;
 import zordon.ai.StopReason;
 import zordon.ai.registry.ProviderRegistry;

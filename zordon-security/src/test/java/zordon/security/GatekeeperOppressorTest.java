@@ -33,7 +33,6 @@ import zordon.api.security.Effect;
 import zordon.api.security.Principal;
 import zordon.api.security.RequestOrigin;
 import zordon.api.security.RiskLevel;
-import zordon.api.security.ZPath;
 import zordon.api.trace.AcceptanceCriteria;
 
 /** O desvio do OPPRESSOR MODE no caminho único (SPEC-036 §5). */
