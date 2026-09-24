@@ -118,7 +118,8 @@ class TasksTest {
         AgentRunner agents = new AgentRunner(providers, new PromptComposer(),
                 new ModelToolCaller(runtime, new TurnScopes()), bus);
         planner = new Planner(providers, registry, () -> Set.of("docker.ps", "system.metrics", "fs.read"));
-        runner = new TaskRunner(db.tasks(), planner, new Verifier(providers, runtime), registry, agents, bus, nanos::get);
+        runner = new TaskRunner(db.tasks(), planner, new Verifier(providers, runtime),
+                new TaskRunner.Agents(registry, agents), bus, nanos::get);
         runtime.register(TaskTools.create(runner));
     }
 

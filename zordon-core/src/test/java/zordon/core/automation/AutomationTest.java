@@ -101,11 +101,15 @@ class AutomationTest {
         provider = new ToolLoopTestSupport.Scripted();
         runner = new AgentRunner(ProviderRegistry.of(Map.of(ModelPolicy.DEFAULT_PROVIDER, provider), ModelPolicy.defaults()),
                 new PromptComposer(), new ModelToolCaller(runtime), bus);
-        workflow = new WorkflowEngine(db.tasks(), db.automations(), runtime, registry, runner,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, clock, nanos::get);
-        engine = new AutomationEngine(home.resolve("automations"), db.automations(), db.tasks(), runtime, registry, workflow,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, lockdown::get,
-                () -> SystemSampler.Snapshot.EMPTY, clock, nanos::get);
+        workflow = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)), bus, clock, nanos::get);
+        engine = new AutomationEngine(home.resolve("automations"),
+                new AutomationEngine.Stores(db.automations(), db.tasks()),
+                new AutomationEngine.Engines(runtime, registry, workflow,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)),
+                new AutomationEngine.Env(bus, lockdown::get, () -> SystemSampler.Snapshot.EMPTY),
+                clock, nanos::get);
         runtime.register(tool("test.check", RiskLevel.GREEN, () -> new ToolResult("API caiu", Map.of("status", 503))));
     }
 
@@ -201,8 +205,9 @@ class AutomationTest {
         db.close();
         db = new ZordonDatabase(home.resolve("zordon.db"), clock);
         store = db.memory();
-        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(), runtime, registry, runner,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, clock, nanos::get);
+        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)), bus, clock, nanos::get);
         AutomationSpec changed = AutomationSpec.fromMap(raw("api", List.of(notifyStep("new", "Alterada"))));
         assertThat(restarted.resume(changed, task).ok()).isTrue();
         assertThat(calls).hasValue(0);
@@ -280,8 +285,8 @@ class AutomationTest {
         db.close();
         db = new ZordonDatabase(home.resolve("zordon.db"), clock);
         store = db.memory();
-        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(), runtime, registry, runner,
-                (s, t, b, v) -> { }, bus, clock, nanos::get);
+        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner, (s, t, b, v) -> { }), bus, clock, nanos::get);
         AutomationSpec spec = AutomationSpec.fromMap(raw("agent", List.of(Map.of("id", "think", "agent", "zordon", "task", "Explique"))));
         assertThat(restarted.run(spec, Map.of()).ok()).isFalse();
         assertThat(provider.chats).isEmpty();

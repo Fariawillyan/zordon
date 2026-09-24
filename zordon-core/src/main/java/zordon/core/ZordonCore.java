@@ -317,9 +317,10 @@ public final class ZordonCore implements AutoCloseable {
             defense.modelOutput(done.turn().value(), done.answer());
         });
         this.mcp = new zordon.core.mcp.McpManager(
-                zordon.core.mcp.McpManager.load(config.home().resolve("config.toml")), gatekeeper, runner, tools,
-                notifications, config.home().resolve("state"), config.home().resolve("mcp-work"), Clock.systemUTC(),
-                System::nanoTime).onAlert(alert -> {
+                zordon.core.mcp.McpManager.load(config.home().resolve("config.toml")),
+                new zordon.core.mcp.McpManager.Deps(gatekeeper, runner, tools, notifications),
+                new zordon.core.mcp.McpManager.Dirs(config.home().resolve("state"), config.home().resolve("mcp-work")),
+                Clock.systemUTC(), System::nanoTime).onAlert(alert -> {
                     bus.publish(EventType.SYSTEM_ALERT, alert);
                     if ("drift".equals(alert.get("event"))) {
                         defense.mcpDrift(String.valueOf(alert.get("server")), String.valueOf(alert.get("detail")));
@@ -345,7 +346,8 @@ public final class ZordonCore implements AutoCloseable {
                         .map(row -> String.valueOf(row.get("name")))
                         .filter(name -> toolsForChecks.resolveWireName(name).isPresent())
                         .collect(java.util.stream.Collectors.toSet())),
-                new zordon.core.tasks.Verifier(providers, tools), agents, agentRunner, bus, System::nanoTime);
+                new zordon.core.tasks.Verifier(providers, tools),
+                new zordon.core.tasks.TaskRunner.Agents(agents, agentRunner), bus, System::nanoTime);
         tools.register(zordon.core.tasks.TaskTools.create(tasks));
         this.knowledge = new zordon.core.rag.KnowledgeBase(database.knowledge(), zordon.core.rag.KnowledgeBase.defaultRoots(
                 config.home().resolve("config.toml"), repoRoot(environment)));
@@ -381,10 +383,14 @@ public final class ZordonCore implements AutoCloseable {
                 automationRef.get() != null && automationRef.get().hasConditions());
         zordon.core.automation.AutomationNotifier automationNotifier = new zordon.core.automation.AutomationNotifier(
                 notifications, windows::notify, Clock.systemDefaultZone());
-        zordon.core.automation.WorkflowEngine workflow = new zordon.core.automation.WorkflowEngine(database.tasks(), database.automations(), tools,
-                agents, agentRunner, automationNotifier, bus, Clock.systemDefaultZone(), System::nanoTime);
-        this.automations = new zordon.core.automation.AutomationEngine(config.home().resolve("automations"), database.automations(),
-                database.tasks(), tools, agents, workflow, automationNotifier, bus, lockdown::active, sampler::latest,
+        zordon.core.automation.WorkflowEngine workflow = new zordon.core.automation.WorkflowEngine(
+                database.tasks(), database.automations(),
+                new zordon.core.automation.WorkflowEngine.Engines(tools, agents, agentRunner, automationNotifier),
+                bus, Clock.systemDefaultZone(), System::nanoTime);
+        this.automations = new zordon.core.automation.AutomationEngine(config.home().resolve("automations"),
+                new zordon.core.automation.AutomationEngine.Stores(database.automations(), database.tasks()),
+                new zordon.core.automation.AutomationEngine.Engines(tools, agents, workflow, automationNotifier),
+                new zordon.core.automation.AutomationEngine.Env(bus, lockdown::active, sampler::latest),
                 Clock.systemDefaultZone(), System::nanoTime);
         automationRef.set(automations);
         tools.register(zordon.core.automation.AutomationTools.propose(automations));
@@ -532,11 +538,13 @@ public final class ZordonCore implements AutoCloseable {
                 new zordon.core.zwp.MonitorMethods(sampler, dockerEvents);
         new SessionMethods(bus, version(), startedAt, CAPABILITIES).registerOn(server);
         new ChatMethods(turns, conversations).registerOn(server);
-        new SystemMethods(version(), startedAt, bus, turns, providers, server::connectedClients, voice::status,
-                        () -> Map.of("dir", trace.dir().toString(), "file", trace.today().toString(),
-                                "activity", activity.state()),
-                        () -> Map.of("audit", auditState,
-                                "programs", securitySettings.catalog().keySet().stream().sorted().toList()))
+        new SystemMethods(version(), startedAt,
+                        new SystemMethods.Runtime(bus, turns, providers, server::connectedClients),
+                        new SystemMethods.Reports(voice::status,
+                                () -> Map.of("dir", trace.dir().toString(), "file", trace.today().toString(),
+                                        "activity", activity.state()),
+                                () -> Map.of("audit", auditState,
+                                        "programs", securitySettings.catalog().keySet().stream().sorted().toList())))
                 .with("rag", knowledge::status)
                 .with("usage", () -> usage.summary(7))
                 .with("monitor", monitor::status)

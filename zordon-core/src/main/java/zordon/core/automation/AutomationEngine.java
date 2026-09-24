@@ -76,19 +76,27 @@ public final class AutomationEngine implements AutoCloseable {
     private EventSubscription subscription;
     private boolean closed;
 
-    public AutomationEngine(Path directory, AutomationStateStore states, TaskStore tasks, SkillRuntime tools,
-            AgentRegistry agents, WorkflowEngine workflow, WorkflowEngine.Notifier notifier, ZordonEventBus bus,
-            BooleanSupplier lockdown, Supplier<SystemSampler.Snapshot> metrics, Clock clock, LongSupplier nanos) {
+    /** Onde os estados dos gatilhos e as tarefas geradas são gravados. */
+    public record Stores(AutomationStateStore states, TaskStore tasks) {}
+
+    /** O que executa uma automação: ferramentas, agentes, o fluxo e o aviso. */
+    public record Engines(SkillRuntime tools, AgentRegistry agents, WorkflowEngine workflow,
+            WorkflowEngine.Notifier notifier) {}
+
+    /** O ambiente em volta: barramento, trava de lockdown e as métricas do sistema. */
+    public record Env(ZordonEventBus bus, BooleanSupplier lockdown, Supplier<SystemSampler.Snapshot> metrics) {}
+
+    public AutomationEngine(Path directory, Stores stores, Engines engines, Env env, Clock clock, LongSupplier nanos) {
         this.directory = directory;
-        this.states = states;
-        this.tasks = tasks;
-        this.tools = tools;
-        this.agents = agents;
-        this.workflow = workflow;
-        this.notifier = notifier;
-        this.bus = bus;
-        this.lockdown = lockdown;
-        this.metrics = metrics;
+        this.states = stores.states();
+        this.tasks = stores.tasks();
+        this.tools = engines.tools();
+        this.agents = engines.agents();
+        this.workflow = engines.workflow();
+        this.notifier = engines.notifier();
+        this.bus = env.bus();
+        this.lockdown = env.lockdown();
+        this.metrics = env.metrics();
         this.clock = clock;
         this.nanos = nanos;
     }

@@ -66,13 +66,16 @@ public final class TaskRunner {
     private final Set<String> active = ConcurrentHashMap.newKeySet();
     private final Set<String> cancelled = ConcurrentHashMap.newKeySet();
 
-    public TaskRunner(TaskStore store, Planner planner, Verifier verifier, AgentRegistry agents, AgentRunner runner,
+    /** O par que executa os agentes: o registro e o runner. */
+    public record Agents(AgentRegistry registry, AgentRunner runner) {}
+
+    public TaskRunner(TaskStore store, Planner planner, Verifier verifier, Agents agents,
             ZordonEventBus bus, LongSupplier nanos) {
         this.store = store;
         this.planner = planner;
         this.verifier = verifier;
-        this.agents = agents;
-        this.runner = runner;
+        this.agents = agents.registry();
+        this.runner = agents.runner();
         this.bus = bus;
         this.nanos = nanos;
     }

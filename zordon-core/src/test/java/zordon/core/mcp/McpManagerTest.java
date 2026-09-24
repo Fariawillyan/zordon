@@ -111,7 +111,8 @@ class McpManagerTest {
         McpManager manager = new McpManager(
                 List.of(new McpManager.Server("fake", List.of(program, script.toString(), config.toString()), floor,
                         true)),
-                gatekeeper, runner, runtime, notifications, home.resolve("state"), home.resolve("mcp-work"),
+                new McpManager.Deps(gatekeeper, runner, runtime, notifications),
+                new McpManager.Dirs(home.resolve("state"), home.resolve("mcp-work")),
                 Clock.systemUTC(), nanos::get)
                 .timings(Duration.ofMillis(800), List.of(Duration.ofMillis(200)));
         managers.add(manager);
@@ -202,8 +203,9 @@ class McpManagerTest {
         assertThat(asked).contains("mcp.fake.wipe red");
 
         McpManager strict = new McpManager(List.of(new McpManager.Server("strict",
-                List.of("python3", script.toString(), config.toString()), RiskLevel.YELLOW, true)), gatekeeper,
-                runner, runtime, notifications, home.resolve("state"), home.resolve("mcp-work"), Clock.systemUTC(),
+                List.of("python3", script.toString(), config.toString()), RiskLevel.YELLOW, true)),
+                new McpManager.Deps(gatekeeper, runner, runtime, notifications),
+                new McpManager.Dirs(home.resolve("state"), home.resolve("mcp-work")), Clock.systemUTC(),
                 nanos::get);
         managers.add(strict);
         strict.start();

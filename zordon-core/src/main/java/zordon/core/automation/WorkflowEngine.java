@@ -80,15 +80,17 @@ public final class WorkflowEngine {
     private final zordon.memory.AutomationStateStore budget;
     private long tokensToday;
 
-    public WorkflowEngine(TaskStore store, zordon.memory.AutomationStateStore budget, SkillRuntime tools,
-            AgentRegistry agents, AgentRunner runner, Notifier notifier, ZordonEventBus bus, Clock clock,
-            LongSupplier nanos) {
+    /** O que executa um passo do fluxo: ferramentas, agentes, o runner e o aviso. */
+    public record Engines(SkillRuntime tools, AgentRegistry agents, AgentRunner runner, Notifier notifier) {}
+
+    public WorkflowEngine(TaskStore store, zordon.memory.AutomationStateStore budget, Engines engines,
+            ZordonEventBus bus, Clock clock, LongSupplier nanos) {
         this.store = store;
         this.budget = budget;
-        this.tools = tools;
-        this.agents = agents;
-        this.runner = runner;
-        this.notifier = notifier;
+        this.tools = engines.tools();
+        this.agents = engines.agents();
+        this.runner = engines.runner();
+        this.notifier = engines.notifier();
         this.bus = bus;
         this.clock = clock;
         this.nanos = nanos;

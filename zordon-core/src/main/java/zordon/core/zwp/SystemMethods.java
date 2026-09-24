@@ -46,25 +46,24 @@ public final class SystemMethods {
     private final Supplier<Map<String, Object>> trace;
     private final Supplier<Map<String, Object>> security;
 
-    public SystemMethods(
-            String version,
-            Instant startedAt,
-            ZordonEventBus bus,
-            TurnManager turns,
-            ProviderRegistry providers,
-            IntSupplier connectedClients,
-            Supplier<Map<String, Object>> voice,
-            Supplier<Map<String, Object>> trace,
-            Supplier<Map<String, Object>> security) {
+    /** O que responde ao sistema: o barramento, os turnos, os provedores e a contagem de clientes. */
+    public record Runtime(ZordonEventBus bus, TurnManager turns, ProviderRegistry providers,
+            IntSupplier connectedClients) {}
+
+    /** Os relatórios de estado que o sistema expõe: voz, trace e segurança. */
+    public record Reports(Supplier<Map<String, Object>> voice, Supplier<Map<String, Object>> trace,
+            Supplier<Map<String, Object>> security) {}
+
+    public SystemMethods(String version, Instant startedAt, Runtime runtime, Reports reports) {
         this.version = version;
         this.startedAt = startedAt;
-        this.bus = bus;
-        this.turns = turns;
-        this.providers = providers;
-        this.connectedClients = connectedClients;
-        this.voice = voice;
-        this.trace = trace;
-        this.security = security;
+        this.bus = runtime.bus();
+        this.turns = runtime.turns();
+        this.providers = runtime.providers();
+        this.connectedClients = runtime.connectedClients();
+        this.voice = reports.voice();
+        this.trace = reports.trace();
+        this.security = reports.security();
     }
 
     private final Map<String, Supplier<Map<String, Object>>> extra = new java.util.concurrent.ConcurrentHashMap<>();

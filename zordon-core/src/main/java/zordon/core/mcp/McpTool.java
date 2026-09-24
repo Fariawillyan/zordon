@@ -52,8 +52,10 @@ final class McpTool implements Tool {
     private final Breaker breaker;
     private final Duration timeout;
 
-    McpTool(String server, Map<String, Object> declared, RiskLevel floor, boolean newTool, Supplier<McpClient> client,
-            Breaker breaker, Duration timeout) {
+    /** A ligação da ferramenta com o servidor MCP: o cliente, o disjuntor e o prazo. */
+    record Wiring(Supplier<McpClient> client, Breaker breaker, Duration timeout) {}
+
+    McpTool(String server, Map<String, Object> declared, RiskLevel floor, boolean newTool, Wiring wiring) {
         this.server = server;
         this.remoteName = String.valueOf(declared.get("name"));
         String text = declared.get("description") instanceof String given ? given.strip() : "";
@@ -78,9 +80,9 @@ final class McpTool implements Tool {
         // Primeira semana de uma ferramenta: um nível acima, até o usuário ver o que ela faz (MCP §3).
         this.risk = newTool ? level.raise() : level;
         this.effects = Set.copyOf(declaredEffects);
-        this.client = client;
-        this.breaker = breaker;
-        this.timeout = timeout;
+        this.client = wiring.client();
+        this.breaker = wiring.breaker();
+        this.timeout = wiring.timeout();
     }
 
     @Override

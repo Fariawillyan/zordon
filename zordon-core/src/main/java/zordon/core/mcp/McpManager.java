@@ -111,15 +111,21 @@ public final class McpManager implements AutoCloseable {
         }
     }
 
-    public McpManager(List<Server> servers, Gatekeeper gatekeeper, ProcessRunner runner, SkillRuntime tools,
-            NotificationCenter notifications, Path stateDir, Path workDir, Clock clock, LongSupplier nanos) {
+    /** Com quem o gerenciador fala para mediar uma chamada MCP. */
+    public record Deps(Gatekeeper gatekeeper, ProcessRunner runner, SkillRuntime tools,
+            NotificationCenter notifications) {}
+
+    /** Onde o estado dos servidores e o trabalho das chamadas ficam em disco. */
+    public record Dirs(Path stateDir, Path workDir) {}
+
+    public McpManager(List<Server> servers, Deps deps, Dirs dirs, Clock clock, LongSupplier nanos) {
         this.servers = List.copyOf(servers);
-        this.gatekeeper = Objects.requireNonNull(gatekeeper, "gatekeeper");
-        this.runner = Objects.requireNonNull(runner, "runner");
-        this.tools = Objects.requireNonNull(tools, "tools");
-        this.notifications = Objects.requireNonNull(notifications, "notifications");
-        this.stateDir = Objects.requireNonNull(stateDir, "stateDir");
-        this.workDir = Objects.requireNonNull(workDir, "workDir");
+        this.gatekeeper = Objects.requireNonNull(deps.gatekeeper(), "gatekeeper");
+        this.runner = Objects.requireNonNull(deps.runner(), "runner");
+        this.tools = Objects.requireNonNull(deps.tools(), "tools");
+        this.notifications = Objects.requireNonNull(deps.notifications(), "notifications");
+        this.stateDir = Objects.requireNonNull(dirs.stateDir(), "stateDir");
+        this.workDir = Objects.requireNonNull(dirs.workDir(), "workDir");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.nanos = Objects.requireNonNull(nanos, "nanos");
         servers.forEach(server -> connections.put(server.name(), new Connection(server)));
@@ -281,7 +287,7 @@ public final class McpManager implements AutoCloseable {
             seen.putIfAbsent(key, now.toString());
             boolean fresh = Duration.between(first, now).compareTo(NEW_TOOL) < 0;
             McpTool tool = new McpTool(connection.server.name(), declared, connection.server.floor(), fresh,
-                    () -> connection.client, connection.breaker, callTimeout);
+                    new McpTool.Wiring(() -> connection.client, connection.breaker, callTimeout));
             tools.register(tool);
             connection.registered.add(tool.name());
         }
