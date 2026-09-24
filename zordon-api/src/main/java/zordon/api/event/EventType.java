@@ -54,7 +54,7 @@ public enum EventType {
     /** Uma ativação pela palavra, {@code {score, outcome, bargeIn}}; nunca áudio nem texto (SPEC-013). */
     VOICE_WAKE(Topic.VOICE),
 
-    /** Nível do microfone em dBFS, {@code {rms, peak}}; só no teste ou na escuta (SPEC-009). */
+    /** Nível do microfone em dBFS, {@code {rms, peak, bass, mid, treble}}; só no teste ou na escuta (SPEC-009). */
     VOICE_LEVEL(Topic.VOICE),
 
     /** Estado visual do núcleo, {@code {state}} (SPEC-012). */

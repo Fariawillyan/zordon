@@ -331,7 +331,7 @@ de protocolo.
 | `tools` | `TOOL_CALLED` | `{callId, tool, risk, decision}` — sem argumentos ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)) |
 | `tools` | `TOOL_RESULT` | `{callId, tool, status, durationMs}` |
 | `voice` | `VOICE_WAKE` | `{score, outcome, bargeIn}` — uma ativação pela palavra "Zordon" e o desfecho; nunca áudio nem texto ([SPEC-013](../specs/voice/SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md)) |
-| `voice` | `VOICE_LEVEL` | `{rms, peak}` em dBFS — no máximo 20 Hz, só durante o teste do microfone ou uma escuta ativa |
+| `voice` | `VOICE_LEVEL` | `{rms, peak, bass, mid, treble}` em dBFS — no máximo 20 Hz, só durante o teste do microfone ou uma escuta ativa |
 | `voice` | `TTS_STARTED` / `TTS_FINISHED` | `{streamId}` |
 | `chat` | `USER_COMMAND` | `{turnId, text, source: "voice"\|"text"}` |
 | `chat` | `AI_THINKING` | `{turnId, model, agentId}` |

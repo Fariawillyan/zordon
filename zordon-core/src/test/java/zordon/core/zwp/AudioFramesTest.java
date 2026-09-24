@@ -95,7 +95,7 @@ class AudioFramesTest {
 
             List<EventEnvelope> levels = events.stream().filter(event -> event.type() == EventType.VOICE_LEVEL).toList();
             assertThat(levels).isNotEmpty().hasSizeLessThanOrEqualTo(25);
-            assertThat(levels.getFirst().payload()).containsOnlyKeys("rms", "peak");
+            assertThat(levels.getFirst().payload()).containsOnlyKeys("rms", "peak", "bass", "mid", "treble");
             assertThat(credits).isNotEmpty().allSatisfy(credit -> assertThat(credit)
                     .containsEntry("streamId", stream.get()).containsEntry("frames", 10));
             Map<String, Object> lastTest = (Map<String, Object>) events.stream()

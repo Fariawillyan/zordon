@@ -51,8 +51,8 @@ de fluxo estão documentados, mas não implementados.
   nunca tem mais frames não confirmados que o crédito; sem crédito, descarta o
   frame e conta. O núcleo devolve crédito com `audio.credit {streamId, frames}`
   (notificação) conforme consome.
-- **Nível no núcleo**: cada frame vira RMS e pico em dBFS; o núcleo publica
-  `VOICE_LEVEL {rms, peak}` a no máximo 20 Hz, e só durante o teste ou uma escuta
+- **Nível no núcleo**: cada frame vira RMS, pico e três bandas em dBFS; o núcleo publica
+  `VOICE_LEVEL {rms, peak, bass, mid, treble}` a no máximo 20 Hz, e só durante o teste ou uma escuta
   ativa. Com o microfone ligado o tempo todo no modo `wake`, 20 eventos por
   segundo expulsariam a conversa do anel de replay (2.000 eventos ≈ 100 s). Os
   frames são descartados depois do cálculo até existir o sidecar.
@@ -114,7 +114,7 @@ limitado a um por sessão por minuto.
 | `voice.testMicrophone` | cliente → núcleo | `{seconds?}` → snapshot; sem host, `ERR_BRIDGE_UNAVAILABLE` |
 | `AUDIO_IN` (`0x01`) | host → núcleo | PCM 16 kHz mono s16le, 640 bytes |
 | `AUDIO_END` (`0x03`) | host → núcleo | vazio |
-| `VOICE_LEVEL` | evento `voice` | `{rms, peak}` em dBFS, de -90 a 0 |
+| `VOICE_LEVEL` | evento `voice` | `{rms, peak, bass, mid, treble}` em dBFS, de -90 a 0 |
 
 Veredito do teste (média do RMS dos frames com sinal):
 
@@ -133,7 +133,7 @@ Java: `BinaryFrame(type, streamId, seq, payload)` e `FrameType` em `zordon-api`;
 
 | Tópico | Evento | Payload |
 |---|---|---|
-| `voice` | `VOICE_LEVEL` | `{rms, peak}` — sem áudio, só dois números |
+| `voice` | `VOICE_LEVEL` | `{rms, peak, bass, mid, treble}` — sem áudio, só métricas |
 | `system` | `SYSTEM_ALERT` | frame descartado: `{message, sessionId, streamId}` |
 
 ## 9. Dados
@@ -148,7 +148,7 @@ até o núcleo reiniciar.
   descartado: nenhum cliente injeta áudio no pipeline de voz.
 - O teste é pedido pelo usuário, tem teto de 10 s e aparece no cabeçalho; não há
   captura silenciosa.
-- `VOICE_LEVEL` carrega dois números; nenhum byte de áudio vai para evento, log
+- `VOICE_LEVEL` carrega cinco métricas; nenhum byte de áudio vai para evento, log
   ou disco.
 - O crédito impede que um núcleo lento acumule áudio antigo no host.
 

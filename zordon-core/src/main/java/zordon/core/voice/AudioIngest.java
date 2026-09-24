@@ -181,8 +181,14 @@ public final class AudioIngest implements BinaryHandler {
         if (levelsWanted && (!levelPublished || now - lastLevel >= LEVEL_INTERVAL_NANOS)) {
             levelPublished = true;
             lastLevel = now;
-            levels.accept(Map.of("rms", level.rmsDbfs(), "peak", level.peakDbfs()));
+            levels.accept(Map.of("rms", level.rmsDbfs(), "peak", level.peakDbfs(),
+                    "bass", levelDbfs(level.bass()), "mid", levelDbfs(level.mid()),
+                    "treble", levelDbfs(level.treble())));
         }
+    }
+
+    private static double levelDbfs(double level) {
+        return AudioLevel.dbfs(level);
     }
 
     /** Um alerta por sessão por minuto: um cliente defeituoso não inunda o tópico. */

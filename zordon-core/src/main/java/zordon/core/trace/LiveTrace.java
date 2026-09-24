@@ -74,7 +74,7 @@ public final class LiveTrace implements AutoCloseable {
         return dir.resolve(LocalDate.now(clock) + ".jsonl");
     }
 
-    /** Uma linha por evento, menos {@code VOICE_LEVEL}: dois números 20 vezes por segundo. */
+    /** Uma linha por evento, menos {@code VOICE_LEVEL}: métricas transitórias 20 vezes por segundo. */
     public void write(EventEnvelope event) {
         if (event.type() == EventType.VOICE_LEVEL) {
             return;

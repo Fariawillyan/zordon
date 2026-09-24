@@ -68,7 +68,7 @@ public final class DesktopState {
     private final StringProperty currentTurnId = new SimpleStringProperty();
     private final StringProperty draft = new SimpleStringProperty("");
     private final ObjectProperty<VoiceStatus> voice = new SimpleObjectProperty<>();
-    /** Último {@code VOICE_LEVEL} em dBFS: {@code [rms, pico]}. */
+    /** Último {@code VOICE_LEVEL} em dBFS: {@code [rms, pico, graves, médios, agudos]}. */
     private final ObjectProperty<double[]> voiceLevel = new SimpleObjectProperty<>();
     /** Estado visual do núcleo, de {@code ACTIVITY_STATE} (SPEC-012). */
     private final StringProperty activity = new SimpleStringProperty("idle");
@@ -224,7 +224,9 @@ public final class DesktopState {
             case VOICE_STATE -> voice(payload);
             case ACTIVITY_STATE -> activity.set(String.valueOf(payload.getOrDefault("state", "idle")));
             case VOICE_LEVEL -> voiceLevel.set(new double[] {
-                number(payload.get("rms")), number(payload.get("peak"))});
+                number(payload.get("rms")), number(payload.get("peak")),
+                number(payload.getOrDefault("bass", -90)), number(payload.getOrDefault("mid", -90)),
+                number(payload.getOrDefault("treble", -90))});
             case LOCKDOWN_ENTERED -> lockdown(true, String.valueOf(payload.getOrDefault("reason", "")));
             case LOCKDOWN_EXITED -> lockdown(false, "");
             case SECURITY_NOTIFICATION -> notification(payload);

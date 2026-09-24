@@ -156,8 +156,8 @@ topic, payload}`; lacunas marcadas com `{"gap": n}`. `system.diagnostics` ganha
 Trace em disco, diretório 0700, arquivos 0600, só acrescenta, um arquivo por dia,
 nunca apagado pelo Zordon ([ADR-0015](../../adr/ADR-0015-exclusao-impossivel-por-construcao.md)).
 Contém o texto das conversas (é o registro completo); não contém áudio nem
-chaves, porque eventos não os carregam. `VOICE_LEVEL` fica fora: são dois números
-20 vezes por segundo.
+chaves, porque eventos não os carregam. `VOICE_LEVEL` fica fora: são cinco
+métricas transitórias 20 vezes por segundo.
 
 ## 10. Segurança
 

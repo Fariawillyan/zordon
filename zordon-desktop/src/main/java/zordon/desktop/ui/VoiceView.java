@@ -86,7 +86,7 @@ final class VoiceView extends StackPane {
         effects.activity(state.activityProperty().get());
         state.voiceLevelProperty().addListener((observable, before, now) -> {
             if (now != null) {
-                effects.micLevel(now[0]);
+                effects.micLevel(now);
             }
         });
         showPill();

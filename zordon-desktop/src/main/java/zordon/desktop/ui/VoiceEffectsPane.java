@@ -193,8 +193,8 @@ final class VoiceEffectsPane extends Pane {
         visualizer.activity(state);
     }
 
-    void micLevel(double dbfs) {
-        visualizer.micLevel(dbfs);
+    void micLevel(double[] levels) {
+        visualizer.micLevel(levels);
     }
 
     String activity() {
