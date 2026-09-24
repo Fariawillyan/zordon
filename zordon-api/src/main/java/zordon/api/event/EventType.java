@@ -72,6 +72,15 @@ public enum EventType {
     /** Saída do lockdown: {@code {by}}, sempre {@code user} (SPEC-015). */
     LOCKDOWN_EXITED(Topic.SECURITY),
 
+    /** OPPRESSOR MODE ativo: {@code {since, trigger}} (SPEC-036). */
+    OPPRESSOR_ENTERED(Topic.SECURITY),
+
+    /** Fim do OPPRESSOR MODE: {@code {by}} (SPEC-036). */
+    OPPRESSOR_EXITED(Topic.SECURITY),
+
+    /** A voz pediu o modo: a janela deve pedir a senha. {@code {heard}} (SPEC-036). */
+    OPPRESSOR_PROMPT(Topic.SECURITY),
+
     /** Uma ferramenta foi chamada: {@code {callId, tool, risk, decision}}, sem argumentos (SPEC-016). */
     TOOL_CALLED(Topic.TOOLS),
 

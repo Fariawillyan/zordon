@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.api.security.ActionDescriptor;
@@ -31,6 +32,10 @@ import zordon.api.trace.Spec;
  * perguntar quando for preciso, gravar a intenção e só então liberar. Quem não
  * tem uma {@link Permit.Granted} não executa, porque {@link ProcessRunner} e as
  * ferramentas exigem uma.
+ *
+ * <p>Ser o caminho único é o que permite ao OPPRESSOR MODE existir de verdade:
+ * o modo desvia aqui, e por isso vale para toda ação do processo, não só para
+ * as que alguma tela lembrou de perguntar (SPEC-036).
  */
 @Spec("SPEC-016")
 public final class Gatekeeper {
@@ -75,15 +80,25 @@ public final class Gatekeeper {
 
     private final PermissionEngine engine;
     private final AuditLog audit;
+    private final BooleanSupplier oppressor;
 
+    /** Sem OPPRESSOR MODE: toda ação passa pelo motor de permissão. */
     public Gatekeeper(PermissionEngine engine, AuditLog audit) {
+        this(engine, audit, () -> false);
+    }
+
+    public Gatekeeper(PermissionEngine engine, AuditLog audit, BooleanSupplier oppressor) {
         this.engine = Objects.requireNonNull(engine, "engine");
         this.audit = Objects.requireNonNull(audit, "audit");
+        this.oppressor = Objects.requireNonNull(oppressor, "oppressor");
     }
 
     public CompletableFuture<Permit> authorize(ActionDescriptor action, Principal actor,
             PermissionEngine.PolicyContext ctx, String turnId) {
         String callId = "call-" + UUID.randomUUID();
+        if (oppressor.getAsBoolean() && !ctx.lockdown()) {
+            return CompletableFuture.completedFuture(oppress(callId, action, actor, turnId));
+        }
         Decision first = engine.evaluate(action, actor, ctx);
         CompletableFuture<Decision> decided;
         String decidedBy;
@@ -106,6 +121,28 @@ public final class Gatekeeper {
             audit.complete(callId, AuditLog.Status.CANCELLED, Duration.ZERO, null, decision.reason());
             return new Permit.Refused(callId, decision);
         });
+    }
+
+    /**
+     * Libera sem avaliar: OPPRESSOR MODE (SPEC-036, ADR-0041).
+     *
+     * <p>O motor de permissão não é consultado — não há risco calculado, teto
+     * de origem nem confirmação. A auditoria continua recebendo a intenção,
+     * como em qualquer outra ação, e continua não sendo uma etapa de aprovação:
+     * {@code begin} grava e a execução segue.
+     *
+     * <p>O lockdown é a única coisa que o modo não atravessa, e por isso o
+     * desvio olha {@code ctx.lockdown()} antes de chegar aqui. Um kill switch
+     * que um modo desliga não é um kill switch — e ele também é acionado
+     * sozinho pela defesa quando a cadeia da auditoria aparece quebrada, que é
+     * justamente quando a senha digitada antes não prova mais nada. Sair do
+     * lockdown continua sendo uma ação na tela (SPEC-015 CA-6).
+     */
+    private Permit.Granted oppress(String callId, ActionDescriptor action, Principal actor, String turnId) {
+        Decision decision = new Decision.Allow(action.baseRisk(), "OPPRESSOR MODE", false);
+        audit.begin(new AuditLog.Entry(callId, turnId, actor, action.tool(), action.args(), decision, "oppressor"));
+        log.warn("{} {} → allow (OPPRESSOR MODE, sem avaliação)", callId, action.tool());
+        return new Permit.Granted(callId, action, decision);
     }
 
     /** O desfecho de uma execução liberada. */

@@ -84,6 +84,8 @@ final class VoiceView extends StackPane {
         // O estado visual do núcleo e o nível do microfone chegam do núcleo (SPEC-012).
         state.activityProperty().addListener((observable, before, now) -> effects.activity(now));
         effects.activity(state.activityProperty().get());
+        state.oppressorProperty().addListener((observable, before, now) -> effects.oppressor(now));
+        effects.oppressor(state.oppressorProperty().get());
         state.voiceLevelProperty().addListener((observable, before, now) -> {
             if (now != null) {
                 effects.micLevel(now);

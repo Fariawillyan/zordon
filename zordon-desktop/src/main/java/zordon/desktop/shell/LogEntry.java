@@ -95,6 +95,11 @@ public record LogEntry(String time, long seq, String topic, String type, String 
                 + payload.getOrDefault("title", "") + " · " + payload.getOrDefault("actionTaken", ""));
         out.put(EventType.LOCKDOWN_ENTERED, payload -> "Zordon pausado (só leitura) · " + payload.getOrDefault("reason", ""));
         out.put(EventType.LOCKDOWN_EXITED, payload -> "Zordon retomado · por " + payload.getOrDefault("by", "?"));
+        out.put(EventType.OPPRESSOR_ENTERED, payload -> "OPPRESSOR MODE ativo · toda ação liberada sem avaliação · por "
+                + payload.getOrDefault("trigger", "?"));
+        out.put(EventType.OPPRESSOR_EXITED, payload -> "OPPRESSOR MODE encerrado · motor de permissão de volta · por "
+                + payload.getOrDefault("by", "?"));
+        out.put(EventType.OPPRESSOR_PROMPT, payload -> "OPPRESSOR MODE pedido por voz · a janela vai pedir a senha");
         out.put(EventType.TOOL_CALLED, payload -> "ferramenta " + payload.getOrDefault("tool", "?") + " · "
                 + payload.getOrDefault("risk", "?") + " · " + payload.getOrDefault("decision", "?"));
         out.put(EventType.TOOL_RESULT, payload -> "ferramenta " + payload.getOrDefault("tool", "?") + " · "

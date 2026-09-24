@@ -94,6 +94,7 @@ public final class ZordonCore implements AutoCloseable {
     private zordon.core.permission.DesktopApprover approver;
     private zordon.core.notify.NotificationCenter notifications;
     private zordon.core.permission.LockdownService lockdown;
+    private zordon.core.permission.OppressorService oppressor;
     /** Execução mediada (SPEC-016). */
     private zordon.core.tools.SkillRuntime tools;
     private zordon.core.tools.WindowsBridge windows;
@@ -241,7 +242,12 @@ public final class ZordonCore implements AutoCloseable {
         this.notifications = new zordon.core.notify.NotificationCenter(
                 config.home().resolve("state").resolve("notifications.db"), Clock.systemUTC(),
                 message -> bus.publish(EventType.SECURITY_NOTIFICATION, message.payload()));
-        this.gatekeeper = new zordon.security.Gatekeeper(permissions, audit);
+        // Antes do gatekeeper porque é ele quem consulta o modo a cada ação.
+        this.oppressor = new zordon.core.permission.OppressorService(
+                config.home().resolve("state").resolve("oppressor.hash"), Clock.systemUTC(),
+                (entered, payload) -> bus.publish(entered ? EventType.OPPRESSOR_ENTERED : EventType.OPPRESSOR_EXITED,
+                        payload));
+        this.gatekeeper = new zordon.security.Gatekeeper(permissions, audit, oppressor::active);
         this.runner = new zordon.security.ProcessRunner(
                 securitySettings(environment).validator());
         this.userHome = zordon.api.security.ZPath.ofWsl(
@@ -548,7 +554,8 @@ public final class ZordonCore implements AutoCloseable {
                     return stats;
                 })
                 .registerOn(server);
-        new zordon.core.zwp.SecurityMethods(notifications, lockdown, approver, () -> auditState).registerOn(server);
+        new zordon.core.zwp.SecurityMethods(notifications, lockdown, oppressor, approver, () -> auditState)
+                .registerOn(server);
         new zordon.core.zwp.ToolMethods(tools, windows, vault).registerOn(server);
         new zordon.core.zwp.McpMethods(mcp).registerOn(server);
         new zordon.core.zwp.MemoryMethods(memory).registerOn(server);
@@ -575,7 +582,7 @@ public final class ZordonCore implements AutoCloseable {
             }
             speech.cue();
         });
-        voice.onCommand(text -> turns.send(voiceConversation(), text, "voice"));
+        voice.onCommand(this::heard);
         engine.start();
         speech.start();
         new VoiceMethods(voice).registerOn(server);
@@ -600,6 +607,22 @@ public final class ZordonCore implements AutoCloseable {
         systemd.ready();
 
         // Os servidores MCP conectam em segundo plano: o núcleo já está pronto (SPEC-020 CA-1).
+    }
+
+    /**
+     * Uma fala da escuta: ou mexe no OPPRESSOR MODE, ou vira turno (SPEC-036 CA-9).
+     *
+     * <p>A checagem vem antes do turno porque um pedido de modo não pode virar
+     * conversa: passar pelo modelo tornaria não-determinístico algo que decide
+     * se o motor de permissão continua no caminho.
+     */
+    private void heard(String text) {
+        switch (zordon.core.permission.OppressorPhrase.of(text)) {
+            // A voz só abre o pedido de senha na tela; nunca autoriza (ADR-0030).
+            case ENTER -> bus.publish(EventType.OPPRESSOR_PROMPT, java.util.Map.of("heard", text));
+            case EXIT -> oppressor.exit("voice");
+            case NONE -> turns.send(voiceConversation(), text, "voice");
+        }
     }
 
     /** O que sobe depois de pronto: MCP, destilação, monitor e as tarefas interrompidas. */

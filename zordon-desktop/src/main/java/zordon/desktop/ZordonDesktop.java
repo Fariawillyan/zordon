@@ -228,6 +228,72 @@ public final class ZordonDesktop extends Application implements ShellActions {
     }
 
     @Override
+    public void enterOppressor(char[] password) {
+        // O núcleo confere e publica OPPRESSOR_ENTERED; o estado vem por ali.
+        // A senha vira String só para caber no JSON e some do vetor aqui.
+        Map<String, Object> params = Map.of("password", secret(password));
+        connection.request("security.oppressor.enter", params)
+                .thenAccept(ignored -> {})
+                .exceptionally(this::oppressorFailure);
+    }
+
+    @Override
+    public void exitOppressor() {
+        connection.request("security.oppressor.exit", Map.of())
+                .thenAccept(ignored -> {})
+                .exceptionally(this::oppressorFailure);
+    }
+
+    @Override
+    public void setOppressorPassword(char[] current, char[] next) {
+        Map<String, Object> params = Map.of("current", secret(current), "next", secret(next));
+        connection.request("security.oppressor.password", params)
+                .thenAccept(result -> Platform.runLater(() -> state.oppressorStatus(
+                        state.oppressorProperty().get(), true)))
+                .exceptionally(this::oppressorFailure);
+    }
+
+    /**
+     * Falha do OPPRESSOR MODE: aparece na própria seção, não na conversa.
+     *
+     * <p>Mandar para o chat escondia o erro de quem estava na tela de
+     * Segurança: a ação não acontecia e nada dizia por quê. Senha errada, senha
+     * ausente e método que o núcleo não conhece chegam todos por aqui.
+     */
+    private Void oppressorFailure(Throwable failure) {
+        Platform.runLater(() -> state.oppressorFailed(rootMessage(failure)));
+        return null;
+    }
+
+    /**
+     * Abre o pedido da senha mestre, vindo da voz (SPEC-036 CA-9).
+     *
+     * <p>Um vetor vazio é desistência — e também é o que chega se a janela for
+     * fechada na cruz. Não vale a pena pedir ao núcleo nesse caso.
+     */
+    private void promptOppressor() {
+        if (state.oppressorProperty().get()) {
+            return;
+        }
+        showWindowNow();
+        zordon.desktop.ui.OppressorPane.show(stage, stylesheet()).thenAccept(password -> {
+            if (password.length > 0) {
+                enterOppressor(password);
+            }
+        });
+    }
+
+    /** Uma senha do controle vira String para o JSON e é apagada do vetor. */
+    private static String secret(char[] value) {
+        if (value == null) {
+            return "";
+        }
+        String text = new String(value);
+        java.util.Arrays.fill(value, '\0');
+        return text;
+    }
+
+    @Override
     public void loadQuarantine() {
         connection.request("security.quarantine.list", Map.of())
                 .thenAccept(result -> Platform.runLater(() -> {
@@ -612,6 +678,10 @@ public final class ZordonDesktop extends Application implements ShellActions {
                 state.lockdown(Boolean.TRUE.equals(lockdown.get("active")),
                         String.valueOf(lockdown.get("reason") == null ? "" : lockdown.get("reason")));
             }
+            if (result.get("oppressor") instanceof Map<?, ?> oppressor) {
+                state.oppressorStatus(Boolean.TRUE.equals(oppressor.get("active")),
+                        Boolean.TRUE.equals(oppressor.get("configured")));
+            }
         })).exceptionally(failure -> null);
         refreshDiagnostics();
         // Sempre, mesmo retomando: o microfone é o estado que não pode estar velho.
@@ -679,6 +749,8 @@ public final class ZordonDesktop extends Application implements ShellActions {
             Map<String, Object> payload = event.payload();
             String turnId = String.valueOf(payload.getOrDefault("turnId", ""));
             switch (event.type()) {
+                // A voz pediu o modo: a janela vem para a frente e pede a senha.
+                case OPPRESSOR_PROMPT -> promptOppressor();
                 case AI_THINKING -> {
                     if (payload.get("notice") instanceof String notice) {
                         shell.chatNotice(notice.substring(0, 1).toUpperCase(java.util.Locale.ROOT)

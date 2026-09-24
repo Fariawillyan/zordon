@@ -56,6 +56,22 @@ public interface ShellActions {
     /** Sai do só leitura. Só a tela faz isso. */
     default void resumeZordon() {}
 
+    /**
+     * Entra no OPPRESSOR MODE com a senha mestre (SPEC-036). Só a tela faz isso.
+     *
+     * <p>A implementação zera {@code password} depois de montar o pedido.
+     */
+    default void enterOppressor(char[] password) {}
+
+    /** Sai do OPPRESSOR MODE, de volta ao comportamento normal (SPEC-036). */
+    default void exitOppressor() {}
+
+    /**
+     * Cadastra ou troca a senha mestre (SPEC-036). {@code current} é vazio no
+     * primeiro cadastro. A implementação zera os dois vetores depois do pedido.
+     */
+    default void setOppressorPassword(char[] current, char[] next) {}
+
     /** {@code security.quarantine.list} (SPEC-017). */
     default void loadQuarantine() {}
 

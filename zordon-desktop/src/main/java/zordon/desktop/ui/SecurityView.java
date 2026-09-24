@@ -58,6 +58,7 @@ final class SecurityView extends DestinationPage {
         events.setId("security-events");
 
         show(VoiceSettingsView.security(state, actions),
+                VoiceSettingsView.oppressor(state, actions),
                 VoiceSettingsView.notifications(state, actions),
                 Cards.section("O que a defesa fez", events),
                 VoiceSettingsView.quarantine(state, actions));

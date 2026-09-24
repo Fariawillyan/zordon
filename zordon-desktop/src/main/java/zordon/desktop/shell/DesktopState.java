@@ -79,6 +79,17 @@ public final class DesktopState {
     private final StringProperty voiceError = new SimpleStringProperty("");
     /** Kill switch (SPEC-015): o núcleo está em só leitura. */
     private final BooleanProperty lockdown = new SimpleBooleanProperty(false);
+    /** OPPRESSOR MODE ativo no núcleo (SPEC-036): a janela inteira muda enquanto durar. */
+    private final BooleanProperty oppressor = new SimpleBooleanProperty(false);
+    /** Se há senha mestre cadastrada: sem ela, não há como ativar o modo. */
+    private final BooleanProperty oppressorConfigured = new SimpleBooleanProperty(false);
+    /**
+     * A última falha do OPPRESSOR MODE, para a própria seção mostrar.
+     *
+     * <p>Sem isto o erro ia para a conversa, e quem está na tela de Segurança
+     * via a ação não acontecer sem nenhuma explicação.
+     */
+    private final StringProperty oppressorError = new SimpleStringProperty("");
     private final StringProperty lockdownReason = new SimpleStringProperty("");
     /** Itens da quarentena, do mais novo para o mais antigo (SPEC-017). */
     private final javafx.collections.ObservableList<Map<String, Object>> quarantine =
@@ -229,6 +240,12 @@ public final class DesktopState {
                 number(payload.getOrDefault("treble", -90))});
             case LOCKDOWN_ENTERED -> lockdown(true, String.valueOf(payload.getOrDefault("reason", "")));
             case LOCKDOWN_EXITED -> lockdown(false, "");
+            case OPPRESSOR_ENTERED -> {
+                // Se entrou, é porque havia senha: os dois passam a valer.
+                oppressor.set(true);
+                oppressorConfigured.set(true);
+            }
+            case OPPRESSOR_EXITED -> oppressor.set(false);
             case SECURITY_NOTIFICATION -> notification(payload);
             case VOICE_STOPPED -> {
                 transcriptions.addFirst(java.time.format.DateTimeFormatter.ofPattern("HH:mm")
@@ -276,6 +293,29 @@ public final class DesktopState {
 
     public BooleanProperty lockdownProperty() {
         return lockdown;
+    }
+
+    public BooleanProperty oppressorProperty() {
+        return oppressor;
+    }
+
+    public BooleanProperty oppressorConfiguredProperty() {
+        return oppressorConfigured;
+    }
+
+    public StringProperty oppressorErrorProperty() {
+        return oppressorError;
+    }
+
+    public void oppressorFailed(String reason) {
+        oppressorError.set(reason == null ? "" : reason);
+    }
+
+    /** Aplica o {@code oppressor} de {@code security.status}: ativo e se tem senha. */
+    public void oppressorStatus(boolean active, boolean configured) {
+        oppressor.set(active);
+        oppressorConfigured.set(configured);
+        oppressorError.set("");
     }
 
     public StringProperty lockdownReasonProperty() {

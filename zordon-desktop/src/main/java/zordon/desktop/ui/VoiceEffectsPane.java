@@ -197,6 +197,11 @@ final class VoiceEffectsPane extends Pane {
         visualizer.micLevel(levels);
     }
 
+    /** OPPRESSOR MODE no núcleo visual (SPEC-036 CA-8). */
+    void oppressor(boolean value) {
+        visualizer.oppressor(value);
+    }
+
     String activity() {
         return visualizer.activity();
     }

@@ -57,6 +57,8 @@ final class VoiceVisualizer extends Region {
     static final double METER_Y = 120;
 
     private static final Color CYAN = Color.web("#12E3F7");
+    /** O vermelho do OPPRESSOR MODE, o mesmo do tema da janela. */
+    private static final Color OPPRESSOR = Color.web("#FF3B4E");
     private static final Color FRAME = Color.web("#1C6272", 0.75);
     private static final Color TEXT = Color.web("#9FB6C6");
 
@@ -66,6 +68,8 @@ final class VoiceVisualizer extends Region {
     private boolean reducedMotion;
     /** Estado visual do núcleo (SPEC-012): só animação, nenhum texto. */
     private String activity = "idle";
+    /** OPPRESSOR MODE (SPEC-036): sobrepõe a cor do estado e acelera tudo. */
+    private boolean oppressor;
     private long activitySince = System.nanoTime();
     private double micEnergy;
     private double micBass;
@@ -173,6 +177,23 @@ final class VoiceVisualizer extends Region {
     }
 
     /**
+     * Liga o OPPRESSOR MODE no desenho (SPEC-036 CA-8).
+     *
+     * <p>Sobrepõe a cor de qualquer estado: enquanto o modo dura, o que a tela
+     * precisa dizer não é "ouvindo" ou "pensando", é que nada está sendo
+     * perguntado antes de executar.
+     */
+    void oppressor(boolean value) {
+        oppressor = value;
+        draw();
+    }
+
+    /** Quanto o OPPRESSOR MODE acelera e amplia o movimento. */
+    private double intensity() {
+        return oppressor ? 1.8 : 1;
+    }
+
+    /**
      * Nível do microfone em dBFS: RMS, pico, graves, médios e agudos.
      *
      * <p>Só guarda o valor: quem desenha é o {@code motion}. Com áudio ativo
@@ -263,7 +284,7 @@ final class VoiceVisualizer extends Region {
             return;
         }
         t = reducedMotion ? 0 : (System.nanoTime() - activitySince) / 1e9;
-        tintColor = tintFor(activity);
+        tintColor = oppressor ? OPPRESSOR : tintFor(activity);
         GraphicsContext g = canvas.getGraphicsContext2D();
         // O Canvas do JavaFX no Windows pode manter a matriz do frame anterior
         // quando uma animação e um resize ocorrem juntos. A limpeza precisa
@@ -587,11 +608,11 @@ g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
         double reactive = 0.55 + micBass * 1.15 + micMid * 0.65 + micTreble * 0.3;
         return switch (activity) {
             case "speaking" -> reactive + 0.22 * Math.sin(t * 6);
-            case "listening" -> reducedMotion ? 1 : reactive;
+            case "listening" -> reducedMotion ? 1 : reactive * intensity();
             case "understanding" -> 0.75 + micMid * 0.7;
             case "planning" -> 0.7 + micTreble * 0.35;
             case "executing" -> 0.9 + micBass * 0.5;
-            default -> 0.72 + micEnergy * 0.25;
+            default -> (0.72 + micEnergy * 0.25) * intensity();
         };
     }
 
@@ -612,9 +633,9 @@ g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
             case "planning" -> t * 0.3;
             case "executing" -> t * 0.8;
             case "agents" -> t * 0.5;
-            case "listening" -> t * (0.12 + micMid * 0.8);
+            case "listening" -> t * (0.12 + micMid * 0.8) * intensity();
             case "speaking" -> t * (0.35 + micTreble * 1.6);
-            default -> t * 0.04;
+            default -> t * 0.04 * intensity();
         };
     }
 

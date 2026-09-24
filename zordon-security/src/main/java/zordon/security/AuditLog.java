@@ -47,7 +47,8 @@ public interface AuditLog extends AutoCloseable {
     /**
      * A intenção de uma ação e a decisão sobre ela.
      *
-     * @param decidedBy {@code policy}, {@code user}, {@code timeout} ou {@code ceiling}
+     * @param decidedBy {@code policy}, {@code user}, {@code timeout}, {@code ceiling}
+     *     ou {@code oppressor} (liberado sem avaliação, SPEC-036)
      */
     record Entry(String callId, String turnId, Principal principal, String tool, Map<String, Object> args,
             Decision decision, String decidedBy) {

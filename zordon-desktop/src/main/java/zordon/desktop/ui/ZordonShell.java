@@ -56,6 +56,14 @@ public final class ZordonShell extends StackPane {
     private final java.util.Map<Destination, DestinationPage> pages = new java.util.EnumMap<>(Destination.class);
     private final StackPane screens = new StackPane();
     private final Label notice = new Label();
+    /**
+     * A faixa do OPPRESSOR MODE (SPEC-036 CA-8).
+     *
+     * <p>Fica na pilha da raiz, acima de qualquer tela, porque o aviso não pode
+     * depender de o usuário estar na aba certa: enquanto o modo dura, o motor
+     * de permissão está fora do caminho em toda ação, não só nesta tela.
+     */
+    private final Label oppressor = new Label("O P P R E S S O R   M O D E");
 
     public ZordonShell(DesktopState state, ShellActions actions) {
         this.state = state;
@@ -108,7 +116,17 @@ public final class ZordonShell extends StackPane {
         HBox.setHgrow(work, Priority.ALWAYS);
 
         HBox layout = new HBox(rail, work);
-        getChildren().add(layout);
+        oppressor.getStyleClass().add("oppressor-banner");
+        oppressor.setMouseTransparent(true);
+        oppressor.setMaxWidth(Double.MAX_VALUE);
+        oppressor.setAlignment(Pos.CENTER);
+        oppressor.visibleProperty().bind(state.oppressorProperty());
+        oppressor.managedProperty().bind(oppressor.visibleProperty());
+        StackPane.setAlignment(oppressor, Pos.TOP_CENTER);
+        getChildren().addAll(layout, oppressor);
+        // A janela inteira muda de cor: o CSS pendura tudo nesta classe.
+        state.oppressorProperty().addListener((observable, before, now) -> theme(now));
+        theme(state.oppressorProperty().get());
 
         state.destinationProperty().addListener((observable, before, now) -> show(now));
         show(state.destinationProperty().get());
@@ -177,6 +195,14 @@ public final class ZordonShell extends StackPane {
 
     public void focusComposer() {
         composer.focusField();
+    }
+
+    /** Liga ou desliga o tema do OPPRESSOR MODE na raiz (SPEC-036 CA-8). */
+    private void theme(boolean active) {
+        getStyleClass().remove("oppressor");
+        if (active) {
+            getStyleClass().add("oppressor");
+        }
     }
 
     private void navigate(Destination destination) {
