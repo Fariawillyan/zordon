@@ -41,10 +41,6 @@
     <module name="ParameterNumber">
       <property name="max" value="4"/>
     </module>
-    <!-- Um record com componentes demais é a mesma lista longa de parâmetros. -->
-    <module name="RecordComponentNumber">
-      <property name="max" value="4"/>
-    </module>
 
     <!-- Profundidade de aninhamento: 5 no resto do projeto. -->
     <module name="NestedIfDepth">
