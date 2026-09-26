@@ -96,12 +96,19 @@ class AudioFramesTest {
             List<EventEnvelope> levels = events.stream().filter(event -> event.type() == EventType.VOICE_LEVEL).toList();
             assertThat(levels).isNotEmpty().hasSizeLessThanOrEqualTo(25);
             assertThat(levels.getFirst().payload()).containsOnlyKeys("rms", "peak", "bass", "mid", "treble");
-            assertThat(credits).isNotEmpty().allSatisfy(credit -> assertThat(credit)
-                    .containsEntry("streamId", stream.get()).containsEntry("frames", 10));
             Map<String, Object> lastTest = (Map<String, Object>) events.stream()
                     .filter(event -> event.payload().get("lastTest") != null).findFirst().orElseThrow()
                     .payload().get("lastTest");
             assertThat(lastTest).containsEntry("verdict", "ok");
+            // Crédito conforme consome (CA-6): um a cada 10 frames aceitos. Ele volta
+            // pela conexão do host, sem ordem garantida em relação ao VOICE_STATE que
+            // chegou ao desktop — por isso espera. E a conta sai dos frames que o
+            // núcleo diz ter consumido: num runner carregado o host pode mandar menos
+            // de 10 no segundo do teste, e aí nenhum crédito é o certo.
+            int consumed = ((Number) lastTest.get("frames")).intValue();
+            await(() -> credits.size() >= consumed / 10);
+            assertThat(credits).allSatisfy(credit -> assertThat(credit)
+                    .containsEntry("streamId", stream.get()).containsEntry("frames", 10));
             await(() -> !capturing.get());
         }
     }
