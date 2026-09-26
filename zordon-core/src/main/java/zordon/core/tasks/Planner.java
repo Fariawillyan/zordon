@@ -18,7 +18,6 @@ package zordon.core.tasks;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -31,15 +30,12 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.ai.AiException;
-import zordon.ai.AiMessage;
-import zordon.ai.AiRequest;
-import zordon.ai.ContentBlock;
 import zordon.ai.ModelRole;
-import zordon.ai.Role;
 import zordon.ai.registry.ProviderRegistry;
 import zordon.api.trace.Spec;
 import zordon.core.agents.AgentProfile;
 import zordon.core.agents.AgentRegistry;
+import zordon.core.chat.RoleModels;
 import zordon.memory.TaskStore;
 
 /**
@@ -87,27 +83,14 @@ public final class Planner {
     }
 
     private String ask(String goal, String problem) throws PlanException {
-        ProviderRegistry.Selection selection = null;
-        for (ModelRole role : List.of(ModelRole.AGENT_HEAVY, ModelRole.CONVERSATION)) {
-            if (providers.select(role) instanceof ProviderRegistry.Resolution.Selected selected) {
-                selection = selected.selection();
-                break;
-            }
-        }
-        if (selection == null) {
-            throw new PlanException("nenhum modelo disponível para planejar");
-        }
+        ProviderRegistry.Selection selection = RoleModels.first(providers, ModelRole.AGENT_HEAVY, ModelRole.CONVERSATION)
+                .orElseThrow(() -> new PlanException("nenhum modelo disponível para planejar"));
         StringBuilder request = new StringBuilder("[Pedido do usuário]\n").append(goal);
         if (problem != null) {
             request.append("\n\n[O plano anterior foi recusado]\n").append(problem).append("\nCorrija e devolva o JSON.");
         }
         try {
-            return selection.provider().chat(AiRequest.builder(selection.choice().model())
-                    .systemPrompt(system())
-                    .messages(List.of(new AiMessage(Role.USER, List.of(new ContentBlock.Text(request.toString())))))
-                    .maxOutputTokens(2_048)
-                    .timeout(Duration.ofMinutes(2))
-                    .build()).text();
+            return RoleModels.ask(selection, system(), request.toString(), 2_048).text();
         } catch (AiException e) {
             throw new PlanException("o modelo não planejou: " + e.getMessage());
         }

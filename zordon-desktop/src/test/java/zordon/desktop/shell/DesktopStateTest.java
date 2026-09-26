@@ -33,13 +33,13 @@ class DesktopStateTest {
     @AcceptanceCriteria("SPEC-005/CA-3")
     @Test
     void oCabecalhoDizOEstadoDoNucleoEAVozIndisponivel() {
-        assertThat(state.coreLabel().get()).isEqualTo("Conectando…");
+        assertThat(state.connection().label().get()).isEqualTo("Conectando…");
 
         state.online("0.1.0");
-        assertThat(state.coreLabel().get()).isEqualTo("Núcleo conectado");
+        assertThat(state.connection().label().get()).isEqualTo("Núcleo conectado");
 
         state.offline("conexão encerrada");
-        assertThat(state.coreLabel().get()).isEqualTo("Núcleo offline");
+        assertThat(state.connection().label().get()).isEqualTo("Núcleo offline");
         assertThat(DesktopState.VOICE_UNAVAILABLE).isEqualTo("Voz indisponível");
     }
 
@@ -47,14 +47,14 @@ class DesktopStateTest {
     @Test
     void offlineBloqueiaOComposerComMotivoEPreservaORascunho() {
         state.online("0.1.0");
-        state.draftProperty().set("metade de uma pergunta");
+        state.conversation().draftProperty().set("metade de uma pergunta");
 
         state.offline("conexão encerrada");
 
-        assertThat(state.composerBlockedReason().get()).contains("offline").contains("rascunho fica guardado");
-        assertThat(state.draftProperty().get()).isEqualTo("metade de uma pergunta");
-        assertThat(state.reconnectionsProperty().get()).isEqualTo(1);
-        assertThat(state.lastSyncProperty().get()).isNotNull();
+        assertThat(state.conversation().composerBlockedReason().get()).contains("offline").contains("rascunho fica guardado");
+        assertThat(state.conversation().draftProperty().get()).isEqualTo("metade de uma pergunta");
+        assertThat(state.connection().reconnectionsProperty().get()).isEqualTo(1);
+        assertThat(state.connection().lastSyncProperty().get()).isNotNull();
     }
 
     @AcceptanceCriteria("SPEC-005/CA-4")
@@ -62,8 +62,8 @@ class DesktopStateTest {
     void falharAntesDaPrimeiraConexaoNaoContaComoReconexao() {
         state.offline("núcleo não publicou endpoint.json");
 
-        assertThat(state.connectionProperty().get()).isEqualTo(CoreConnection.State.OFFLINE);
-        assertThat(state.reconnectionsProperty().get()).isZero();
+        assertThat(state.connection().stateProperty().get()).isEqualTo(CoreConnection.State.OFFLINE);
+        assertThat(state.connection().reconnectionsProperty().get()).isZero();
     }
 
     @AcceptanceCriteria("SPEC-005/CA-5")
@@ -91,7 +91,7 @@ class DesktopStateTest {
         state.accept(response(100, 20, "0.0010", false));
         state.accept(response(50, 10, "0.0005", true));
 
-        SessionUsage usage = state.usageProperty().get();
+        SessionUsage usage = state.conversation().usageProperty().get();
         assertThat(usage.turns()).isEqualTo(2);
         assertThat(usage.inputTokens()).isEqualTo(150);
         assertThat(usage.costUsd()).isEqualByComparingTo(new BigDecimal("0.0015"));
@@ -104,11 +104,11 @@ class DesktopStateTest {
     void aExecucaoAtualMostraQuemRespondeuECusto() {
         state.accept(response(1240, 320, "0.0123", false));
 
-        TurnSummary turn = state.lastTurnProperty().get();
+        TurnSummary turn = state.conversation().lastTurnProperty().get();
         assertThat(turn.footer())
                 .isEqualTo("anthropic · claude-opus-5 · 1240 tok entrada · 320 tok saída · 0 de cache · US$ 0.0123");
         assertThat(turn.latencyMs()).isEqualTo(1870);
-        assertThat(state.turnRunningProperty().get()).isFalse();
+        assertThat(state.conversation().turnRunningProperty().get()).isFalse();
     }
 
     private static EventEnvelope response(long input, long output, String cost, boolean estimated) {

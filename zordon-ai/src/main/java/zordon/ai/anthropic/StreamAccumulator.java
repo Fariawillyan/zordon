@@ -20,12 +20,8 @@ import com.anthropic.models.messages.RawContentBlockStartEvent;
 import com.anthropic.models.messages.RawMessageDeltaEvent;
 import com.anthropic.models.messages.RawMessageStartEvent;
 import com.anthropic.models.messages.RawMessageStreamEvent;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import zordon.ai.AiStreamListener;
 import zordon.ai.ContentBlock;
 import zordon.ai.StopReason;
@@ -40,13 +36,10 @@ import zordon.api.TokenUsage;
  */
 final class StreamAccumulator {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     private final AiStreamListener listener;
     private final StringBuilder text = new StringBuilder();
     private final StringBuilder thinking = new StringBuilder();
-    private final Map<Long, PendingToolCall> toolCalls = new HashMap<>();
-    private final List<ContentBlock.ToolUse> completedCalls = new ArrayList<>();
+    private final ToolCallAssembler toolCalls;
 
     private TokenUsage usage = TokenUsage.NONE;
     private StopReason stopReason = StopReason.END_TURN;
@@ -54,13 +47,14 @@ final class StreamAccumulator {
 
     StreamAccumulator(AiStreamListener listener) {
         this.listener = listener;
+        this.toolCalls = new ToolCallAssembler(listener);
     }
 
     void accept(RawMessageStreamEvent event) {
         event.messageStart().ifPresent(this::onMessageStart);
         event.contentBlockStart().ifPresent(this::onBlockStart);
         event.contentBlockDelta().ifPresent(this::onDelta);
-        event.contentBlockStop().ifPresent(stop -> finishToolCall(stop.index()));
+        event.contentBlockStop().ifPresent(stop -> toolCalls.finish(stop.index()));
         event.messageDelta().ifPresent(this::onMessageDelta);
     }
 
@@ -76,7 +70,7 @@ final class StreamAccumulator {
 
     private void onBlockStart(RawContentBlockStartEvent event) {
         event.contentBlock().toolUse().ifPresent(block ->
-                toolCalls.put(event.index(), new PendingToolCall(block.id(), block.name(), new StringBuilder())));
+                toolCalls.start(event.index(), block.id(), block.name()));
     }
 
     private void onDelta(RawContentBlockDeltaEvent event) {
@@ -88,9 +82,7 @@ final class StreamAccumulator {
             thinking.append(delta.thinking());
             listener.onThinking(delta.thinking());
         });
-        event.delta().inputJson().ifPresent(delta ->
-                Optional.ofNullable(toolCalls.get(event.index()))
-                        .ifPresent(pending -> pending.json().append(delta.partialJson())));
+        event.delta().inputJson().ifPresent(delta -> toolCalls.append(event.index(), delta.partialJson()));
     }
 
     private void onMessageDelta(RawMessageDeltaEvent event) {
@@ -107,26 +99,6 @@ final class StreamAccumulator {
         listener.onUsage(usage);
     }
 
-    private void finishToolCall(long index) {
-        PendingToolCall pending = toolCalls.remove(index);
-        if (pending == null) {
-            return;
-        }
-        try {
-            String json = pending.json().isEmpty() ? "{}" : pending.json().toString();
-            ContentBlock.ToolUse call =
-                    new ContentBlock.ToolUse(pending.id(), pending.name(), MAPPER.readTree(json));
-            completedCalls.add(call);
-            listener.onToolUse(call);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            // Argumento inválido volta ao modelo como erro de ferramenta; abortar o
-            // turno inteiro por causa disto seria desproporcional.
-            listener.onError(new zordon.ai.AiException(
-                    zordon.ai.AiException.Kind.INVALID_REQUEST,
-                    "argumentos inválidos para " + pending.name(), e));
-        }
-    }
-
     List<ContentBlock> content() {
         List<ContentBlock> blocks = new ArrayList<>();
         if (!thinking.isEmpty()) {
@@ -135,7 +107,7 @@ final class StreamAccumulator {
         if (!text.isEmpty()) {
             blocks.add(new ContentBlock.Text(text.toString()));
         }
-        blocks.addAll(completedCalls);
+        blocks.addAll(toolCalls.completed());
         return blocks;
     }
 
@@ -168,6 +140,4 @@ final class StreamAccumulator {
             default -> StopReason.END_TURN;
         };
     }
-
-    private record PendingToolCall(String id, String name, StringBuilder json) {}
 }

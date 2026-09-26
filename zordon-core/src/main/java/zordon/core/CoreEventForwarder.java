@@ -16,21 +16,27 @@
 package zordon.core;
 
 import java.util.Set;
+import java.util.stream.Collectors;
+import zordon.api.event.Topic;
 import zordon.core.event.QueuePolicy;
 import zordon.core.event.ZordonEventBus;
 import zordon.core.zwp.ZwpServer;
-import zordon.api.event.Topic;
 
 /** Liga os dois fluxos de eventos do núcleo ao servidor ZWP. */
 final class CoreEventForwarder {
 
+    private CoreEventForwarder() {}
+
+    /**
+     * Duas assinaturas, porque as políticas de fila diferem: tópicos obrigatórios
+     * falham alto em vez de descartar em silêncio (ADR-0011).
+     */
     static void forward(ZordonEventBus bus, ZwpServer server) {
         Set<String> droppable = Topic.ALL.stream()
                 .filter(topic -> !Topic.MANDATORY.contains(topic))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                .collect(Collectors.toUnmodifiableSet());
         bus.subscribe("zwp-mandatory", Topic.MANDATORY, QueuePolicy.rejectPublish(512), server::broadcastEvent);
         bus.subscribe("zwp", droppable, QueuePolicy.dropOldest(1_024), server::broadcastEvent);
     }
 
-    private CoreEventForwarder() {}
 }

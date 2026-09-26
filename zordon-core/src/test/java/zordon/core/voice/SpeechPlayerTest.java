@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import zordon.api.trace.AcceptanceCriteria;
@@ -47,8 +48,7 @@ class SpeechPlayerTest {
         Clients clients = new Clients();
         clients.responder = call -> "audio.play".equals(call.method()) ? Map.of("accepted", true) : Map.of();
         List<Map<String, Object>> published = new CopyOnWriteArrayList<>();
-        VoiceService voice = new VoiceService(new VoiceStore(home.resolve("voice.json")), engine, clients,
-                published::add, new MutableClock(), null);
+        VoiceService voice = voice(engine, clients, published::add);
         voice.playbackHostConnected("h1");
         List<BinaryFrame> frames = new CopyOnWriteArrayList<>();
         SpeechPlayer player = new SpeechPlayer(engine, voice, clients, (session, frame) -> frames.add(frame));
@@ -78,8 +78,7 @@ class SpeechPlayerTest {
     @Test
     void aFilaGuardaNoMaximoTresEAutorizacaoPassaNaFrente() {
         Engine engine = new Engine();
-        VoiceService voice = new VoiceService(new VoiceStore(home.resolve("voice.json")), engine, new Clients(),
-                snapshot -> { }, new MutableClock(), null);
+        VoiceService voice = voice(engine, new Clients(), snapshot -> { });
         SpeechPlayer player = new SpeechPlayer(engine, voice, new Clients(), (session, frame) -> true);
 
         for (int i = 0; i < 5; i++) {
@@ -100,5 +99,12 @@ class SpeechPlayerTest {
             }
             Thread.sleep(20);
         }
+    }
+
+    /** Relógio falso: o prazo anda junto com o relógio do teste. */
+    private VoiceService voice(Engine engine, Clients clients, Consumer<Map<String, Object>> published) {
+        MutableClock clock = new MutableClock();
+        return new VoiceService(new VoiceService.Dependencies(new VoiceStore(home.resolve("voice.json")), engine,
+                clients, published, clock, null, AudioIngest.detached(), () -> clock.millis() * 1_000_000L));
     }
 }

@@ -20,36 +20,39 @@ import java.time.Instant;
 import java.util.Map;
 import zordon.api.event.EventEnvelope;
 
-/** Applies protocol events to the desktop state without bloating the state holder. */
+/** Os eventos do protocolo aplicados ao estado da tela. */
 final class DesktopEventApplier {
 
     private DesktopEventApplier() {}
 
     static void apply(DesktopState state, EventEnvelope event, Clock clock) {
-        state.lastSyncProperty().set(Instant.now(clock));
+        state.connection().lastSyncProperty().set(Instant.now(clock));
         Map<String, Object> payload = event.payload();
         switch (event.type()) {
             case USER_COMMAND -> {
-                state.turnRunningProperty().set(true);
-                state.currentTurnIdProperty().set(String.valueOf(payload.get("turnId")));
+                state.conversation().turnRunningProperty().set(true);
+                state.conversation().currentTurnIdProperty().set(String.valueOf(payload.get("turnId")));
             }
-            case AI_THINKING -> state.turnRunningProperty().set(true);
-            case AI_ERROR -> state.turnRunningProperty().set(false);
-            case VOICE_STATE -> state.voice(payload);
-            case ACTIVITY_STATE -> state.activityProperty().set(String.valueOf(payload.getOrDefault("state", "idle")));
-            case VOICE_LEVEL -> state.voiceLevelProperty().set(new double[] {number(payload.get("rms")),
+            case AI_THINKING -> state.conversation().turnRunningProperty().set(true);
+            case AI_ERROR -> state.conversation().turnRunningProperty().set(false);
+            case VOICE_STATE -> state.voice().apply(payload);
+            case ACTIVITY_STATE -> state.voice().activityProperty().set(String.valueOf(payload.getOrDefault("state", "idle")));
+            case VOICE_LEVEL -> state.voice().levelProperty().set(new double[] {number(payload.get("rms")),
                 number(payload.get("peak")), number(payload.getOrDefault("bass", -90)),
                 number(payload.getOrDefault("mid", -90)), number(payload.getOrDefault("treble", -90))});
-            case LOCKDOWN_ENTERED -> state.lockdown(true, String.valueOf(payload.getOrDefault("reason", "")));
-            case LOCKDOWN_EXITED -> state.lockdown(false, "");
-            case OPPRESSOR_ENTERED -> state.oppressorStatus(true, true);
-            case OPPRESSOR_EXITED -> state.oppressorProperty().set(false);
-            case SECURITY_NOTIFICATION -> state.notification(payload);
-            case VOICE_STOPPED -> state.transcription(payload, clock);
-            case AI_RESPONSE -> state.response(payload);
+            case LOCKDOWN_ENTERED -> state.security().lockdown(true, String.valueOf(payload.getOrDefault("reason", "")));
+            case LOCKDOWN_EXITED -> state.security().lockdown(false, "");
+            // Se entrou, é porque havia senha: os dois passam a valer.
+            case OPPRESSOR_ENTERED -> state.security().oppressorStatus(true, true);
+            case OPPRESSOR_EXITED -> state.security().oppressorProperty().set(false);
+            case SECURITY_NOTIFICATION -> state.security().notification(payload);
+            case VOICE_STOPPED -> state.voice().transcription(payload, clock);
+            case AI_RESPONSE -> state.conversation().response(payload);
             default -> { }
         }
     }
 
-    private static double number(Object value) { return value instanceof Number number ? number.doubleValue() : -90; }
+    private static double number(Object value) {
+        return value instanceof Number number ? number.doubleValue() : -90;
+    }
 }

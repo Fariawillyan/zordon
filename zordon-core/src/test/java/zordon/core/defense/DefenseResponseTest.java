@@ -88,7 +88,8 @@ class DefenseResponseTest {
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.SECURITY), QueuePolicy.dropOldest(256), events::add);
         notifications = new NotificationCenter(home.resolve("notifications.db"), Clock.systemUTC(), notices::add);
-        defense = new DefenseService(db.findings(), notifications, bus, new Redactor(), Clock.systemUTC(), System::nanoTime);
+        defense = new DefenseService(new DefenseService.Outlets(db.findings(), notifications, bus), new Redactor(),
+                Clock.systemUTC(), System::nanoTime);
         breakers = new CircuitBreakers(Clock.systemUTC());
         response = new DefenseEngine(breakers, db.securityEvents(), notifications, bus, new DefenseEngine.Actions() {
             @Override public boolean isolateMcp(String server) { return isolated.add(server); }

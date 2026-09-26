@@ -55,10 +55,10 @@ final class Inspector extends ScrollPane {
         content.setPadding(new Insets(16));
         setContent(content);
 
-        state.lastTurnProperty().addListener((observable, before, now) -> render());
-        state.usageProperty().addListener((observable, before, now) -> render());
+        state.conversation().lastTurnProperty().addListener((observable, before, now) -> render());
+        state.conversation().usageProperty().addListener((observable, before, now) -> render());
         state.diagnosticsProperty().addListener((observable, before, now) -> render());
-        state.turnRunningProperty().addListener((observable, before, now) -> render());
+        state.conversation().turnRunningProperty().addListener((observable, before, now) -> render());
         render();
     }
 
@@ -66,15 +66,15 @@ final class Inspector extends ScrollPane {
         cards.getChildren().clear();
         state.providerWarning().ifPresent(warning -> cards.getChildren().add(card("Atenção", warningText(warning))));
         cards.getChildren().add(card("Execução atual", currentTurn()));
-        cards.getChildren().add(card("Consumo desta sessão", usage(state.usageProperty().get())));
+        cards.getChildren().add(card("Consumo desta sessão", usage(state.conversation().usageProperty().get())));
         cards.getChildren().add(card("Núcleo", core(state.diagnosticsProperty().get())));
     }
 
     private Node currentTurn() {
-        if (state.turnRunningProperty().get()) {
+        if (state.conversation().turnRunningProperty().get()) {
             return muted("Turno em andamento…");
         }
-        TurnSummary turn = state.lastTurnProperty().get();
+        TurnSummary turn = state.conversation().lastTurnProperty().get();
         if (turn == null) {
             return muted("Nenhum turno ainda nesta sessão.");
         }

@@ -58,15 +58,15 @@ final class VoiceStatusStrip extends HBox {
         getChildren().addAll(microphone, speech, model, memory);
         getChildren().forEach(node -> HBox.setHgrow(node, Priority.ALWAYS));
 
-        state.voiceProperty().addListener((observable, before, now) -> render());
-        state.connectionProperty().addListener((observable, before, now) -> render());
+        state.voice().statusProperty().addListener((observable, before, now) -> render());
+        state.connection().stateProperty().addListener((observable, before, now) -> render());
         state.diagnosticsProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     private void render() {
-        VoiceStatus voice = state.voiceProperty().get();
-        boolean online = state.connectionProperty().get() == CoreConnection.State.ONLINE;
+        VoiceStatus voice = state.voice().statusProperty().get();
+        boolean online = state.connection().stateProperty().get() == CoreConnection.State.ONLINE;
         renderMicrophone(voice);
         renderSpeech(voice);
         renderModel(online);

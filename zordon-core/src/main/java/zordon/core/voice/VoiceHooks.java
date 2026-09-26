@@ -13,16 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package zordon.defense;
+package zordon.core.voice;
 
-import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
-/** Identificadores dos achados. */
-final class FindingId {
-
-    private FindingId() {}
-
-    static String next() {
-        return "fnd-" + UUID.randomUUID();
-    }
-}
+/**
+ * O que as partes da voz pedem ao {@link VoiceService}: o lock que protege todo o
+ * estado da voz, publicar o estado, reconciliar o microfone, ressincronizar o
+ * fluxo e duas perguntas sobre o estado das outras partes.
+ */
+record VoiceHooks(Object lock, Runnable publish, Runnable reconcile, Runnable resync, BooleanSupplier testing,
+        BooleanSupplier clickActive) {}

@@ -129,9 +129,9 @@ class PermissionUiTest {
         String[] read = new String[1];
         CriticalNotice notice = onFx(() -> new CriticalNotice(message, () -> read[0] = "lido"));
         NotificationBar bar = onFx(() -> {
-            state.notification(message);
-            state.notification(message);   // reenvio na reconexão não duplica
-            return new NotificationBar(state, new ShellActions() {
+            state.security().notification(message);
+            state.security().notification(message);   // reenvio na reconexão não duplica
+            return new NotificationBar(state, new FakeShellActions() {
                 @Override public void send(String text, zordon.desktop.shell.ComposerTarget target) {}
                 @Override public void newConversation() {}
                 @Override public void cancelTurn(String turnId) {}
@@ -145,12 +145,12 @@ class PermissionUiTest {
             });
         });
         onFx(() -> {
-            assertThat(state.notifications()).hasSize(1);
+            assertThat(state.security().notifications()).hasSize(1);
             assertThat(bar.isVisible()).isTrue();
             assertThat(bar.text()).contains("A auditoria foi alterada por fora");
             ((Button) notice.lookup("#critical-read")).fire();
             ((Button) bar.lookup("#notification-ack")).fire();
-            assertThat(state.notifications()).isEmpty();
+            assertThat(state.security().notifications()).isEmpty();
             assertThat(bar.isVisible()).isFalse();
             return null;
         });
@@ -162,7 +162,7 @@ class PermissionUiTest {
     void lockdownApareceNaPilulaENosAjustes() throws Exception {
         DesktopState state = onFx(DesktopState::new);
         boolean[] asked = new boolean[2];
-        ShellActions actions = new ShellActions() {
+        ShellActions actions = new FakeShellActions() {
             @Override public void send(String text, zordon.desktop.shell.ComposerTarget target) {}
             @Override public void newConversation() {}
             @Override public void cancelTurn(String turnId) {}
@@ -184,7 +184,7 @@ class PermissionUiTest {
                 Button toggle = (Button) settings.getContent().lookup("#lockdown-toggle");
                 assertThat(toggle.getText()).isEqualTo("Pausar Zordon");
                 toggle.fire();
-                state.lockdown(true, "pausado pelo usuário na janela");
+                state.security().lockdown(true, "pausado pelo usuário na janela");
                 assertThat(toggle.getText()).isEqualTo("Retomar Zordon");
                 assertThat(voice.pillVisible()).isTrue();
                 assertThat(voice.pillText()).isEqualTo(SecurityPresentation.PAUSED);
@@ -201,7 +201,7 @@ class PermissionUiTest {
     void servidorMcpQueMudouMostraAprovarEOBotaoPedeAoNucleo() throws Exception {
         DesktopState state = onFx(DesktopState::new);
         java.util.List<String> approved = new java.util.concurrent.CopyOnWriteArrayList<>();
-        ShellActions actions = new ShellActions() {
+        ShellActions actions = new FakeShellActions() {
             @Override public void send(String text, zordon.desktop.shell.ComposerTarget target) {}
             @Override public void newConversation() {}
             @Override public void cancelTurn(String turnId) {}
@@ -216,7 +216,7 @@ class PermissionUiTest {
         };
         McpView settings = onFx(() -> new McpView(state, actions));
         onFx(() -> {
-            state.mcpServers().setAll(
+            state.resources().mcpServers().setAll(
                     Map.of("name", "git", "state", "connected", "tools", java.util.List.of("mcp.git.log"), "drift", false),
                     Map.of("name", "docker", "state", "drift", "tools", java.util.List.of(), "drift", true));
             assertThat(settings.getContent().lookup("#mcp-approve-git")).as("sem mudança, sem botão").isNull();
@@ -231,7 +231,7 @@ class PermissionUiTest {
     void memoriaListaOsFatosEOBotaoEsquecePeloNucleo() throws Exception {
         DesktopState state = onFx(DesktopState::new);
         java.util.List<String> forgotten = new java.util.concurrent.CopyOnWriteArrayList<>();
-        ShellActions actions = new ShellActions() {
+        ShellActions actions = new FakeShellActions() {
             @Override public void send(String text, zordon.desktop.shell.ComposerTarget target) {}
             @Override public void newConversation() {}
             @Override public void cancelTurn(String turnId) {}
@@ -246,7 +246,7 @@ class PermissionUiTest {
         };
         MemoryView settings = onFx(() -> new MemoryView(state, actions));
         onFx(() -> {
-            state.memoryFacts().setAll(Map.of("id", "f_1", "kind", "PREFERENCE", "subject", "respostas",
+            state.resources().memoryFacts().setAll(Map.of("id", "f_1", "kind", "PREFERENCE", "subject", "respostas",
                     "content", "prefere respostas curtas", "observedAt", "2026-09-19T15:00:00Z"));
             javafx.scene.Node list = settings.getContent().lookup("#memory-list");
             assertThat(((javafx.scene.layout.VBox) list).getChildren()).hasSize(1);

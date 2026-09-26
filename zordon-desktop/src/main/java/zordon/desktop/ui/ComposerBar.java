@@ -71,7 +71,7 @@ final class ComposerBar extends VBox {
         field.setPrefRowCount(2);
         field.getStyleClass().add("composer-field");
         field.setAccessibleText("Mensagem para o Zordon");
-        field.textProperty().bindBidirectional(state.draftProperty());
+        field.textProperty().bindBidirectional(state.conversation().draftProperty());
         field.addEventHandler(InputMethodEvent.INPUT_METHOD_TEXT_CHANGED,
                 event -> composing = !event.getComposed().isEmpty());
         field.addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
@@ -83,9 +83,9 @@ final class ComposerBar extends VBox {
         send.setContentDisplay(javafx.scene.control.ContentDisplay.RIGHT);
         send.setOnAction(event -> submit());
         cancel.getStyleClass().add("button-secondary");
-        cancel.setOnAction(event -> actions.cancelTurn(state.currentTurnIdProperty().get()));
-        cancel.visibleProperty().bind(state.turnRunningProperty());
-        cancel.managedProperty().bind(state.turnRunningProperty());
+        cancel.setOnAction(event -> actions.cancelTurn(state.conversation().currentTurnIdProperty().get()));
+        cancel.visibleProperty().bind(state.conversation().turnRunningProperty());
+        cancel.managedProperty().bind(state.conversation().turnRunningProperty());
         Region bottomSpacer = new Region();
         HBox.setHgrow(bottomSpacer, Priority.ALWAYS);
         HBox bottom = new HBox(12, hint, bottomSpacer, cancel, send);
@@ -100,16 +100,16 @@ final class ComposerBar extends VBox {
     }
 
     private void bindState() {
-        field.disableProperty().bind(Bindings.isNotEmpty(state.composerBlockedReason()));
-        send.disableProperty().bind(Bindings.isNotEmpty(state.composerBlockedReason())
+        field.disableProperty().bind(Bindings.isNotEmpty(state.conversation().composerBlockedReason()));
+        send.disableProperty().bind(Bindings.isNotEmpty(state.conversation().composerBlockedReason())
                 .or(Bindings.createBooleanBinding(() -> field.getText().isBlank(), field.textProperty())));
         field.promptTextProperty().bind(Bindings.createStringBinding(
-                () -> state.composerBlockedReason().get().isEmpty()
+                () -> state.conversation().composerBlockedReason().get().isEmpty()
                         ? "O que vamos fazer agora?"
-                        : state.composerBlockedReason().get(),
-                state.composerBlockedReason()));
+                        : state.conversation().composerBlockedReason().get(),
+                state.conversation().composerBlockedReason()));
         target.textProperty().bind(Bindings.createStringBinding(
-                () -> state.composerTarget().label(), state.destinationProperty(), state.sessionIdProperty()));
+                () -> state.composerTarget().label(), state.destinationProperty(), state.conversation().sessionIdProperty()));
         model.textProperty().bind(Bindings.createStringBinding(
                 () -> modelLabel(state.diagnosticsProperty().get()), state.diagnosticsProperty()));
     }

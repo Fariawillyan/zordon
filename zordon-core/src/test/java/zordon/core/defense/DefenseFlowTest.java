@@ -81,7 +81,8 @@ class DefenseFlowTest {
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.SECURITY), QueuePolicy.dropOldest(256), events::add);
         notifications = new NotificationCenter(home.resolve("notifications.db"), Clock.systemUTC(), notices::add);
-        defense = new DefenseService(db.findings(), notifications, bus, new Redactor(), Clock.systemUTC(), System::nanoTime);
+        defense = new DefenseService(new DefenseService.Outlets(db.findings(), notifications, bus), new Redactor(),
+                Clock.systemUTC(), System::nanoTime);
         PermissionEngine.Approver allow = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.ONCE);
         Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(

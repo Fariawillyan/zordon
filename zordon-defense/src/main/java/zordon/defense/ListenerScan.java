@@ -18,65 +18,66 @@ package zordon.defense;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/** Tracks newly listening TCP ports. */
-final class HostWatchListeners {
+/** Portas novas em LISTEN, lidas de {@code /proc/net/tcp}. A primeira varredura só monta a linha de base. */
+final class ListenerScan {
 
-    private final Path proc;
-    private final Clock clock;
-    private final Consumer<Observation> sink;
+    static final Duration EVERY = Duration.ofSeconds(5);
+
+    private final HostWatch.Config config;
+    private final Consumer<String> errors;
     private final Set<String> listeners = new LinkedHashSet<>();
-    private String error;
-    private boolean first = true;
+    private boolean firstScan = true;
 
-    HostWatchListeners(HostWatch.Config config) {
-        proc = config.proc();
-        clock = config.clock();
-        sink = config.sink();
+    ListenerScan(HostWatch.Config config, Consumer<String> errors) {
+        this.config = config;
+        this.errors = errors;
     }
 
-    List<Observation> scan() {
+    synchronized List<Observation> scan() {
         Set<String> current = new LinkedHashSet<>();
         for (String file : List.of("net/tcp", "net/tcp6")) {
             try {
-                for (String line : Files.readAllLines(proc.resolve(file), StandardCharsets.UTF_8)) {
+                for (String line : Files.readAllLines(config.proc().resolve(file), StandardCharsets.UTF_8)) {
                     String[] fields = line.trim().split("\\s+");
-                    if (fields.length >= 4 && "0A".equals(fields[3])) {
-                        String local = fields[1];
-                        current.add(String.valueOf(Integer.parseInt(local.substring(local.indexOf(':') + 1), 16)));
+                    if (fields.length < 4 || !"0A".equals(fields[3])) {
+                        continue;   // 0A = LISTEN
                     }
+                    String local = fields[1];
+                    current.add(String.valueOf(Integer.parseInt(local.substring(local.indexOf(':') + 1), 16)));
                 }
             } catch (IOException | RuntimeException e) {
-                error = "portas: " + e.getMessage();
+                errors.accept("portas: " + e.getMessage());
             }
         }
         List<Observation> found = new ArrayList<>();
-        if (first) {
-            first = false;
+        if (firstScan) {
+            firstScan = false;
             listeners.addAll(current);
             return found;
         }
         for (String port : current) {
             if (listeners.add(port)) {
-                Observation observation = new Observation("host.new-listener",
-                        new Subject("port", port), "port:" + port, null, null, null, null, null, null,
-                        "uma porta nova apareceu escutando: " + port, false, java.util.Map.of("porta", port),
-                        clock.instant());
+                Observation observation = new Observation("host.new-listener", new Subject("port", port),
+                        "port:" + port, null, null, null, null, null, null,
+                        "uma porta nova apareceu escutando: " + port, false, Map.of("porta", port),
+                        config.clock().instant());
                 found.add(observation);
-                sink.accept(observation);
+                config.sink().accept(observation);
             }
         }
         listeners.retainAll(current);
         return found;
     }
 
-    int count() { return listeners.size(); }
-    String error() { return error; }
+    synchronized int count() {
+        return listeners.size();
+    }
 }

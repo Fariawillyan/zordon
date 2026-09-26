@@ -37,31 +37,32 @@ final class SecurityView extends DestinationPage {
 
     SecurityView(DesktopState state, ShellActions actions) {
         super("OPERAÇÃO", "Segurança", () -> {
-            actions.loadFindings();
-            actions.loadSecurityEvents();
+            actions.security().loadFindings();
+            actions.security().loadSecurityEvents();
         });
         this.state = state;
         this.actions = actions;
         setId("security-view");
-        repaintOn(state.findings(), state.breakers(), state.securityEvents());
-        state.lockdownProperty().addListener((observable, before, now) -> render());
+        repaintOn(state.security().findings(), state.security().breakers(), state.security().securityEvents());
+        state.security().lockdownProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     @Override
     void render() {
         // O kill switch, os achados e os disjuntores já existiam na aba "Segurança"
-        // dos Ajustes, mais completos do que uma segunda versão aqui seria — então
-        // esta tela os reusa e acrescenta só o que faltava: o que a defesa fez.
-        VBox events = rows(List.copyOf(state.securityEvents()), "Nenhuma ação de defesa registrada.",
+        // dos Ajustes (hoje em SecurityCards), mais completos do que uma segunda
+        // versão aqui seria — então esta tela os reusa e acrescenta só o que
+        // faltava: o que a defesa fez.
+        VBox events = rows(List.copyOf(state.security().securityEvents()), "Nenhuma ação de defesa registrada.",
                 SecurityView::eventRow);
         events.setId("security-events");
 
-        show(VoiceSettingsView.security(state, actions),
-                VoiceSettingsView.oppressor(state, actions),
-                VoiceSettingsView.notifications(state, actions),
+        show(SecurityCards.security(state, actions),
+                OppressorCard.oppressor(state, actions),
+                SecurityCards.notifications(state, actions),
                 Cards.section("O que a defesa fez", events),
-                VoiceSettingsView.quarantine(state, actions));
+                SecurityCards.quarantine(state, actions));
     }
 
     private static javafx.scene.Node eventRow(Map<String, Object> event) {

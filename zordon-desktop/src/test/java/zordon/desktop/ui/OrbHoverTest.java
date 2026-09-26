@@ -48,7 +48,7 @@ class OrbHoverTest {
         FxTestSupport.start();
     }
 
-    private static final ShellActions NO_ACTIONS = new ShellActions() {
+    private static final ShellActions NO_ACTIONS = new FakeShellActions() {
         @Override
         public void send(String text, ComposerTarget target) {}
 

@@ -440,7 +440,9 @@ class VoiceServiceTest {
     }
 
     private VoiceService service(Clients clients) {
-        return new VoiceService(new VoiceStore(store()), engine, clients, published::add, clock, null);
+        // Relógio falso: o prazo anda junto com o relógio do teste.
+        return new VoiceService(new VoiceService.Dependencies(new VoiceStore(store()), engine, clients, published::add,
+                clock, null, AudioIngest.detached(), () -> clock.millis() * 1_000_000L));
     }
 
     private Path store() {

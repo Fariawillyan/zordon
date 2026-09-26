@@ -148,9 +148,9 @@ class AgentsTest {
         AgentRunner runner = new AgentRunner(providers, new PromptComposer(), modelTools, bus)
                 .onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
         runtime.unregister(TurnScope.DELEGATE).register(new DelegateTool(registry, scopes, runner, nanos::get));
-        turns.onToolCalls(modelTools);
-        turns.onAgents(registry);
-        turns.onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
+        turns.hooks().onToolCalls(modelTools);
+        turns.hooks().onAgents(registry);
+        turns.hooks().onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
         return turns;
     }
 
@@ -284,7 +284,7 @@ class AgentsTest {
         ToolLoopTestSupport.Scripted slow = new ToolLoopTestSupport.Scripted()
                 .then(calls("system_metrics", Map.of("x", 1))).then(calls("system_metrics", Map.of("x", 2)));
         TurnManager clocked = turns(slow);
-        clocked.nanoClock(() -> nanos.addAndGet(Duration.ofSeconds(40).toNanos()));
+        clocked.hooks().nanoClock(() -> nanos.addAndGet(Duration.ofSeconds(40).toNanos()));
         Map<String, Object> third = awaitDone(clocked.send(session(), "curto: meça devagar", "text"));
         assertThat(third.get("text")).asString().contains("Parei no limite de tempo do agente curto.");
     }

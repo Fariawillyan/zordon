@@ -15,10 +15,21 @@
  */
 package zordon.desktop.ui;
 
-interface ShellConversationActions {
-    default void acknowledge(String messageId) {}
+/** A memória e a base de conhecimento (SPEC-021, SPEC-028). */
+public interface ShellMemoryActions {
+
+    /** Nada: para quem só mostra a tela, como os testes. */
+    ShellMemoryActions NONE = new ShellMemoryActions() { };
+
+    /** {@code memory.facts} (SPEC-021). */
     default void loadMemory() {}
+
+    /** Esquece um fato de verdade. Só a tela faz isso. */
     default void forgetFact(String factId) {}
+
+    /** {@code rag.status} e {@code rag.roots} (SPEC-028). */
     default void loadKnowledge() {}
+
+    /** {@code rag.reindex} (SPEC-028): só pela tela, e só quando o usuário manda. */
     default void reindexKnowledge() {}
 }

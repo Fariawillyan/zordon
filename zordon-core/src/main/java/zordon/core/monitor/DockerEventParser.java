@@ -17,24 +17,44 @@ package zordon.core.monitor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Valida e normaliza uma linha do stream de eventos do Docker. */
+/** O formato do {@code docker events --format {{json .}}}: uma linha JSON por evento. */
 final class DockerEventParser {
 
-    private static final Logger log = LoggerFactory.getLogger(DockerEventParser.class);
+    private static final Logger log = LoggerFactory.getLogger(DockerEvents.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    private DockerEventParser() {}
+
+    /** Lê o stream linha a linha enquanto {@code running} valer. */
+    static void lines(InputStream stdout, BooleanSupplier running, Consumer<String> each) throws IOException {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(stdout, StandardCharsets.UTF_8))) {
+            String line;
+            while (running.getAsBoolean() && (line = in.readLine()) != null) {
+                each.accept(line);
+            }
+        }
+    }
+
+    /** A linha como evento, se for um dos que interessam; o resto é descartado. */
     static Optional<Map<String, Object>> parse(String line) {
         JsonNode event;
         try {
             event = JSON.readTree(line);
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             log.warn("eventos do Docker: linha que não é JSON ignorada");
             return Optional.empty();
         }
@@ -56,5 +76,4 @@ final class DockerEventParser {
         return Optional.of(payload);
     }
 
-    private DockerEventParser() {}
 }

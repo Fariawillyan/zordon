@@ -15,14 +15,11 @@
  */
 package zordon.memory;
 
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A conversa e os fatos: o que o Zordon lembra (SPEC-021, ADR-0008).
@@ -36,12 +33,13 @@ public final class SqliteMemoryStore implements MemoryStore {
 
     static final int CANDIDATES = 30;
 
-    private static final Logger log = LoggerFactory.getLogger(SqliteMemoryStore.class);
     private final ZordonDatabase database;
     private final Sql sql;
     private final Clock clock;
     private final Embedder embedder;
     private final MemoryConversation conversation;
+    private final DistillQueue distill;
+    private final FactTable facts;
 
     SqliteMemoryStore(ZordonDatabase database) {
         this.database = database;
@@ -49,6 +47,8 @@ public final class SqliteMemoryStore implements MemoryStore {
         this.clock = database.clock();
         this.embedder = database.embedder();
         this.conversation = new MemoryConversation(sql);
+        this.distill = new DistillQueue(sql);
+        this.facts = new FactTable(sql);
     }
 
     /**
@@ -93,53 +93,14 @@ public final class SqliteMemoryStore implements MemoryStore {
             String normalized = normalize(fact.content());
             Instant now = clock.instant();
             if (!fact.corrects()) {
-                Fact existing = one("SELECT * FROM fact WHERE lower(subject) = lower(?) AND normalized = ? "
+                Fact existing = facts.one("SELECT * FROM fact WHERE lower(subject) = lower(?) AND normalized = ? "
                         + "AND superseded_by IS NULL AND (expires_at IS NULL OR expires_at > ?)",
                         fact.subject(), normalized, now.toString());
                 if (existing != null) {
                     return existing;
                 }
             }
-            String id = MemoryIds.fact(now);
-            try {
-                sql.connection().setAutoCommit(false);
-                try (var insert = sql.prepare(
-                        "INSERT INTO fact (id, kind, subject, content, normalized, confidence, observed_at, expires_at, "
-                                + "provenance, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                        var supersede = sql.prepare(
-                                "UPDATE fact SET superseded_by = ? WHERE kind = ? AND lower(subject) = lower(?) "
-                                        + "AND superseded_by IS NULL AND id <> ?")) {
-                    insert.setString(1, id);
-                    insert.setString(2, fact.kind().name());
-                    insert.setString(3, fact.subject());
-                    insert.setString(4, fact.content());
-                    insert.setString(5, normalized);
-                    insert.setDouble(6, fact.confidence());
-                    insert.setString(7, fact.observedAt().toString());
-                    insert.setString(8, fact.expiresAt() == null ? null : fact.expiresAt().toString());
-                    insert.setString(9, fact.provenance());
-                    insert.setString(10, fact.source());
-                    insert.executeUpdate();
-                    if (fact.corrects()) {
-                        supersede.setString(1, id);
-                        supersede.setString(2, fact.kind().name());
-                        supersede.setString(3, fact.subject());
-                        supersede.setString(4, id);
-                        int replaced = supersede.executeUpdate();
-                        log.info("fato {} substitui {} fato(s) de {}", id, replaced, fact.kind());
-                    }
-                    sql.connection().commit();
-                } catch (SQLException e) {
-                    sql.connection().rollback();
-                    throw e;
-                } finally {
-                    sql.connection().setAutoCommit(true);
-                }
-            } catch (SQLException e) {
-                throw Sql.failure("fato", e);
-            }
-            Fact stored = one("SELECT * FROM fact WHERE id = ?", id);
-            log.info("fato {} gravado ({}, {})", id, fact.kind(), fact.source());
+            Fact stored = facts.insert(fact, normalized, now);
             if (embedder != null) {
                 embedder.indexed(stored);
             }
@@ -155,12 +116,12 @@ public final class SqliteMemoryStore implements MemoryStore {
             String filter = MemorySearchPolicy.filter(query, params);
             Map<String, Double> fused = MemorySearchPolicy.fuse(rankings(query, filter, params));
             List<MemoryHit> hits = new ArrayList<>();
-            for (Map.Entry<String, Double> entry : fused.entrySet()) {
-                Fact fact = one("SELECT * FROM fact WHERE id = ?", entry.getKey());
+            fused.forEach((id, score) -> {
+                Fact fact = facts.one("SELECT * FROM fact WHERE id = ?", id);
                 if (MemorySearchPolicy.accepted(fact, query, now)) {
-                    hits.add(new MemoryHit(fact, entry.getValue() * MemorySearchPolicy.weight(fact, now)));
+                    hits.add(new MemoryHit(fact, score * MemorySearchPolicy.weight(fact, now)));
                 }
-            }
+            });
             MemorySearchPolicy.order(hits);
             return List.copyOf(hits.subList(0, Math.min(query.limit(), hits.size())));
         }
@@ -217,43 +178,25 @@ public final class SqliteMemoryStore implements MemoryStore {
                 params.add(subject);
             }
             sqlText.append(" ORDER BY observed_at DESC, id LIMIT ").append(Math.max(1, Math.min(limit, 500)));
-            return many(sqlText.toString(), params);
+            return facts.many(sqlText.toString(), params);
         }
     }
 
     @Override
     public void touched(Iterable<String> factIds) {
         synchronized (sql) {
-            try (var update = sql.prepare(
-                    "UPDATE fact SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?")) {
-                for (String id : factIds) {
-                    update.setString(1, clock.instant().toString());
-                    update.setString(2, id);
-                    update.addBatch();
-                }
-                update.executeBatch();
-            } catch (SQLException e) {
-                throw Sql.failure("acesso", e);
-            }
+            facts.touch(factIds, clock);
         }
     }
 
     @Override
     public boolean forget(String factId) {
         synchronized (sql) {
-            try (var delete = sql.prepare("DELETE FROM fact WHERE id = ?")) {
-                delete.setString(1, factId);
-                boolean gone = delete.executeUpdate() > 0;
-                if (gone) {
-                    log.info("fato {} esquecido a pedido do usuário", factId);
-                    if (embedder != null) {
-                        embedder.forgotten(factId);
-                    }
-                }
-                return gone;
-            } catch (SQLException e) {
-                throw Sql.failure("esquecer", e);
+            boolean gone = facts.delete(factId);
+            if (gone && embedder != null) {
+                embedder.forgotten(factId);
             }
+            return gone;
         }
     }
 
@@ -274,65 +217,22 @@ public final class SqliteMemoryStore implements MemoryStore {
 
     @Override
     public void enqueueDistill(String turnId, String sessionId, boolean tainted, Instant now) {
-        synchronized (sql) {
-            try (var insert = sql.prepare(
-                    "INSERT OR IGNORE INTO distill_queue (turn_id, session_id, tainted, created_at, next_at) "
-                            + "VALUES (?, ?, ?, ?, ?)")) {
-                insert.setString(1, turnId);
-                insert.setString(2, sessionId);
-                insert.setInt(3, tainted ? 1 : 0);
-                insert.setString(4, now.toString());
-                insert.setString(5, now.toString());
-                insert.executeUpdate();
-            } catch (SQLException e) {
-                throw Sql.failure("fila de destilação", e);
-            }
-        }
+        distill.enqueue(turnId, sessionId, tainted, now);
     }
 
     @Override
     public List<DistillJob> dueDistill(Instant now, int limit) {
-        synchronized (sql) {
-            try (var query = sql.prepare(
-                    "SELECT turn_id, session_id, tainted, attempts FROM distill_queue WHERE state = 'pending' "
-                            + "AND next_at <= ? ORDER BY next_at LIMIT ?")) {
-                query.setString(1, now.toString());
-                query.setInt(2, limit);
-                List<DistillJob> out = new ArrayList<>();
-                try (var row = query.executeQuery()) {
-                    while (row.next()) {
-                        out.add(new DistillJob(row.getString(1), row.getString(2), row.getInt(3) == 1, row.getInt(4)));
-                    }
-                }
-                return out;
-            } catch (SQLException e) {
-                throw Sql.failure("fila de destilação", e);
-            }
-        }
+        return distill.due(now, limit);
     }
 
     @Override
     public void distilled(String turnId) {
-        synchronized (sql) {
-            sql.update("UPDATE distill_queue SET state = 'done', attempts = attempts + 1 WHERE turn_id = ?", turnId);
-        }
+        distill.done(turnId);
     }
 
     @Override
     public void distillFailed(String turnId, String error, Instant nextAt, boolean giveUp) {
-        synchronized (sql) {
-            try (var update = sql.prepare(
-                    "UPDATE distill_queue SET attempts = attempts + 1, last_error = ?, next_at = ?, state = ? "
-                            + "WHERE turn_id = ?")) {
-                update.setString(1, error == null ? null : error.substring(0, Math.min(error.length(), 300)));
-                update.setString(2, nextAt.toString());
-                update.setString(3, giveUp ? "failed" : "pending");
-                update.setString(4, turnId);
-                update.executeUpdate();
-            } catch (SQLException e) {
-                throw Sql.failure("fila de destilação", e);
-            }
-        }
+        distill.failed(turnId, error, nextAt, giveUp);
     }
 
     @Override
@@ -347,31 +247,4 @@ public final class SqliteMemoryStore implements MemoryStore {
     static String normalize(String text) {
         return TimeWindows.plain(text).replaceAll("\\s+", " ").replaceAll("[\\s.!;,]+$", "").strip();
     }
-    private Fact one(String sqlText, String... params) {
-        List<Fact> found = many(sqlText, List.of(params));
-        return found.isEmpty() ? null : found.getFirst();
-    }
-
-    private List<Fact> many(String sqlText, List<String> params) {
-        try (var query = sql.prepare(sqlText)) {
-            for (int i = 0; i < params.size(); i++) {
-                query.setString(i + 1, params.get(i));
-            }
-            List<Fact> out = new ArrayList<>();
-            try (var row = query.executeQuery()) {
-                while (row.next()) {
-                    String expires = row.getString("expires_at");
-                    out.add(new Fact(row.getString("id"), FactKind.valueOf(row.getString("kind")),
-                            row.getString("subject"), row.getString("content"), row.getDouble("confidence"),
-                            Instant.parse(row.getString("observed_at")), expires == null ? null : Instant.parse(expires),
-                            row.getString("provenance"), row.getString("source"), row.getInt("access_count"),
-                            row.getString("superseded_by")));
-                }
-            }
-            return out;
-        } catch (SQLException e) {
-            throw Sql.failure("leitura de fatos", e);
-        }
-    }
-
 }

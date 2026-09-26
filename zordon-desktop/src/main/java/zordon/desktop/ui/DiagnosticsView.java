@@ -46,7 +46,7 @@ final class DiagnosticsView extends ScrollPane {
         setContent(content);
         state.diagnosticsProperty().addListener((observable, before, now) -> render());
         state.diagnosticsErrorProperty().addListener((observable, before, now) -> render());
-        state.reconnectionsProperty().addListener((observable, before, now) -> render());
+        state.connection().reconnectionsProperty().addListener((observable, before, now) -> render());
         render();
     }
 
@@ -67,8 +67,8 @@ final class DiagnosticsView extends ScrollPane {
         }
         Diagnostics diagnostics = state.diagnosticsProperty().get();
         content.getChildren().add(Cards.section("Esta janela", Inspector.rows(
-                "Conexão", state.coreLabel().get(),
-                "Quedas nesta sessão", String.valueOf(state.reconnectionsProperty().get()))));
+                "Conexão", state.connection().label().get(),
+                "Quedas nesta sessão", String.valueOf(state.connection().reconnectionsProperty().get()))));
         if (diagnostics == null) {
             return;
         }

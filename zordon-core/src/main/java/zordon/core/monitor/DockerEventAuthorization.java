@@ -15,6 +15,7 @@
  */
 package zordon.core.monitor;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -26,14 +27,14 @@ import zordon.api.security.RiskLevel;
 import zordon.security.Gatekeeper;
 import zordon.security.PermissionEngine;
 
-/** Builds and authorizes the fixed, read-only Docker monitor action. */
+/** A ação fixa, só de leitura, que o monitor do Docker pede ao Gatekeeper. */
 final class DockerEventAuthorization {
 
     private DockerEventAuthorization() {}
 
-    static Gatekeeper.Permit authorize(Gatekeeper gatekeeper, java.util.List<String> command) throws Exception {
+    static Gatekeeper.Permit authorize(Gatekeeper gatekeeper, List<String> command) throws Exception {
         ActionDescriptor action = new ActionDescriptor("monitor.docker", Map.of(), RiskLevel.GREEN,
-                Set.of(Effect.SPAWN_PROCESS), java.util.List.of(), 1, command,
+                Set.of(Effect.SPAWN_PROCESS), List.of(), 1, command,
                 "Acompanhar os eventos dos containers");
         return gatekeeper.authorize(action, new Principal("system:monitor", RequestOrigin.UI, false),
                 PermissionEngine.PolicyContext.interactive(), null).get(70, TimeUnit.SECONDS);

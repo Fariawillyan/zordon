@@ -84,8 +84,8 @@ class SidecarVoiceEngineTest {
                 @Override public void transcript(VoiceEngine.Transcript t) { events.add("final " + t.text()); }
             })).isTrue();
             engine.audio(1, new byte[640]);
-            SidecarVoiceEngine.Message listen = SidecarVoiceEngine.read(sidecar);
-            SidecarVoiceEngine.Message audio = SidecarVoiceEngine.read(sidecar);
+            EngineFrames.Message listen = EngineFrames.read(sidecar);
+            EngineFrames.Message audio = EngineFrames.read(sidecar);
             assertThat(header(listen)).containsEntry("op", "listen").containsEntry("id", 1);
             assertThat(header(audio)).containsEntry("op", "audio").containsEntry("bytes", 640);
             assertThat(audio.payload()).hasSize(640);
@@ -102,7 +102,7 @@ class SidecarVoiceEngineTest {
                 @Override public void chunk(int rate, byte[] pcm) { played.put(pcm); events.add("rate " + rate); }
                 @Override public void end(String reason) { events.add("tts_end"); }
             })).isTrue();
-            assertThat(header(SidecarVoiceEngine.read(sidecar))).containsEntry("op", "speak")
+            assertThat(header(EngineFrames.read(sidecar))).containsEntry("op", "speak")
                     .containsEntry("text", "São 15h40.")
                     .containsEntry("style", "normal");
             write(sidecar, Map.of("ev", "tts", "id", 2, "rate", 22050), new byte[20]);
@@ -118,9 +118,9 @@ class SidecarVoiceEngineTest {
     void oJavaLeEEscreveAMesmaMolduraDoPython() throws Exception {
         Path golden = Path.of(System.getProperty("zordon.repoRoot", "..")).resolve("voice/tests/golden");
 
-        SidecarVoiceEngine.Message fin = SidecarVoiceEngine.read(Channels.newChannel(
+        EngineFrames.Message fin = EngineFrames.read(Channels.newChannel(
                 Files.newInputStream(golden.resolve("final.bin"))));
-        SidecarVoiceEngine.Message tts = SidecarVoiceEngine.read(Channels.newChannel(
+        EngineFrames.Message tts = EngineFrames.read(Channels.newChannel(
                 Files.newInputStream(golden.resolve("tts.bin"))));
 
         assertThat(header(fin)).containsEntry("text", "que horas são").containsEntry("durationMs", 1840);
@@ -132,18 +132,18 @@ class SidecarVoiceEngineTest {
         header.put("confidence", 0.95);
         header.put("durationMs", 1840);
         header.put("reason", "end");
-        ByteBuffer java = SidecarVoiceEngine.encode(header, null);
+        ByteBuffer java = EngineFrames.encode(header, null);
         byte[] bytes = new byte[java.remaining()];
         java.get(bytes);
         assertThat(bytes).isEqualTo(Files.readAllBytes(golden.resolve("final.bin")));
     }
 
-    private static Map<Object, Object> header(SidecarVoiceEngine.Message message) {
+    private static Map<Object, Object> header(EngineFrames.Message message) {
         return new java.util.HashMap<>(message.header());
     }
 
     private static void write(SocketChannel channel, Map<String, Object> header, byte[] payload) throws Exception {
-        ByteBuffer frame = SidecarVoiceEngine.encode(header, payload);
+        ByteBuffer frame = EngineFrames.encode(header, payload);
         while (frame.hasRemaining()) {
             channel.write(frame);
         }

@@ -25,7 +25,7 @@ import zordon.security.SecuritySettings;
 /** Carrega a política uma vez e mantém o fallback restritivo quando o TOML é inválido. */
 final class SecuritySettingsLoader {
 
-    private static final Logger log = LoggerFactory.getLogger(SecuritySettingsLoader.class);
+    private static final Logger log = LoggerFactory.getLogger(ZordonCore.class);
 
     private final Path config;
     private final String home;
@@ -38,6 +38,7 @@ final class SecuritySettingsLoader {
         this.path = environment.get("PATH");
     }
 
+    /** Política inválida não derruba o núcleo: vale a padrão, que é a mais restrita, e isso é avisado. */
     synchronized SecuritySettings load() {
         if (loaded == null) {
             try {

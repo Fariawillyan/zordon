@@ -17,20 +17,22 @@ package zordon.defense;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
-/** Texto determinístico dos achados de defesa. */
+/** O título e o motivo de um achado, escritos por código a partir dos sinais. */
 final class FindingText {
 
     private FindingText() {}
 
+    /** O motivo, escrito por código: é o que o usuário lê para decidir (Defesa §4). */
     static String rationale(List<Signal> signals, double weight) {
         Map<String, Integer> counted = new LinkedHashMap<>();
         signals.forEach(signal -> counted.merge(signal.detectorId() + " (" + signal.kind() + ")", 1, Integer::sum));
         StringBuilder out = new StringBuilder();
         counted.forEach((name, times) -> out.append(out.isEmpty() ? "" : "; ").append(name)
                 .append(times > 1 ? " ×" + times : ""));
-        return out + ". Peso somado " + String.format(java.util.Locale.ROOT, "%.2f", weight)
+        return out + ". Peso somado " + String.format(Locale.ROOT, "%.2f", weight)
                 + " na janela de " + FindingWindow.SIZE.toSeconds() + " s.";
     }
 

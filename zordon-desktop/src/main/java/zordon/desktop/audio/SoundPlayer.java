@@ -19,8 +19,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
+import zordon.api.trace.Spec;
 
 /** One bounded output worker. The audio device's frame cursor drives visualization. */
+@Spec("SPEC-008")
 public final class SoundPlayer implements AutoCloseable {
     /**
      * O que aconteceu com o último som (SPEC-008 v2). "Tocou" só com prova: a
@@ -65,11 +67,8 @@ public final class SoundPlayer implements AutoCloseable {
     private final LongSupplier nanos;
     private volatile Outcome outcome;
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(1), runnable -> {
-                Thread thread = new Thread(runnable, "voice-feedback");
-                thread.setDaemon(true);
-                return thread;
-            }, new ThreadPoolExecutor.DiscardOldestPolicy());
+            new ArrayBlockingQueue<>(1), Thread.ofPlatform().name("voice-feedback").daemon().factory(),
+            new ThreadPoolExecutor.DiscardOldestPolicy());
     private volatile Output output;
     private volatile SoundSynthesizer.Sound sound;
     private volatile double volume = 0.35;
@@ -129,8 +128,9 @@ public final class SoundPlayer implements AutoCloseable {
         } catch (Exception failure) {
             synchronized (this) {
                 if (ticket == generation) {
-                    error = unavailableMessage();
-                    outcome = new Failed(error);
+                    Failed failed = PlaybackProof.unavailable(failure);
+                    error = failed.reason();
+                    outcome = failed;
                 }
             }
         } finally {
@@ -150,16 +150,11 @@ public final class SoundPlayer implements AutoCloseable {
         if (ticket != generation) {
             return;
         }
-        long position = line.framePosition();
-        if (position < rendered.frames() - POSITION_TOLERANCE) {
-            error = NOT_REPRODUCED;
-        } else if (elapsed < rendered.seconds() * REAL_TIME_FRACTION) {
-            error = NOT_REAL_TIME;
-        } else {
-            outcome = new Played(line.name(), rendered.frames(), rendered.seconds());
-            return;
+        Outcome judged = PlaybackProof.judge(line, rendered, elapsed);
+        if (judged instanceof Failed failed) {
+            error = failed.reason();
         }
-        outcome = new Failed(error);
+        outcome = judged;
     }
 
     public synchronized void stop() {
@@ -205,9 +200,4 @@ public final class SoundPlayer implements AutoCloseable {
     static boolean inWsl() {
         return JavaSoundOutput.inWsl();
     }
-
-    private static String unavailableMessage() {
-        return inWsl() && outputName().isEmpty() ? NO_OUTPUT_IN_WSL : OUTPUT_UNAVAILABLE;
-    }
-
 }

@@ -33,16 +33,16 @@ final class AgentsView extends DestinationPage {
     private final DesktopState state;
 
     AgentsView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "Agentes", actions::loadAgents);
+        super("RECURSOS", "Agentes", actions.data()::loadAgents);
         this.state = state;
         setId("agents-view");
-        repaintOn(state.agents());
+        repaintOn(state.resources().agents());
         render();
     }
 
     @Override
     void render() {
-        List<java.util.Map<String, Object>> all = List.copyOf(state.agents());
+        List<java.util.Map<String, Object>> all = List.copyOf(state.resources().agents());
         List<java.util.Map<String, Object>> loaded = all.stream().filter(a -> !a.containsKey("reason")).toList();
         List<java.util.Map<String, Object>> ignored = all.stream().filter(a -> a.containsKey("reason")).toList();
 

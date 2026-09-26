@@ -15,27 +15,15 @@
  */
 package zordon.ai.anthropic;
 
-import com.anthropic.core.JsonValue;
 import com.anthropic.models.messages.CacheControlEphemeral;
-import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
-import com.anthropic.models.messages.MessageParam;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ThinkingConfigAdaptive;
 import com.anthropic.models.messages.ThinkingConfigDisabled;
-import com.anthropic.models.messages.Tool;
-import com.anthropic.models.messages.ToolResultBlockParam;
-import com.anthropic.models.messages.ToolUseBlockParam;
-import com.fasterxml.jackson.databind.JsonNode;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import zordon.ai.AiMessage;
 import zordon.ai.AiRequest;
-import zordon.ai.ContentBlock;
 import zordon.ai.Effort;
-import zordon.ai.Role;
 import zordon.ai.Thinking;
 import zordon.ai.ToolSpec;
 
@@ -45,11 +33,9 @@ import zordon.ai.ToolSpec;
  * <p>Separado do provider porque é aqui que moram os detalhes que geram bug
  * silencioso quando errados — cache no lugar certo, pensamento adaptativo,
  * esforço dentro de {@code output_config} — e eles merecem teste próprio.
+ * Mensagens ficam em {@link AnthropicMessages}; ferramentas, em {@link AnthropicTools}.
  */
 final class AnthropicRequests {
-
-    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
-            new com.fasterxml.jackson.databind.ObjectMapper();
 
     private AnthropicRequests() {}
 
@@ -57,7 +43,7 @@ final class AnthropicRequests {
         MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(request.model())
                 .maxTokens(request.maxOutputTokens())
-                .messages(request.messages().stream().map(AnthropicRequests::toMessage).toList());
+                .messages(request.messages().stream().map(AnthropicMessages::toMessage).toList());
 
         if (!request.systemPrompt().isBlank()) {
             builder.systemOfTextBlockParams(List.of(systemBlock(request)));
@@ -67,7 +53,7 @@ final class AnthropicRequests {
         // requisições equivalentes precisam gerar os mesmos bytes.
         request.tools().stream()
                 .sorted(java.util.Comparator.comparing(ToolSpec::name))
-                .map(AnthropicRequests::toTool)
+                .map(AnthropicTools::toTool)
                 .forEach(builder::addTool);
 
         if (request.thinking() == Thinking.ADAPTIVE) {
@@ -99,53 +85,6 @@ final class AnthropicRequests {
         return block.build();
     }
 
-    private static MessageParam toMessage(AiMessage message) {
-        List<ContentBlockParam> blocks = new ArrayList<>();
-        for (ContentBlock block : message.content()) {
-            switch (block) {
-                case ContentBlock.Text text ->
-                    blocks.add(ContentBlockParam.ofText(TextBlockParam.builder().text(text.text()).build()));
-                case ContentBlock.ToolUse call ->
-                    blocks.add(ContentBlockParam.ofToolUse(ToolUseBlockParam.builder()
-                            .id(call.callId())
-                            .name(call.tool())
-                            .input(toInput(call.arguments()))
-                            .build()));
-                case ContentBlock.ToolResult result ->
-                    blocks.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                            .toolUseId(result.callId())
-                            .content(result.content())
-                            .isError(result.isError())
-                            .build()));
-                // O pensamento não volta para o modelo: ele é resumo para o usuário.
-                case ContentBlock.Thinking ignored -> { }
-            }
-        }
-        return MessageParam.builder()
-                .role(message.role() == Role.USER ? MessageParam.Role.USER : MessageParam.Role.ASSISTANT)
-                .contentOfBlockParams(blocks)
-                .build();
-    }
-
-    private static Tool toTool(ToolSpec spec) {
-        Tool.InputSchema.Properties.Builder properties = Tool.InputSchema.Properties.builder();
-        fields(spec.inputSchema().get("properties")).forEach(properties::putAdditionalProperty);
-
-        List<String> required = new ArrayList<>();
-        JsonNode declared = spec.inputSchema().get("required");
-        if (declared != null && declared.isArray()) {
-            declared.forEach(field -> required.add(field.asText()));
-        }
-        return Tool.builder()
-                .name(spec.name())
-                .description(spec.description())
-                .inputSchema(Tool.InputSchema.builder()
-                        .properties(properties.build())
-                        .required(required)
-                        .build())
-                .build();
-    }
-
     private static OutputConfig.Effort toEffort(Effort effort) {
         return switch (effort) {
             case LOW -> OutputConfig.Effort.LOW;
@@ -154,22 +93,5 @@ final class AnthropicRequests {
             case XHIGH -> OutputConfig.Effort.XHIGH;
             case MAX -> OutputConfig.Effort.MAX;
         };
-    }
-
-    private static ToolUseBlockParam.Input toInput(JsonNode arguments) {
-        ToolUseBlockParam.Input.Builder input = ToolUseBlockParam.Input.builder();
-        fields(arguments).forEach(input::putAdditionalProperty);
-        return input.build();
-    }
-
-    /** Campos de um objeto JSON como valores do SDK; objeto ausente vira vazio. */
-    private static Map<String, JsonValue> fields(JsonNode node) {
-        if (node == null || !node.isObject()) {
-            return Map.of();
-        }
-        Map<String, JsonValue> values = new java.util.LinkedHashMap<>();
-        node.properties().forEach(entry ->
-                values.put(entry.getKey(), JsonValue.from(MAPPER.convertValue(entry.getValue(), Object.class))));
-        return values;
     }
 }

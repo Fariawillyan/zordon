@@ -21,7 +21,7 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 
-/** Java Sound adapter kept outside the playback state machine. */
+/** A saída do Java Sound: a linha estéreo de 16 bits e o nome do dispositivo que vai tocar. */
 final class JavaSoundOutput {
 
     private JavaSoundOutput() {}
@@ -29,19 +29,27 @@ final class JavaSoundOutput {
     static String name() {
         DataLine.Info wanted = new DataLine.Info(SourceDataLine.class, format());
         for (Mixer.Info info : AudioSystem.getMixerInfo()) {
-            if (AudioSystem.getMixer(info).isLineSupported(wanted)) return info.getName();
+            if (AudioSystem.getMixer(info).isLineSupported(wanted)) {
+                return info.getName();
+            }
         }
         return "";
     }
 
-    static boolean inWsl() { return System.getenv("WSL_DISTRO_NAME") != null || System.getenv("WSL_INTEROP") != null; }
+    static boolean inWsl() {
+        return System.getenv("WSL_DISTRO_NAME") != null || System.getenv("WSL_INTEROP") != null;
+    }
 
     static SoundPlayer.Output open() throws Exception {
         AudioFormat audio = format();
         String name = name();
         SourceDataLine line = AudioSystem.getSourceDataLine(audio);
-        try { line.open(audio, 4096); }
-        catch (Exception failure) { line.close(); throw failure; }
+        try {
+            line.open(audio, 4096);
+        } catch (Exception failure) {
+            line.close();
+            throw failure;
+        }
         return new SoundPlayer.Output() {
             @Override public String name() { return name.isEmpty() ? "saída padrão" : name; }
             @Override public void start() { line.start(); }
@@ -52,5 +60,7 @@ final class JavaSoundOutput {
         };
     }
 
-    private static AudioFormat format() { return new AudioFormat(SoundSynthesizer.SAMPLE_RATE, 16, 2, true, false); }
+    private static AudioFormat format() {
+        return new AudioFormat(SoundSynthesizer.SAMPLE_RATE, 16, 2, true, false);
+    }
 }

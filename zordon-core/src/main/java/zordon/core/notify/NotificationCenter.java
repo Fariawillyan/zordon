@@ -16,13 +16,7 @@
 package zordon.core.notify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,6 +28,7 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.api.security.Severity;
+import zordon.api.trace.Spec;
 
 /**
  * O único caminho de toda comunicação iniciada pelo Zordon
@@ -43,6 +38,7 @@ import zordon.api.security.Severity;
  * está na fila e sai na próxima conexão. CRITICAL e HIGH ficam pendentes até o
  * usuário confirmar; INFO e WARNING expiram em 24 h.
  */
+@Spec("SPEC-015")
 public final class NotificationCenter implements AutoCloseable {
 
     /** Conteúdo de uma mensagem, agrupado para evitar chamadas ambíguas. */
@@ -63,21 +59,7 @@ public final class NotificationCenter implements AutoCloseable {
     public NotificationCenter(Path file, Clock clock, Consumer<ZordonMessage> delivery) {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.delivery = Objects.requireNonNull(delivery, "delivery");
-        try {
-            Files.createDirectories(file.toAbsolutePath().getParent());
-            Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
-            try (Statement s = connection.createStatement()) {
-                s.execute("PRAGMA journal_mode=WAL");
-                s.execute("PRAGMA busy_timeout=5000");
-                s.execute("""
-                        CREATE TABLE IF NOT EXISTS notification (
-                          id TEXT PRIMARY KEY, ts TEXT NOT NULL, severity TEXT NOT NULL,
-                          body TEXT NOT NULL, expires_at TEXT, acknowledged_at TEXT)""");
-            }
-            store = new NotificationStore(connection, json);
-        } catch (SQLException | IOException e) {
-            throw new IllegalStateException("fila de notificações indisponível em " + file + ": " + e.getMessage(), e);
-        }
+        this.store = NotificationStore.open(file, json);
     }
 
     /** Uma mensagem nova, com id e hora atribuídos aqui. */
@@ -119,8 +101,6 @@ public final class NotificationCenter implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-        try {
-            store.close();
-        } catch (RuntimeException e) { log.warn("fechando a fila de notificações: {}", e.getMessage()); }
+        store.close();
     }
 }

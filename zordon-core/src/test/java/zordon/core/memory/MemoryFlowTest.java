@@ -128,11 +128,11 @@ class MemoryFlowTest {
     private TurnManager turns(ToolLoopTestSupport.Scripted provider) {
         TurnManager turns = new TurnManager(bus, conversations, new IntentRouter(), new PromptComposer(),
                 ProviderRegistry.of(Map.of(ModelPolicy.DEFAULT_PROVIDER, provider), ModelPolicy.defaults()));
-        turns.onToolCalls(new ModelToolCaller(runtime));
-        turns.onTool((tool, args, source, turnId) -> runtime.invoke(tool, args,
+        turns.hooks().onToolCalls(new ModelToolCaller(runtime));
+        turns.hooks().onTool((tool, args, source, turnId) -> runtime.invoke(tool, args,
                 zordon.api.security.Principal.user(zordon.api.security.RequestOrigin.UI), turnId)
                 .thenApply(zordon.core.tools.ToolResult::text));
-        turns.onRecall(new MemoryContext(store, clock, ZoneOffset.UTC));
+        turns.hooks().onRecall(new MemoryContext(store, clock, ZoneOffset.UTC));
         return turns;
     }
 

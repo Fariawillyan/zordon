@@ -17,12 +17,36 @@ package zordon.desktop.ui;
 
 import zordon.desktop.shell.ComposerTarget;
 
-/** Contratos de ações da tela, agrupados por superfície para manter o shell pequeno. */
-public interface ShellActions extends ShellConversationActions, ShellVoiceActions, ShellSecurityActions, ShellDataActions {
+/**
+ * O que o shell pede a quem fala com o núcleo. A tela nunca chama o protocolo
+ * direto: é isso que permite exercitá-la sem núcleo nenhum.
+ *
+ * <p>Aqui ficam só as da conversa; as outras vêm agrupadas pela tela que as usa,
+ * como o estado: voz, segurança, memória e o trabalho (MCP, tarefas, automações,
+ * agentes, uso e sistema).
+ */
+public interface ShellActions {
 
     void send(String text, ComposerTarget target);
+
     void newConversation();
+
     void cancelTurn(String turnId);
+
     void refreshDiagnostics();
 
+    /** A voz não tem padrão: um botão de voz que não faz nada seria defeito silencioso. */
+    ShellVoiceActions voice();
+
+    default ShellSecurityActions security() {
+        return ShellSecurityActions.NONE;
+    }
+
+    default ShellMemoryActions memory() {
+        return ShellMemoryActions.NONE;
+    }
+
+    default ShellDataActions data() {
+        return ShellDataActions.NONE;
+    }
 }

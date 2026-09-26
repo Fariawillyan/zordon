@@ -43,7 +43,7 @@ import zordon.desktop.shell.VoiceStatus;
 
 @EnabledIfEnvironmentVariable(named = "DISPLAY", matches = ".+")
 class VoiceEffectsTest {
-    private static final ShellActions NO_ACTIONS = new ShellActions() {
+    private static final ShellActions NO_ACTIONS = new FakeShellActions() {
         @Override public void send(String text, ComposerTarget target) {}
         @Override public void newConversation() {}
         @Override public void cancelTurn(String turnId) {}
@@ -64,7 +64,7 @@ class VoiceEffectsTest {
     void consoleFitsAndRendersAtBothWidths(int width) throws Exception {
         VoiceView view = onFx(() -> {
             DesktopState state = new DesktopState();
-            state.voice(snapshot("idle", false));
+            state.voice().apply(snapshot("idle", false));
             VoiceView built = new VoiceView(state, NO_ACTIONS);
             Stage stage = new Stage();
             stage.setScene(FxTestSupport.styledScene(built, width, 940));
@@ -122,7 +122,7 @@ class VoiceEffectsTest {
                 assertThat(((Button) view.lookup("#voice-test")).isDisabled()).isFalse();
                 Slider volume = (Slider) view.lookup("#voice-volume");
                 volume.setValue(62);
-                state.voice(snapshot("idle", false));
+                state.voice().apply(snapshot("idle", false));
                 assertThat(((Slider) view.lookup("#voice-volume")).getValue()).isEqualTo(62);
                 // Os detalhes do microfone moraram num painel recolhido da Voz; desde a
                 // SPEC-010 eles estão nos Ajustes. A garantia é a mesma.

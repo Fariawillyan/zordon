@@ -55,7 +55,7 @@ class DestinationPagesTest {
     }
 
     /** Conta o que cada tela pediu ao núcleo, sem responder nada. */
-    private static class Loads implements ShellActions {
+    private static class Loads extends FakeShellActions {
         private final List<String> calls = new ArrayList<>();
 
         @Override
@@ -213,7 +213,7 @@ class DestinationPagesTest {
                     .satisfies(node -> assertThat(((javafx.scene.control.Label) node).getText())
                             .contains("Nenhum agente"));
 
-            state.agents().add(Map.of("id", "research", "description", "Pesquisa", "ceiling", "green",
+            state.resources().agents().add(Map.of("id", "research", "description", "Pesquisa", "ceiling", "green",
                     "role", "agent_light", "source", "builtin"));
             // O render troca os nós, então a lista de antes não serve mais.
             javafx.scene.layout.VBox list = (javafx.scene.layout.VBox) inside(shell, "#agents-view", "#agent-list");

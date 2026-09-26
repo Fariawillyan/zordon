@@ -32,7 +32,7 @@ import zordon.desktop.shell.Destination;
 @EnabledIfEnvironmentVariable(named = "DISPLAY", matches = ".+")
 class OppressorThemeTest {
 
-    private static final ShellActions NO_ACTIONS = new ShellActions() {
+    private static final ShellActions NO_ACTIONS = new FakeShellActions() {
         @Override public void send(String text, ComposerTarget target) {}
         @Override public void newConversation() {}
         @Override public void cancelTurn(String turnId) {}
@@ -71,14 +71,14 @@ class OppressorThemeTest {
             assertThat(shell.getStyleClass()).doesNotContain("oppressor");
             assertThat(banner(shell).isVisible()).isFalse();
 
-            state.oppressorProperty().set(true);
+            state.security().oppressorProperty().set(true);
             shell.applyCss();
 
             assertThat(shell.getStyleClass()).containsOnlyOnce("oppressor");
             assertThat(banner(shell).isVisible()).isTrue();
             assertThat(banner(shell).getText().replace(" ", "")).isEqualTo("OPPRESSORMODE");
 
-            state.oppressorProperty().set(false);
+            state.security().oppressorProperty().set(false);
 
             // Sair volta na hora: o tema não fica pendurado até a próxima tela.
             assertThat(shell.getStyleClass()).doesNotContain("oppressor");
@@ -92,7 +92,7 @@ class OppressorThemeTest {
     void aFaixaApareceEmQualquerTela() throws Exception {
         onFx(() -> {
             DesktopState state = new DesktopState();
-            state.oppressorProperty().set(true);
+            state.security().oppressorProperty().set(true);
             // Uma cena só para todos os destinos: a faixa mora na raiz, e um
             // Stage por destino derruba a JVM de teste antes do fim da suíte.
             ZordonShell shell = shell(state);

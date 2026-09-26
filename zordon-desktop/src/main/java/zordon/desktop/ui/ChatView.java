@@ -17,6 +17,8 @@ package zordon.desktop.ui;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
@@ -30,10 +32,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.skin.VirtualFlow;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import zordon.desktop.shell.ScrollFollow;
 
 /**
@@ -63,7 +63,7 @@ final class ChatView extends VBox {
 
     private final ObservableList<Item> items = FXCollections.observableArrayList();
     private final ListView<Item> list = new ListView<>(items);
-    private final java.util.HashMap<String, Item> streaming = new java.util.HashMap<>();
+    private final Map<String, Item> streaming = new HashMap<>();
     private final ScrollFollow follow = new ScrollFollow();
     private final Button newMessages = new Button("Novas mensagens ↓");
 
@@ -78,17 +78,7 @@ final class ChatView extends VBox {
         this.technical = technical;
         getStyleClass().add("chat-view");
 
-        Label title = new Label("Conversa atual");
-        title.getStyleClass().add("page-title");
-        Button create = new Button("Nova conversa", Icons.of("plus", 16, Color.web("#9AA7BC")));
-        create.getStyleClass().add("button-tertiary");
-        create.setOnAction(event -> onNewConversation.run());
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox header = new HBox(12, title, spacer, create);
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(20, 24, 16, 24));
-        header.getStyleClass().add("page-header");
+        ChatHeader header = new ChatHeader(onNewConversation);
 
         list.getStyleClass().add("chat-list");
         list.setCellFactory(view -> new MessageCell());
@@ -159,7 +149,7 @@ final class ChatView extends VBox {
     }
 
     int renderedCells() {
-        return (int) list.lookupAll(".list-cell").stream().filter(node -> ((ListCell<?>) node).getItem() != null).count();
+        return (int) list.lookupAll(".list-cell").stream().filter(node -> node instanceof MessageCell cell && cell.getItem() != null).count();
     }
 
     int size() {

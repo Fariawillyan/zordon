@@ -19,6 +19,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +84,7 @@ public final class DetectionEngine {
         double weight = signals.stream().mapToDouble(Signal::weight).sum();
         Severity severity = severity(weight);
         String detector = signals.stream().map(Signal::detectorId).distinct().reduce((a, b) -> a + ", " + b).orElse("");
-        Finding finding = new Finding(current == null ? FindingId.next() : current.id(), severity, detector,
+        Finding finding = new Finding(current == null ? "fnd-" + UUID.randomUUID() : current.id(), severity, detector,
                 subject, FindingText.title(subject, signals), FindingText.rationale(signals, weight), signals, signals.size(),
                 current == null ? now : current.firstSeen(), now);
         open.put(key, finding);

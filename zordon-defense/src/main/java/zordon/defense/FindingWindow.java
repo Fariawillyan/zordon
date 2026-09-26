@@ -18,7 +18,7 @@ package zordon.defense;
 import java.time.Duration;
 import java.time.Instant;
 
-/** Janela temporal de correlação dos achados. */
+/** A janela de correlação: sinais do mesmo sujeito dentro dela somam no mesmo achado. */
 final class FindingWindow {
 
     static final Duration SIZE = Duration.ofSeconds(60);

@@ -28,12 +28,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import zordon.api.trace.Spec;
+import zordon.security.LiveProcess;
 
 /**
  * Um servidor MCP pelo transporte {@code stdio}: JSON-RPC 2.0, uma mensagem por
  * linha (SPEC-020). Todo pedido tem prazo; uma resposta que nunca vem não trava
  * ninguém.
  */
+@Spec("SPEC-020")
 public final class McpClient implements AutoCloseable {
 
     /** Uma linha maior que isto é cortada: o servidor não enche a memória do núcleo. */
@@ -41,8 +46,10 @@ public final class McpClient implements AutoCloseable {
     /** Três mensagens seguidas que não são JSON derrubam a conexão (SPEC-020 §13). */
     static final int MAX_INVALID = 3;
 
+    private static final Logger log = LoggerFactory.getLogger(McpClient.class);
+
     private final String name;
-    private final zordon.security.LiveProcess live;
+    private final LiveProcess live;
     private final OutputStream out;
     private final Map<Long, CompletableFuture<Map<String, Object>>> pending = new ConcurrentHashMap<>();
     private final AtomicLong ids = new AtomicLong();
@@ -50,7 +57,7 @@ public final class McpClient implements AutoCloseable {
     private volatile boolean closed;
     private int invalid;
 
-    public McpClient(String name, zordon.security.LiveProcess live, Runnable onClosed) {
+    public McpClient(String name, LiveProcess live, Runnable onClosed) {
         this.name = Objects.requireNonNull(name, "name");
         this.live = Objects.requireNonNull(live, "live");
         this.out = live.stdin();
@@ -112,10 +119,12 @@ public final class McpClient implements AutoCloseable {
                 line.setLength(0);
                 oversized = false;
                 if (invalid >= MAX_INVALID) {
+                    log.warn("MCP {}: {} mensagens seguidas que não são JSON; conexão encerrada", name, invalid);
                     break;
                 }
             }
         } catch (IOException e) {
+            log.debug("MCP {}: leitura encerrada: {}", name, e.getMessage());
         } finally {
             closed = true;
             if (invalid >= MAX_INVALID) {
@@ -130,6 +139,7 @@ public final class McpClient implements AutoCloseable {
 
     /** A resposta passou de 1 MB: falha o pedido dela em vez de esperar o prazo. */
     private void tooLarge(CharSequence start) {
+        log.warn("MCP {}: mensagem maior que 1 MB descartada", name);
         Long id = McpJson.id(start.subSequence(0, Math.min(start.length(), 256)));
         if (id != null) {
             CompletableFuture<Map<String, Object>> answer = pending.get(id);
@@ -145,6 +155,7 @@ public final class McpClient implements AutoCloseable {
             message = McpJson.decode(line);
         } catch (IOException e) {
             invalid++;
+            log.warn("MCP {}: linha que não é JSON ignorada", name);
             return;
         }
         invalid = 0;

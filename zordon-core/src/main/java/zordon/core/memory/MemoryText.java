@@ -26,6 +26,7 @@ import zordon.memory.NewFact;
 /** Regras puras de classificação e apresentação da memória. */
 final class MemoryText {
 
+    /** Uma linha legível para o modelo e para a voz: data, tipo, assunto e o fato. */
     static String line(Fact fact, ZoneId zone) {
         return "- " + LocalDate.ofInstant(fact.observedAt(), zone) + " · " + label(fact.kind()) + " · "
                 + fact.subject() + ": " + fact.content();
@@ -41,6 +42,7 @@ final class MemoryText {
         };
     }
 
+    /** O tipo pelas palavras (SPEC-021 §3). */
     static FactKind kindOf(String content) {
         String plain = java.text.Normalizer.normalize(content.toLowerCase(java.util.Locale.ROOT),
                 java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
@@ -56,6 +58,7 @@ final class MemoryText {
         return FactKind.ENTITY;
     }
 
+    /** O assunto: o nome do projeto, ou as primeiras palavras que dizem algo. */
     static String subjectOf(FactKind kind, String content) {
         var project = java.util.regex.Pattern.compile("(?i)\\bprojeto\\s+([\\p{L}\\p{N}_.-]+)")
                 .matcher(content);

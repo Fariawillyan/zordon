@@ -16,24 +16,11 @@
 package zordon.desktop.ui;
 
 import javafx.animation.AnimationTimer;
-import javafx.beans.value.ChangeListener;
-import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.Slider;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
-import javafx.stage.Window;
 import zordon.api.trace.Spec;
 import zordon.desktop.audio.SoundPlayer;
-import zordon.desktop.audio.SoundSynthesizer;
 import zordon.desktop.audio.SoundSynthesizer.Cue;
 import zordon.desktop.shell.VoiceStatus;
 
@@ -44,27 +31,12 @@ final class VoiceEffectsPane extends Pane {
     /** A saída padrão, lida uma vez: consultar o sistema a 30 fps custaria caro. */
     private final String outputName;
     private final VoiceVisualizer visualizer;
-    private final Button test = new Button("▶  Testar som");
-    private final Button stop = new Button("■  Parar");
-    private final Label status = new Label("●  PRONTO PARA TESTAR");
     /** Resultado do último som, sob o medidor; some em repouso, como na referência. */
     private final Label caption = new Label();
-    private final HBox buttons = new HBox(14);
-    private final VBox card = new VBox(14);
-    /** Onde o seletor de modo de voz entra, quando a tela o fornece (SPEC-033). */
-    private final VBox modeSlot = new VBox();
+    private final VoiceConsoleButtons buttons;
+    private final VoiceEffectsSettings card;
     private Node topCenter;
-    /** A esfera é o botão de falar (SPEC-011 CA-7): invisível, circular, acessível. */
-    private final Button talk = new Button();
-    private final ComboBox<Cue> cue = new ComboBox<>();
-    private final Slider volume = new Slider(0, 100, 35);
-    private final ToggleButton mute = new ToggleButton("Silenciar");
-    private final CheckBox echo = option("Eco", true);
-    private final CheckBox reverb = option("Reverberação", true);
-    private final CheckBox soft = option("Filtro suave", false);
-    private final CheckBox stereo = option("Abertura estéreo", true);
-    private final CheckBox automatic = option("Feedback automático da voz", false);
-    private final CheckBox reduced = option("Reduzir movimento", false);
+    private final TalkOrb talk = new TalkOrb();
     private boolean active;
     private boolean timerRunning;
     private long lastFrame;
@@ -77,10 +49,6 @@ final class VoiceEffectsPane extends Pane {
             if (!player.playing()) stopTimer();
         }
     };
-    private final ChangeListener<Boolean> showingListener = (obs, before, now) -> {
-        if (!now) pause();
-    };
-    private final ChangeListener<Window> windowListener = (obs, before, now) -> observeWindow(before, now);
 
     VoiceEffectsPane() { this(new SoundPlayer()); }
 
@@ -94,91 +62,14 @@ final class VoiceEffectsPane extends Pane {
         visualizer = new VoiceVisualizer(player);
         getStyleClass().add("voice-console");
         setId("voice-effects");
-        test.getStyleClass().addAll("console-button", "console-primary");
-        test.setId("voice-test");
-        test.setOnAction(event -> { if (player.playing()) pause(); else play(cue.getValue()); });
-        stop.getStyleClass().add("button-secondary");
-        stop.setId("voice-stop");
-        stop.setDisable(true);
-        stop.setOnAction(event -> pause());
-        ToggleButton settings = new ToggleButton("Ajustes",
-                Icons.of("settings", 14, javafx.scene.paint.Color.web("#C7D6E2")));
-        settings.getStyleClass().add("console-button");
-        settings.setId("voice-settings-toggle");
-        buttons.getChildren().addAll(test, settings);
-
-        cue.getItems().setAll(Cue.values());
-        cue.setValue(Cue.ACTIVATE);
-        cue.setAccessibleText("Sinal sonoro para testar");
-        cue.setId("voice-cue");
-        FlowPane effects = new FlowPane(16, 12, echo, reverb, soft, stereo);
-        FlowPane preferences = new FlowPane(16, 12, automatic, reduced);
-        Label help = new Label("Efeitos aplicados ao próximo sinal. O volume também ajusta o som atual."
-                + "\nÁudio local de feedback; não altera nem testa o microfone. Ajustes válidos nesta sessão.");
-        help.getStyleClass().add("voice-caption");
-        help.setWrapText(true);
-        // O modo de voz entra no topo: é o ajuste que o usuário vem procurar aqui.
-        VBox settingsBody = new VBox(14, modeSlot,
-                new FlowPane(12, 8, new Label("Sinal"), cue, stop), effects, preferences, help);
-        settingsBody.getStyleClass().add("voice-settings");
-        settingsBody.setId("voice-settings");
-        card.visibleProperty().bind(settings.selectedProperty());
-        reduced.selectedProperty().addListener((obs, old, value) -> visualizer.reducedMotion(value));
-        automatic.selectedProperty().addListener((obs, old, value) -> { if (!value) pause(); });
-
-        volume.setId("voice-volume");
-        volume.setAccessibleText("Volume dos efeitos sonoros");
-        volume.setPrefWidth(125);
-        volume.setMaxWidth(125);
-        volume.setBlockIncrement(5);
-        Label percentage = new Label("35%");
-        percentage.setMinWidth(36);
-        percentage.getStyleClass().add("voice-caption");
-        volume.valueProperty().addListener((obs, old, value) -> {
-            percentage.setText(Math.round(value.doubleValue()) + "%");
-            updateVolume();
-        });
-        mute.getStyleClass().add("mode-option");
-        mute.setId("voice-mute");
-        mute.selectedProperty().addListener((obs, old, value) -> {
-            mute.setText(value ? "Ativar som" : "Silenciar");
-            if (value) pause();
-            updateVolume();
-        });
-        HBox volumeBox = new HBox(10, new Label("Volume"), volume, percentage, mute);
-        volumeBox.setAlignment(Pos.CENTER_LEFT);
-        volumeBox.getStyleClass().add("voice-volume-box");
-        status.getStyleClass().add("voice-output-status");
-        status.setWrapText(true);
-        status.setMaxWidth(330);
-        status.setId("voice-output-status");
+        buttons = new VoiceConsoleButtons(this::testOrStop);
+        card = new VoiceEffectsSettings(this::pause, this::updateVolume, visualizer::reducedMotion);
+        card.visibleProperty().bind(buttons.settingsOpen());
         caption.getStyleClass().add("console-caption");
         caption.setId("voice-output-caption");
         caption.setWrapText(true);
-        card.getStyleClass().add("console-card");
-        card.getChildren().addAll(settingsBody, volumeBox, status);
-        talk.setId("voice-talk");
-        talk.getStyleClass().add("orb-button");
-        talk.setAccessibleText("Falar com o Zordon");
-        talk.setTooltip(new javafx.scene.control.Tooltip("Falar com o Zordon (Ctrl+Espaço)"));
         getChildren().addAll(visualizer, talk, caption, buttons, card);
-        sceneProperty().addListener((obs, before, now) -> observeScene(before, now));
-    }
-
-    private void observeScene(Scene before, Scene now) {
-        if (before != null) {
-            before.windowProperty().removeListener(windowListener);
-            observeWindow(before.getWindow(), null);
-        }
-        if (now != null) {
-            now.windowProperty().addListener(windowListener);
-            observeWindow(null, now.getWindow());
-        } else pause();
-    }
-
-    private void observeWindow(Window before, Window now) {
-        if (before != null) before.showingProperty().removeListener(showingListener);
-        if (now != null) now.showingProperty().addListener(showingListener);
+        ShowingGuard.install(this, this::pause);
     }
 
     void active(boolean value) { active = value; if (!value) pause(); }
@@ -206,10 +97,9 @@ final class VoiceEffectsPane extends Pane {
         return visualizer.activity();
     }
 
-    /** Um nó no alto da moldura, centrado no eixo da esfera (a pílula de estado da SPEC-010). */
     /** Põe o seletor de modo no alto do painel de Ajustes. */
     void modeControl(Node control) {
-        modeSlot.getChildren().setAll(control);
+        card.modeControl(control);
     }
 
     void topCenter(Node node) {
@@ -251,9 +141,7 @@ final class VoiceEffectsPane extends Pane {
         card.resizeRelocate(right - cardWidth, cardTop, cardWidth, Math.max(0, cardHeight));
 
         double orb = 2 * 150 * scale;
-        talk.setShape(new javafx.scene.shape.Circle(orb / 2));
-        talk.resizeRelocate(frame.getMinX() + VoiceVisualizer.CX * scale - orb / 2,
-                frame.getMinY() + VoiceVisualizer.CY * scale - orb / 2, orb, orb);
+        talk.place(frame.getMinX() + VoiceVisualizer.CX * scale, frame.getMinY() + VoiceVisualizer.CY * scale, orb);
 
         if (topCenter != null) {
             double width = topCenter.prefWidth(-1);
@@ -262,18 +150,22 @@ final class VoiceEffectsPane extends Pane {
         }
     }
 
+    private void testOrStop() {
+        if (player.playing()) pause();
+        else play(card.cue());
+    }
+
     private void play(Cue selected) {
         if (!active || getScene() == null || getScene().getWindow() == null
-                || !getScene().getWindow().isShowing() || mute.isSelected() || volume.getValue() == 0) return;
-        player.play(selected, new SoundSynthesizer.Settings(
-                echo.isSelected(), reverb.isSelected(), soft.isSelected(), stereo.isSelected()));
+                || !getScene().getWindow().isShowing() || card.silenced()) return;
+        player.play(selected, card.effects());
         refreshStatus();
         timerRunning = true;
         timer.start();
     }
 
     void feedback(VoiceStatus before, VoiceStatus now) {
-        if (!active || !automatic.isSelected() || before == null || now == null
+        if (!active || !card.automaticFeedback() || before == null || now == null
                 || !now.hostConnected() || !"ready".equals(now.engine()) || !"on".equals(now.capture())
                 || java.util.Objects.equals(before.activity(), now.activity())) return;
         Cue signal = switch (now.activity()) {
@@ -286,21 +178,19 @@ final class VoiceEffectsPane extends Pane {
     }
 
     private void updateVolume() {
-        player.setVolume(mute.isSelected() ? 0 : volume.getValue() / 100);
+        player.setVolume(card.level());
         refreshStatus();
         visualizer.tick();
     }
 
     private void refreshStatus() {
         String text = statusText();
-        status.setText(text);
+        card.show(text, player.playing());
         // Em repouso ("pronto para testar") o console fica igual à referência.
         boolean resting = text.startsWith("●  PRONTO");
         caption.setText(resting ? "" : text);
         caption.setVisible(!resting);
-        stop.setDisable(!player.playing());
-        test.setDisable(mute.isSelected() || volume.getValue() == 0);
-        test.setText(player.playing() ? "■  Parar som" : "▶  Testar som");
+        buttons.refresh(player.playing(), card.silenced());
     }
 
     /** SPEC-008 v2 §3: diz onde o som vai tocar e, depois, se tocou de fato. */
@@ -308,7 +198,7 @@ final class VoiceEffectsPane extends Pane {
         if (!player.error().isEmpty()) {
             return player.error();
         }
-        if (mute.isSelected() || volume.getValue() == 0) {
+        if (card.silenced()) {
             return "●  SOM SILENCIADO";
         }
         String output = outputName.isEmpty() ? "nenhuma saída encontrada" : outputName;
@@ -332,10 +222,4 @@ final class VoiceEffectsPane extends Pane {
     private void stopTimer() { timer.stop(); timerRunning = false; }
     boolean animating() { return timerRunning; }
     void close() { pause(); player.close(); }
-
-    private static CheckBox option(String text, boolean selected) {
-        CheckBox check = new CheckBox(text);
-        check.setSelected(selected);
-        return check;
-    }
 }

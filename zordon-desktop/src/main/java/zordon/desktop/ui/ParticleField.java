@@ -17,23 +17,25 @@ package zordon.desktop.ui;
 
 import java.util.Random;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.paint.Color;
 
-/** Renders the three particle planes around the orb. */
+/** Os três planos de partículas em volta da esfera. */
 final class ParticleField {
 
     private ParticleField() {}
 
-    static void draw(GraphicsContext g, double radius, VoiceVisualizer.ParticleState s) {
+    static void draw(GraphicsContext g, double radius, VoiceVisualizer.ParticleState s,
+            VoiceVisualizer.Palette palette) {
         Random random = new Random(19);
+        // Plano distante: pontos lentos, com paralaxe quase invisível.
         for (int i = 0; i < 260; i++) {
             double x = (random.nextDouble() * VoiceVisualizer.W + Math.sin(s.t() * 0.12 + i) * 5
                     + VoiceVisualizer.W) % VoiceVisualizer.W;
             double y = (random.nextDouble() * VoiceVisualizer.H + Math.cos(s.t() * 0.08 + i) * 3
                     + VoiceVisualizer.H) % VoiceVisualizer.H;
-            g.setFill(color("#2ACDE0", 0.08 + random.nextDouble() * 0.14));
+            g.setFill(palette.col("#2ACDE0", 0.08 + random.nextDouble() * 0.14));
             g.fillOval(x, y, 0.7, 0.7);
         }
+        // Plano orbital: a densidade e a expansão respondem ao grave e ao médio.
         for (int i = 0; i < 1700; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
             double z = random.nextDouble() * 2 - 1;
@@ -42,17 +44,18 @@ final class ParticleField {
             double x = orbit * Math.cos(rotation);
             double y = radius * z;
             double depth = Math.sin(rotation);
-            g.setFill(color("#27EAFF", 0.07 + 0.34 * Math.abs(depth) + s.treble() * 0.1));
+            g.setFill(palette.col("#27EAFF", 0.07 + 0.34 * Math.abs(depth) + s.treble() * 0.1));
             double pull = "understanding".equals(s.activity()) ? 0.86 + 0.14 * Math.cos(s.t() * 3) : 1;
             double size = depth > 0.5 ? 1.4 : 0.8;
             g.fillOval(VoiceVisualizer.CX + x * pull, VoiceVisualizer.CY + y * pull, size, size);
         }
+        // Plano próximo: partículas maiores, mais brilhantes e com deriva própria.
         for (int i = 0; i < 900; i++) {
             double angle = random.nextDouble() * Math.PI * 2;
             double r = radius + random.nextGaussian() * (4.2 + s.treble() * 7);
             double drift = Math.sin(s.t() * 0.9 + i * 0.17) * (1 + s.mid() * 5);
             double size = 0.5 + random.nextDouble() * 1.6 + s.treble() * 0.8;
-            g.setFill(color("#50EDFF", 0.14 + random.nextDouble() * 0.48 + s.treble() * 0.12));
+            g.setFill(palette.col("#50EDFF", 0.14 + random.nextDouble() * 0.48 + s.treble() * 0.12));
             g.fillOval(VoiceVisualizer.CX + Math.cos(angle) * r + drift,
                     VoiceVisualizer.CY + Math.sin(angle) * r, size, size);
         }
@@ -69,6 +72,4 @@ final class ParticleField {
             default -> s.t() * 0.04 * s.intensity();
         };
     }
-
-    private static Color color(String value, double opacity) { return Color.web(value, opacity); }
 }

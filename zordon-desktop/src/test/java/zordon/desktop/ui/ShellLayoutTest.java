@@ -41,7 +41,7 @@ class ShellLayoutTest {
 
     private static final Path SNAPSHOTS = Path.of("build", "ui-snapshots");
 
-    private static final ShellActions NO_ACTIONS = new ShellActions() {
+    private static final ShellActions NO_ACTIONS = new FakeShellActions() {
         @Override
         public void send(String text, ComposerTarget target) {}
 
@@ -128,10 +128,10 @@ class ShellLayoutTest {
     void notificacaoFicaCompactaComTextoLongoEAbreOsAvisos(int width, int height) throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.notification(Map.of("messageId", "first", "severity", "warning",
+            state.security().notification(Map.of("messageId", "first", "severity", "warning",
                     "title", "43621: host.new-listener — " + "detalhe longo ".repeat(30),
                     "actionTaken", "O que a defesa fez está no histórico da tela de Segurança. ".repeat(20)));
-            state.notification(Map.of("messageId", "second", "severity", "high",
+            state.security().notification(Map.of("messageId", "second", "severity", "high",
                     "title", "Outro aviso", "actionTaken", "Aguardando sua leitura."));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
             Stage stage = new Stage();
@@ -153,10 +153,10 @@ class ShellLayoutTest {
                 shell.layout();
                 assertThat(state.destinationProperty().get()).isEqualTo(zordon.desktop.shell.Destination.SECURITY);
                 assertThat(isShowing(shell.lookup("#notification-list"))).isTrue();
-                assertThat(state.notifications()).hasSize(2);
+                assertThat(state.security().notifications()).hasSize(2);
                 assertThat(bar.isVisible()).isFalse();
                 ((javafx.scene.control.Button) shell.lookup("#notification-read-first")).fire();
-                assertThat(state.notifications()).hasSize(1);
+                assertThat(state.security().notifications()).hasSize(1);
                 state.select(zordon.desktop.shell.Destination.VOICE);
                 assertThat(bar.isVisible()).isTrue();
                 assertThat(bar.text()).contains("Outro aviso");
@@ -176,11 +176,11 @@ class ShellLayoutTest {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
             for (int i = 0; i < 30; i++) {
-                state.findings().add(Map.of("findingId", "f" + i, "severity", "warning",
+                state.security().findings().add(Map.of("findingId", "f" + i, "severity", "warning",
                         "title", (43621 + i) + ": host.new-listener",
                         "rationale", "host.new-listener. Peso somado 0.40 na janela de 60 s."));
             }
-            state.mcpServers().add(Map.of("name", "Servidor de desenvolvimento com nome longo",
+            state.resources().mcpServers().add(Map.of("name", "Servidor de desenvolvimento com nome longo",
                     "state", "drift", "tools", List.of(), "drift", true));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
             state.select(zordon.desktop.shell.Destination.AUTOMATIONS);
@@ -291,7 +291,7 @@ class ShellLayoutTest {
     void osAjustesMostramOEstadoConfirmadoEAPilulaOfereceDesligar() throws Exception {
         VoiceView voiceView = onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.voice(Map.of(
+            state.voice().apply(Map.of(
                     "mode", "wake",
                     "effective", "wake",
                     "activity", "idle",
@@ -323,7 +323,7 @@ class ShellLayoutTest {
     void oCartaoDeTesteMostraOMedidorAoVivoDuranteOTeste() throws Exception {
         double progress = onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.voice(Map.of(
+            state.voice().apply(Map.of(
                     "mode", "off",
                     "effective", "off",
                     "activity", "idle",
@@ -362,7 +362,7 @@ class ShellLayoutTest {
     void aVozEmRepousoEOConsoleDaReferencia(int width, int height) throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.voice(Map.of(
+            state.voice().apply(Map.of(
                     "mode", "off", "effective", "off", "activity", "idle",
                     "capture", Map.of("state", "off", "requested", false, "confirmedAt", "2026-09-18T17:02:11Z"),
                     "host", Map.of("connected", true),
@@ -460,7 +460,7 @@ class ShellLayoutTest {
     void osAjustesMostramModosMicrofoneTesteEMotor() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.voice(Map.of(
+            state.voice().apply(Map.of(
                     "mode", "wake", "effective", "unavailable", "reason", "motor de voz não instalado",
                     "activity", "idle",
                     "capture", Map.of("state", "off", "requested", false, "confirmedAt", "2026-09-18T17:02:11Z"),
@@ -528,7 +528,7 @@ class ShellLayoutTest {
     void aPilulaNaoTemTextoVisivelSoIconesComRotuloAcessivel() throws Exception {
         onFx(() -> {
             DesktopState state = onlineWithConversation();
-            state.voice(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
+            state.voice().apply(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
                     "capture", Map.of("state", "on", "requested", true, "confirmedAt", "2026-09-18T17:02:11Z"),
                     "host", Map.of("connected", true), "engine", Map.of("state", "ready")));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);

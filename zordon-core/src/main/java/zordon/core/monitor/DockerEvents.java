@@ -15,27 +15,29 @@
  */
 package zordon.core.monitor;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import zordon.api.trace.Spec;
 import zordon.security.AuditLog;
 import zordon.security.Gatekeeper;
+import zordon.security.LiveProcess;
 import zordon.security.ProcessRunner;
 
 /**
  * Eventos de container por push: {@code docker events} como processo longo, pelo
  * caminho auditado (SPEC-024). Nada de consultar a cada N segundos: o Docker avisa.
  */
+@Spec("SPEC-024")
 public final class DockerEvents implements AutoCloseable {
 
     /** O que interessa a um assistente; o resto (exec_start, attach…) é ruído. */
@@ -45,6 +47,7 @@ public final class DockerEvents implements AutoCloseable {
             "type=container");
 
     private static final Logger log = LoggerFactory.getLogger(DockerEvents.class);
+
     private final Gatekeeper gatekeeper;
     private final ProcessRunner runner;
     private final Path workDir;
@@ -54,7 +57,7 @@ public final class DockerEvents implements AutoCloseable {
     private volatile boolean running;
     private volatile String state = "stopped";
     private volatile String reason;
-    private volatile zordon.security.LiveProcess live;
+    private volatile LiveProcess live;
 
     public DockerEvents(Gatekeeper gatekeeper, ProcessRunner runner, Path workDir,
             Consumer<Map<String, Object>> events, List<Duration> backoff) {
@@ -116,23 +119,18 @@ public final class DockerEvents implements AutoCloseable {
         }
         boolean audited = false;
         try {
-            java.nio.file.Files.createDirectories(workDir);
-        } catch (java.io.IOException e) {
+            Files.createDirectories(workDir);
+        } catch (IOException e) {
             reason = "pasta de trabalho: " + e.getMessage();
         }
-        try (zordon.security.LiveProcess process = runner.start(granted, workDir)) {
+        try (LiveProcess process = runner.start(granted, workDir)) {
             live = process;
             granted.complete(new AuditLog.Completion(AuditLog.Status.OK, Duration.ZERO, "stream aberto", null));
             audited = true;
             state = "streaming";
             reason = null;
             log.info("eventos do Docker: acompanhando");
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(process.stdout(), StandardCharsets.UTF_8))) {
-                String line;
-                while (running && (line = in.readLine()) != null) {
-                    handle(line);
-                }
-            }
+            DockerEventParser.lines(process.stdout(), () -> running, this::handle);
             reason = "o stream do docker terminou";
             return true;
         } catch (Exception e) {
@@ -168,7 +166,7 @@ public final class DockerEvents implements AutoCloseable {
     @Override
     public void close() {
         running = false;
-        zordon.security.LiveProcess current = live;
+        LiveProcess current = live;
         if (current != null) {
             current.close();
         }

@@ -19,24 +19,20 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.text.Normalizer;
-import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import zordon.ai.AiException;
-import zordon.ai.AiMessage;
-import zordon.ai.AiRequest;
 import zordon.ai.AiResponse;
-import zordon.ai.ContentBlock;
 import zordon.ai.ModelRole;
-import zordon.ai.Role;
 import zordon.ai.registry.ProviderRegistry;
 import zordon.api.security.Principal;
 import zordon.api.security.RequestOrigin;
 import zordon.api.security.RiskLevel;
 import zordon.api.trace.Spec;
 import zordon.core.agents.AgentRunner;
+import zordon.core.chat.RoleModels;
 import zordon.core.tools.SkillRuntime;
 import zordon.memory.TaskStore;
 
@@ -108,13 +104,8 @@ public final class Verifier {
     }
 
     private Outcome byJudgement(String goal, TaskStore.StepView step, String criterion, AgentRunner.Result result) {
-        ProviderRegistry.Selection selection = null;
-        for (ModelRole role : List.of(ModelRole.AGENT_LIGHT, ModelRole.CONVERSATION)) {
-            if (providers.select(role) instanceof ProviderRegistry.Resolution.Selected selected) {
-                selection = selected.selection();
-                break;
-            }
-        }
+        ProviderRegistry.Selection selection =
+                RoleModels.first(providers, ModelRole.AGENT_LIGHT, ModelRole.CONVERSATION).orElse(null);
         if (selection == null) {
             return new Outcome("judgement", INCONCLUSIVE, "nenhum modelo para verificar", null, 0);
         }
@@ -131,12 +122,7 @@ public final class Verifier {
         }
         AiResponse response;
         try {
-            response = selection.provider().chat(AiRequest.builder(selection.choice().model())
-                    .systemPrompt(SYSTEM)
-                    .messages(List.of(new AiMessage(Role.USER, List.of(new ContentBlock.Text(request.toString())))))
-                    .maxOutputTokens(512)
-                    .timeout(Duration.ofMinutes(2))
-                    .build());
+            response = RoleModels.ask(selection, SYSTEM, request.toString(), 512);
         } catch (AiException e) {
             return new Outcome("judgement", INCONCLUSIVE, "o Verifier não respondeu: " + e.getMessage(),
                     selection.choice().model(), 0);

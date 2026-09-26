@@ -29,8 +29,6 @@ import zordon.ai.AiProvider;
 import zordon.ai.ModelPolicy;
 import zordon.ai.ModelRole;
 import zordon.ai.Pricing;
-import zordon.ai.anthropic.AnthropicProvider;
-import zordon.ai.openai.OpenAiCompatibleProvider;
 import zordon.api.trace.Spec;
 
 /**
@@ -95,7 +93,7 @@ public final class ProviderRegistry {
                 .sorted(Comparator.comparingInt(ProviderConfig::precedence).thenComparing(ProviderConfig::id))
                 .toList()) {
             try {
-                ready.put(config.id(), create(config, pricing, environment, cli));
+                ready.put(config.id(), ProviderFactory.create(config, pricing, environment, cli));
                 if (config.defaultModel() != null) {
                     models.put(config.id(), config.defaultModel());
                 }
@@ -197,37 +195,5 @@ public final class ProviderRegistry {
             });
         }
         return described;
-    }
-
-    private static AiProvider create(ProviderConfig config, Pricing pricing, Map<String, String> environment,
-            zordon.ai.cli.CliRunner cli) {
-        return switch (config.type()) {
-            case ANTHROPIC -> {
-                SecretRef reference = config.apiKeyIfAny().orElse(new SecretRef("ANTHROPIC_API_KEY"));
-                yield AnthropicProvider.create(requireKey(reference, environment), config.baseUrlIfAny(), pricing);
-            }
-            case OPENAI_COMPATIBLE -> new OpenAiCompatibleProvider(
-                    config.id(),
-                    config.baseUrl(),
-                    // Chave é opcional aqui: um Ollama local não pede nenhuma.
-                    config.apiKeyIfAny().map(reference -> requireKey(reference, environment)).orElse(null),
-                    config.maxTokensParam(),
-                    pricing);
-            case CLAUDE_CLI -> {
-                if (cli == null) {
-                    throw new IllegalStateException("não há como rodar o claude neste núcleo");
-                }
-                if (!cli.available("claude")) {
-                    throw new IllegalStateException("claude não está no catálogo de programas; instale o claude CLI"
-                            + " (npm i -g @anthropic-ai/claude-code), entre com `claude` e reinicie o núcleo");
-                }
-                yield new zordon.ai.cli.ClaudeCliProvider(config.id(), cli);
-            }
-        };
-    }
-
-    private static String requireKey(SecretRef reference, Map<String, String> environment) {
-        return reference.resolve(environment).orElseThrow(() -> new IllegalStateException(
-                "defina " + reference.variable() + " (em ~/.zordon/secrets.env para o serviço)"));
     }
 }

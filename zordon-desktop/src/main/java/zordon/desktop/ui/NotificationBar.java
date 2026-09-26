@@ -85,14 +85,14 @@ final class NotificationBar extends VBox {
         ok.setOnAction(event -> {
             if (current != null) {
                 String id = String.valueOf(current.get("messageId"));
-                state.acknowledged(id);
-                actions.acknowledge(id);
+                state.security().acknowledged(id);
+                actions.security().acknowledge(id);
             }
         });
         HBox footer = new HBox(8, details, ok);
         footer.setAlignment(Pos.CENTER_RIGHT);
         getChildren().addAll(header, title, text, footer);
-        state.notifications().addListener((ListChangeListener<Map<String, Object>>) change -> render(state));
+        state.security().notifications().addListener((ListChangeListener<Map<String, Object>>) change -> render(state));
         state.destinationProperty().addListener((observable, before, now) -> {
             if (now != zordon.desktop.shell.Destination.SECURITY) readingDetails = false;
             render(state);
@@ -101,7 +101,7 @@ final class NotificationBar extends VBox {
     }
 
     private void render(DesktopState state) {
-        current = state.notifications().stream()
+        current = state.security().notifications().stream()
                 .filter(message -> SecurityPresentation.banner(String.valueOf(message.get("severity"))))
                 .findFirst().orElse(null);
         boolean shown = current != null && !readingDetails;
@@ -124,7 +124,7 @@ final class NotificationBar extends VBox {
         text.setTooltip(new Tooltip(text.getText()));
         text.setVisible(!text.getText().isBlank());
         text.setManaged(text.isVisible());
-        long others = state.notifications().stream()
+        long others = state.security().notifications().stream()
                 .filter(message -> SecurityPresentation.banner(String.valueOf(message.get("severity")))).count() - 1;
         more.setText(others > 0 ? "+" + others + " pendente" + (others == 1 ? "" : "s") : "");
         more.setVisible(others > 0);

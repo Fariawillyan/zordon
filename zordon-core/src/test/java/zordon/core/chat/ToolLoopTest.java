@@ -137,7 +137,7 @@ class ToolLoopTest {
     private TurnManager manager(Scripted provider, Tools tools) {
         TurnManager turns = new TurnManager(bus, conversations, new IntentRouter(), new PromptComposer(),
                 ProviderRegistry.of(Map.of(ModelPolicy.DEFAULT_PROVIDER, provider), ModelPolicy.defaults()));
-        turns.onToolCalls(tools);
+        turns.hooks().onToolCalls(tools);
         return turns;
     }
 

@@ -18,71 +18,83 @@ package zordon.defense;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/** Scans proc descriptors for access to protected credentials. */
-final class HostWatchCredentials {
+/** Quem está com uma credencial aberta: os descritores de cada processo em {@code /proc}. */
+final class CredentialScan {
 
-    private final Path proc;
-    private final List<String> paths;
-    private final Clock clock;
-    private final Consumer<Observation> sink;
+    static final Duration EVERY = Duration.ofSeconds(2);
+
+    /** Programas que abrem credencial no dia a dia e não são notícia. */
+    static final Set<String> KNOWN = Set.of("ssh", "sshd", "ssh-agent", "ssh-keygen", "ssh-add", "scp", "sftp",
+            "git", "git-remote-http", "gpg", "gpg-agent", "gnome-keyring-d", "code", "node", "java", "python3");
+
+    private static final Logger log = LoggerFactory.getLogger(HostWatch.class);
+
+    private final HostWatch.Config config;
+    private final Consumer<String> errors;
     private final Set<String> reported = new LinkedHashSet<>();
-    private String error;
 
-    HostWatchCredentials(HostWatch.Config config) {
-        proc = config.proc();
-        paths = List.copyOf(config.credentialPaths());
-        clock = config.clock();
-        sink = config.sink();
+    CredentialScan(HostWatch.Config config, Consumer<String> errors) {
+        this.config = config;
+        this.errors = errors;
     }
 
-    List<Observation> scan() {
+    synchronized List<Observation> scan() {
         List<Observation> found = new ArrayList<>();
-        try (Stream<Path> pids = Files.list(proc)) {
+        try (Stream<Path> pids = Files.list(config.proc())) {
             for (Path pid : pids.filter(path -> path.getFileName().toString().matches("\\d+")).toList()) {
                 String number = pid.getFileName().toString();
                 String command = command(pid);
-                if (HostWatch.KNOWN.contains(command)) {
+                if (KNOWN.contains(command)) {
                     continue;
                 }
                 for (String open : openFiles(pid)) {
-                    if (paths.stream().noneMatch(open::contains)) {
+                    if (config.credentialPaths().stream().noneMatch(open::contains)) {
                         continue;
                     }
                     String key = number + " " + open;
                     if (!reported.add(key)) {
-                        continue;
+                        continue;   // já avisado enquanto o descritor segue aberto
                     }
-                    Observation observation = new Observation("host.credential-access",
-                            new Subject("process", number), "process:" + number, null, null, null, null,
-                            null, null, "o processo " + command + " (pid " + number + ") está com " + open
-                                    + " aberto", false, java.util.Map.of("pid", number, "processo", command,
-                                            "arquivo", open), clock.instant());
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("pid", number);
+                    data.put("processo", command);
+                    data.put("arquivo", open);
+                    Observation observation = new Observation("host.credential-access", Subject.process(number),
+                            "process:" + number, null, null, null, null, null, null,
+                            "o processo " + command + " (pid " + number + ") está com " + open + " aberto", false,
+                            data, config.clock().instant());
                     found.add(observation);
-                    sink.accept(observation);
+                    config.sink().accept(observation);
                 }
             }
         } catch (IOException | RuntimeException e) {
-            error = "credenciais: " + e.getMessage();
+            errors.accept("credenciais: " + e.getMessage());
+            log.debug("varredura de credenciais: {}", e.getMessage());
         }
         reported.removeIf(key -> !stillOpen(key));
         return found;
     }
 
-    int alertCount() { return reported.size(); }
-    int scanCount() { return paths.size(); }
-    String error() { return error; }
+    synchronized int openAlerts() {
+        return reported.size();
+    }
 
     private boolean stillOpen(String key) {
-        int split = key.indexOf(' ');
-        return openFiles(proc.resolve(key.substring(0, split))).contains(key.substring(split + 1));
+        String pid = key.substring(0, key.indexOf(' '));
+        String file = key.substring(key.indexOf(' ') + 1);
+        return openFiles(config.proc().resolve(pid)).contains(file);
     }
 
     private List<String> openFiles(Path pid) {
@@ -92,12 +104,12 @@ final class HostWatchCredentials {
                 try {
                     out.add(Files.readSymbolicLink(fd).toString());
                 } catch (IOException | UnsupportedOperationException e) {
-                    // O descritor fechou durante a varredura.
+                    // descritor que já fechou, ou não é link: segue
                 }
             }
             return out;
         } catch (IOException | RuntimeException e) {
-            return List.of();
+            return List.of();   // processo de outro usuário, ou que já morreu
         }
     }
 

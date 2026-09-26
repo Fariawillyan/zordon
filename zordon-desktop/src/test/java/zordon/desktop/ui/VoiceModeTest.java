@@ -40,7 +40,7 @@ class VoiceModeTest {
 
     private final List<String> pedidos = new ArrayList<>();
 
-    private final ShellActions actions = new ShellActions() {
+    private final ShellActions actions = new FakeShellActions() {
         @Override
         public void send(String text, ComposerTarget target) {}
 
@@ -125,7 +125,7 @@ class VoiceModeTest {
     private static DesktopState comVoz(String mode) {
         DesktopState state = new DesktopState();
         state.online("0.1.0");
-        state.voice(Map.of("mode", mode, "effective", mode, "activity", "idle",
+        state.voice().apply(Map.of("mode", mode, "effective", mode, "activity", "idle",
                 "capture", Map.of("state", "on", "requested", true, "confirmedAt", "2026-09-20T10:00:00Z"),
                 "host", Map.of("connected", true),
                 "engine", Map.of("state", "ready")));

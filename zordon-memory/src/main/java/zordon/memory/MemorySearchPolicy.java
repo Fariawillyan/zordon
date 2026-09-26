@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 final class MemorySearchPolicy {
 
     private static final int RRF_K = 60;
+    /** Palavras que não ajudam a achar nada. */
     private static final Set<String> STOPWORDS = Set.of("a", "o", "as", "os", "um", "uma", "de", "da", "do", "das",
             "dos", "e", "em", "no", "na", "nos", "nas", "que", "se", "para", "pra", "por", "com", "sem", "eu", "voce",
             "me", "meu", "minha", "isso", "isto", "esse", "essa", "este", "esta", "qual", "quais", "como", "onde",
@@ -37,6 +38,7 @@ final class MemorySearchPolicy {
 
     private MemorySearchPolicy() {}
 
+    /** O trecho de {@code WHERE} comum às consultas, com os parâmetros na ordem. */
     static String filter(RecallQuery query, List<String> params) {
         StringBuilder filter = new StringBuilder(
                 " AND f.superseded_by IS NULL AND (f.expires_at IS NULL OR f.expires_at > ?)");
@@ -56,6 +58,7 @@ final class MemorySearchPolicy {
         return filter.toString();
     }
 
+    /** Reciprocal Rank Fusion: a posição em cada lista vira peso, e os pesos somam. */
     static Map<String, Double> fuse(List<List<String>> rankings) {
         Map<String, Double> fused = new HashMap<>();
         for (List<String> ranking : rankings) {
@@ -66,6 +69,7 @@ final class MemorySearchPolicy {
         return fused;
     }
 
+    /** O embedder não sabe de filtro nem de fato esquecido: o corte é conferido aqui. */
     static boolean accepted(Fact fact, RecallQuery query, Instant now) {
         return fact != null && fact.active(now)
                 && (query.kinds().isEmpty() || query.kinds().contains(fact.kind()))
@@ -90,6 +94,7 @@ final class MemorySearchPolicy {
             if (word.length() < 2 || STOPWORDS.contains(word)) {
                 continue;
             }
+            // Um prefixo curto pega as flexões: "trabalhamos" acha "trabalhou".
             String term = word.length() >= 6 ? word.substring(0, Math.max(5, word.length() - 4)) : word;
             String quoted = "\"" + term + "\"" + (word.length() >= 4 ? "*" : "");
             if (!terms.contains(quoted)) {

@@ -35,11 +35,11 @@ final class McpView extends DestinationPage {
     private final ShellActions actions;
 
     McpView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "MCP", actions::loadMcp);
+        super("RECURSOS", "MCP", actions.data()::loadMcp);
         this.state = state;
         this.actions = actions;
         setId("mcp-view");
-        repaintOn(state.mcpServers());
+        repaintOn(state.resources().mcpServers());
         render();
     }
 
@@ -47,10 +47,10 @@ final class McpView extends DestinationPage {
     void render() {
         Label hint = muted("Um servidor MCP traz ferramentas novas sem mudar o Zordon. Elas passam pelo mesmo"
                 + " motor de permissão, com o risco do piso declarado no config.toml.");
-        VBox list = rows(List.copyOf(state.mcpServers()),
+        VBox list = rows(List.copyOf(state.resources().mcpServers()),
                 "Nenhum servidor MCP declarado — veja [[mcp.server]] no config.toml.", this::serverRow);
         list.setId("mcp-list");
-        show(Cards.section("Servidores (" + state.mcpServers().size() + ")", new VBox(8, hint, list)));
+        show(Cards.section("Servidores (" + state.resources().mcpServers().size() + ")", new VBox(8, hint, list)));
     }
 
     private javafx.scene.Node serverRow(Map<String, Object> server) {
@@ -61,7 +61,7 @@ final class McpView extends DestinationPage {
         if (Boolean.TRUE.equals(server.get("drift"))) {
             line.getStyleClass().add("warning-text");
             return actionRow(line, button("mcp-approve-" + name, "Aprovar a superfície nova",
-                    () -> actions.approveMcp(name)));
+                    () -> actions.data().approveMcp(name)));
         }
         line.getStyleClass().add("settings-row");
         return line;

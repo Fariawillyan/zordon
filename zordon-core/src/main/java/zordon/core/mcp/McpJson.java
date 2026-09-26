@@ -22,17 +22,23 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** JSON-RPC framing helpers for MCP stdio. */
+/** O JSON-RPC do transporte {@code stdio}: uma mensagem por linha. */
 final class McpJson {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
 
     private McpJson() {}
-    static byte[] encode(Map<String, Object> message) throws IOException { return MAPPER.writeValueAsBytes(message); }
+
+    static byte[] encode(Map<String, Object> message) throws IOException {
+        return MAPPER.writeValueAsBytes(message);
+    }
+
     static Map<String, Object> decode(String line) throws IOException {
         return MAPPER.readValue(line, new TypeReference<Map<String, Object>>() { });
     }
+
+    /** O id de uma mensagem grande demais para decodificar, lido direto do começo do texto. */
     static Long id(CharSequence line) {
         Matcher matcher = ID.matcher(line);
         return matcher.find() ? Long.parseLong(matcher.group(1)) : null;

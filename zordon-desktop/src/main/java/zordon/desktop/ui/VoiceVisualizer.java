@@ -44,6 +44,12 @@ import zordon.desktop.audio.SoundPlayer;
 @Spec("SPEC-008")
 final class VoiceVisualizer extends Region {
 
+    /** A cor com a tinta do tema e a opacidade limitada entre 0 e 1: toda camada desenha por aqui. */
+    @FunctionalInterface
+    interface Palette {
+        Color col(String hex, double alpha);
+    }
+
     record ParticleState(double t, double phase, double bass, double mid, double treble, String activity,
             double intensity) {}
     record WaveState(double t, double phase, double bass, double mid, double treble, double wavePhase, double gain,
@@ -382,7 +388,7 @@ final class VoiceVisualizer extends Region {
 
     private void waves(GraphicsContext g) {
         WaveField.draw(g, new WaveState(t, phase, micBass, micMid, micTreble, wavePhase(), waveGain(),
-                player.level() > 0 && !reducedMotion, player::sample));
+                player.level() > 0 && !reducedMotion, player::sample), this::col);
     }
 
     private void orb(GraphicsContext g) {
@@ -395,7 +401,9 @@ final class VoiceVisualizer extends Region {
         rings(g);
         arcs(g);
         glow(g, radius);
-        ParticleField.draw(g, radius, new ParticleState(t, phase, micBass, micMid, micTreble, activity, intensity()));
+        // As partículas em órbita e a poeira ao redor: a mesma semente em todo quadro.
+        ParticleField.draw(g, radius, new ParticleState(t, phase, micBass, micMid, micTreble, activity, intensity()),
+                this::col);
         core(g, radius);
         poles(g, radius);
         emblem(g);
@@ -451,7 +459,6 @@ g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
         }
     }
 
-    /** As partículas em órbita e a poeira ao redor: a mesma semente em todo quadro. */
     /** O miolo escuro, a borda que pulsa e a onda de conclusão. */
     private void core(GraphicsContext g, double radius) {
         g.setFill(new RadialGradient(0, 0, CX, CY, radius * 0.86, false, CycleMethod.NO_CYCLE,
@@ -527,18 +534,6 @@ g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
             case "executing" -> t * 90;
             case "agents" -> t * 35;
             default -> 0;
-        };
-    }
-
-    private double particleSpin() {
-        return switch (activity) {
-            case "understanding" -> t * 1.5;
-            case "planning" -> t * 0.3;
-            case "executing" -> t * 0.8;
-            case "agents" -> t * 0.5;
-            case "listening" -> t * (0.12 + micMid * 0.8) * intensity();
-            case "speaking" -> t * (0.35 + micTreble * 1.6);
-            default -> t * 0.04 * intensity();
         };
     }
 

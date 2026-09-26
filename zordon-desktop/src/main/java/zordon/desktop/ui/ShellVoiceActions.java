@@ -15,11 +15,22 @@
  */
 package zordon.desktop.ui;
 
-interface ShellVoiceActions {
-    default void setVoiceMode(String mode) {}
-    default void loadVoiceDevices() {}
-    default void selectVoiceDevice(String deviceId) {}
-    default void testMicrophone() {}
-    default void startListening() {}
-    default void stopListening() {}
+/** A voz: o modo, o dispositivo, o teste do microfone e a escuta (SPEC-006 a SPEC-011). */
+public interface ShellVoiceActions {
+
+    /** {@code voice.setMode}; {@code mode} é {@code off}, {@code wake}, {@code push} ou {@code open}. */
+    void setVoiceMode(String mode);
+
+    void loadVoiceDevices();
+
+    void selectVoiceDevice(String deviceId);
+
+    /** {@code voice.testMicrophone} por 5 s (SPEC-009). */
+    void testMicrophone();
+
+    /** Começa uma escuta pedida pelo usuário (SPEC-011). */
+    void startListening();
+
+    /** Encerra a escuta em curso. */
+    void stopListening();
 }
