@@ -46,6 +46,11 @@ import zordon.core.zwp.ZwpMethodException;
 @Spec("SPEC-006")
 public final class VoiceService {
 
+    /** Dependências externas do serviço, agrupadas para manter a construção explícita. */
+    public record Dependencies(VoiceStore store, VoiceEngine engine, ClientRequests clients,
+            Consumer<Map<String, Object>> publisher, Clock clock, ScheduledExecutorService scheduler,
+            AudioIngest ingest, java.util.function.LongSupplier ticker) {}
+
     public static final Duration CAPTURE_TIMEOUT = Duration.ofSeconds(2);
     public static final Duration DEVICE_TIMEOUT = Duration.ofSeconds(5);
     public static final Duration OPEN_DURATION = Duration.ofMinutes(5);
@@ -147,39 +152,20 @@ public final class VoiceService {
             Consumer<Map<String, Object>> publisher,
             Clock clock,
             ScheduledExecutorService scheduler) {
-        this(store, engine, clients, publisher, clock, scheduler, AudioIngest.detached());
-    }
-
-    public VoiceService(
-            VoiceStore store,
-            VoiceEngine engine,
-            ClientRequests clients,
-            Consumer<Map<String, Object>> publisher,
-            Clock clock,
-            ScheduledExecutorService scheduler,
-            AudioIngest ingest) {
-        // Só para testes com relógio falso: o prazo anda junto com o relógio deles.
-        this(store, engine, clients, publisher, clock, scheduler, ingest, () -> clock.millis() * 1_000_000L);
+        this(new Dependencies(store, engine, clients, publisher, clock, scheduler, AudioIngest.detached(),
+                () -> clock.millis() * 1_000_000L));
     }
 
     /** @param ticker relógio monotônico em nanossegundos; em produção, {@code System::nanoTime}. */
-    public VoiceService(
-            VoiceStore store,
-            VoiceEngine engine,
-            ClientRequests clients,
-            Consumer<Map<String, Object>> publisher,
-            Clock clock,
-            ScheduledExecutorService scheduler,
-            AudioIngest ingest,
-            java.util.function.LongSupplier ticker) {
-        this.ticker = Objects.requireNonNull(ticker, "ticker");
-        this.ingest = Objects.requireNonNull(ingest, "ingest");
-        this.store = Objects.requireNonNull(store, "store");
-        this.engine = Objects.requireNonNull(engine, "engine");
-        this.clients = Objects.requireNonNull(clients, "clients");
-        this.publisher = Objects.requireNonNull(publisher, "publisher");
-        this.clock = Objects.requireNonNull(clock, "clock");
-        this.scheduler = scheduler;
+    public VoiceService(Dependencies dependencies) {
+        this.ticker = Objects.requireNonNull(dependencies.ticker(), "ticker");
+        this.ingest = Objects.requireNonNull(dependencies.ingest(), "ingest");
+        this.store = Objects.requireNonNull(dependencies.store(), "store");
+        this.engine = Objects.requireNonNull(dependencies.engine(), "engine");
+        this.clients = Objects.requireNonNull(dependencies.clients(), "clients");
+        this.publisher = Objects.requireNonNull(dependencies.publisher(), "publisher");
+        this.clock = Objects.requireNonNull(dependencies.clock(), "clock");
+        this.scheduler = dependencies.scheduler();
         VoiceStore.Saved saved = store.load();
         this.persisted = saved.mode();
         this.deviceId = saved.deviceId();

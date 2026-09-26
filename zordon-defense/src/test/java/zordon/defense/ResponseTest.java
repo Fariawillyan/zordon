@@ -45,8 +45,8 @@ class ResponseTest {
         assertThatThrownBy(() -> new SecurityEvent("sec-1", Instant.now(), Severity.CRITICAL, "d", "agent:x", "f",
                 "p", "p", "CONTAINED", "AUTO_CONTAINMENT", true, "  ")).isInstanceOf(IllegalArgumentException.class);
 
-        SecurityEvent observed = SecurityEvent.observed("sec-2", Instant.now(), Severity.WARNING, "ai.agent-loop",
-                "agent:x", "fnd-2", "nenhuma");
+        SecurityEvent observed = SecurityEvent.observed(new SecurityEvent.Observed("sec-2", Instant.now(),
+                Severity.WARNING, "ai.agent-loop", "agent:x", "fnd-2", "nenhuma"));
         assertThat(observed.executed()).isEqualTo(SecurityEvent.NONE);
         assertThat(observed.userMessageId()).isNull();
         assertThat(new SecurityEvent("sec-3", Instant.now(), Severity.HIGH, "d", "mcp:x", "f", "isolar", "isolar",

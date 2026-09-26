@@ -16,31 +16,23 @@
 package zordon.zwp;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.drafts.Draft_6455;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import zordon.api.event.EventEnvelope;
-import zordon.api.event.EventType;
+import zordon.api.trace.Spec;
+import zordon.api.zwp.BinaryFrame;
 import zordon.api.zwp.HelloParams;
 import zordon.api.zwp.HelloResult;
-import zordon.api.zwp.ZwpError;
-import zordon.api.zwp.ZwpMessage;
-import zordon.api.zwp.ZwpNotification;
 import zordon.api.zwp.ZwpProtocol;
-import zordon.api.zwp.ZwpRequest;
-import zordon.api.zwp.ZwpResponse;
-import zordon.api.trace.Spec;
 
 /**
  * Cliente ZWP: uma conexão, já autenticada, com correlação de requisição e
@@ -48,46 +40,36 @@ import zordon.api.trace.Spec;
  *
  * <p>Não tenta reconectar — quem decide isso é {@link CoreConnection}. Separar as
  * duas coisas mantém esta classe testável sem esperar backoff.
+ *
+ * <p>O que sai fica em {@link ZwpOutbox}; o que chega, em {@link ZwpInbox}.
  */
 @Spec("SPEC-002")
 public final class ZwpClient implements AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(ZwpClient.class);
-
-    private final ZwpCodec codec = new ZwpCodec();
-    private final AtomicLong nextId = new AtomicLong(1);
-    private final Map<Long, CompletableFuture<Map<String, Object>>> pending = new ConcurrentHashMap<>();
-    private final Map<String, RequestHandler> handlers = new ConcurrentHashMap<>();
-    private final Map<String, java.util.function.Consumer<Map<String, Object>>> notifications =
-            new ConcurrentHashMap<>();
-    private final ScheduledExecutorService timeouts =
-            Executors.newSingleThreadScheduledExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "zwp-client-timeouts");
-                thread.setDaemon(true);
-                return thread;
-            });
-
     private final ZwpClientListener listener;
     private final Socket socket;
+    private final ZwpOutbox outbox;
+    private final ZwpInbox inbox;
 
     public ZwpClient(URI endpoint, String token, ZwpClientListener listener) {
         this.listener = Objects.requireNonNull(listener, "listener");
         this.socket = new Socket(endpoint, Map.of("Authorization", "Bearer " + Objects.requireNonNull(token)));
+        this.outbox = new ZwpOutbox(socket::send);
+        this.inbox = new ZwpInbox(outbox, listener, text -> {
+            if (socket.isOpen()) {
+                socket.send(text);
+            }
+        });
     }
 
     /** Abre o transporte, já autenticado, sem apresentar-se ainda. */
     public void open(Duration timeout) throws InterruptedException {
-        if (!socket.connectBlocking(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-            throw new ZwpConnectionException("não foi possível conectar em " + socket.getURI());
-        }
+        socket.open(timeout);
     }
 
     /** Apresenta-se ao núcleo. Precisa ser a primeira mensagem da conexão. */
     public HelloResult hello(HelloParams hello, Duration timeout) {
-        Map<String, Object> result = request("session.hello", codec.toParams(hello))
-                .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                .join();
-        return codec.params(result, HelloResult.class);
+        return outbox.hello(hello, timeout);
     }
 
     /** Conecta e faz o {@code session.hello}. */
@@ -101,40 +83,23 @@ public final class ZwpClient implements AutoCloseable {
      * {@link #connect}: o núcleo pode pedir logo depois do hello.
      */
     public ZwpClient handle(String method, RequestHandler handler) {
-        handlers.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        inbox.handle(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
         return this;
     }
 
     /** Recebe a notificação {@code method} do núcleo (ex.: {@code audio.credit}). */
-    public ZwpClient onNotification(String method, java.util.function.Consumer<Map<String, Object>> handler) {
-        notifications.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+    public ZwpClient onNotification(String method, Consumer<Map<String, Object>> handler) {
+        inbox.onNotification(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
         return this;
     }
 
     /** Envia um frame binário (ZWP §7). @return se o socket estava aberto para enviar. */
-    public boolean sendBinary(zordon.api.zwp.BinaryFrame frame) {
-        if (!socket.isOpen()) {
-            return false;
-        }
-        try {
-            socket.send(BinaryFrameCodec.encode(frame));
-            return true;
-        } catch (RuntimeException e) {
-            log.debug("frame binário não enviado: {}", e.toString());
-            return false;
-        }
+    public boolean sendBinary(BinaryFrame frame) {
+        return socket.sendFrame(frame);
     }
 
     public CompletableFuture<Map<String, Object>> request(String method, Map<String, Object> params) {
-        long id = nextId.getAndIncrement();
-        CompletableFuture<Map<String, Object>> answer = new CompletableFuture<>();
-        pending.put(id, answer);
-        timeouts.schedule(
-                () -> failIfPending(id, new TimeoutException(method + " não respondeu no prazo")),
-                ZwpProtocol.DEFAULT_REQUEST_TIMEOUT.toMillis(),
-                TimeUnit.MILLISECONDS);
-        socket.send(codec.encode(new ZwpRequest(id, method, params)));
-        return answer;
+        return outbox.request(method, params);
     }
 
     public boolean isOpen() {
@@ -144,105 +109,37 @@ public final class ZwpClient implements AutoCloseable {
     @Override
     public void close() {
         socket.close();
-        timeouts.shutdownNow();
-        pending.keySet().forEach(id -> failIfPending(id, new ZwpConnectionException("conexão encerrada")));
-    }
-
-    private void failIfPending(long id, Throwable cause) {
-        CompletableFuture<Map<String, Object>> answer = pending.remove(id);
-        if (answer != null) {
-            answer.completeExceptionally(cause);
-        }
-    }
-
-    private void handle(String text) {
-        ZwpMessage message;
-        try {
-            message = codec.decode(text);
-        } catch (ZwpCodecException e) {
-            log.warn("mensagem ZWP inválida descartada: {}", e.getMessage());
-            return;
-        }
-        switch (message) {
-            case ZwpResponse response -> complete(response);
-            case ZwpNotification notification -> dispatch(notification);
-            // Fora da thread do socket: um tratador lento não atrasa eventos nem respostas.
-            case ZwpRequest request -> Thread.ofVirtual().name("zwp-handler-" + request.method())
-                    .start(() -> answer(request));
-        }
-    }
-
-    private void answer(ZwpRequest request) {
-        RequestHandler handler = handlers.get(request.method());
-        ZwpResponse response;
-        if (handler == null) {
-            response = ZwpResponse.failed(request.id(), ZwpError.protocol(
-                    ZwpError.METHOD_NOT_FOUND, "método desconhecido: " + request.method()));
-        } else {
-            try {
-                response = ZwpResponse.ok(request.id(), handler.handle(request.params()));
-            } catch (ZwpRemoteException e) {
-                response = ZwpResponse.failed(request.id(), e.error());
-            } catch (Exception e) {
-                log.warn("falha ao atender {} do núcleo: {}", request.method(), e.toString());
-                response = ZwpResponse.failed(request.id(), ZwpError.protocol(
-                        ZwpError.INTERNAL_ERROR, "falha ao atender " + request.method()));
-            }
-        }
-        if (socket.isOpen()) {
-            socket.send(codec.encode(response));
-        }
-    }
-
-    private void complete(ZwpResponse response) {
-        CompletableFuture<Map<String, Object>> answer = pending.remove(response.id());
-        if (answer == null) {
-            log.warn("resposta sem requisição correspondente: id={}", response.id());
-            return;
-        }
-        if (response.isError()) {
-            answer.completeExceptionally(new ZwpRemoteException(response.error()));
-        } else {
-            answer.complete(response.result());
-        }
-    }
-
-    private void dispatch(ZwpNotification notification) {
-        if (!ZwpNotification.EVENT_METHOD.equals(notification.method())) {
-            java.util.function.Consumer<Map<String, Object>> handler = notifications.get(notification.method());
-            if (handler == null) {
-                log.debug("notificação ignorada: {}", notification.method());
-            } else {
-                handler.accept(notification.params());
-            }
-            return;
-        }
-        Map<String, Object> params = notification.params();
-        try {
-            listener.onEvent(new EventEnvelope(
-                    ((Number) params.get("seq")).longValue(),
-                    java.time.Instant.parse((String) params.get("ts")),
-                    EventType.valueOf((String) params.get("type")),
-                    asPayload(params.get("payload"))));
-        } catch (RuntimeException e) {
-            // Evento de um núcleo mais novo. Ignorar o desconhecido é requisito de
-            // evolução do protocolo (ZWP §11).
-            log.debug("evento não reconhecido descartado: {}", params.get("type"));
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> asPayload(Object value) {
-        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+        outbox.close();
     }
 
     /** Adapta a biblioteca de WebSocket sem expor o tipo dela nesta API. */
     private final class Socket extends WebSocketClient {
 
+        private static final Logger log = LoggerFactory.getLogger(ZwpClient.class);
+
         private Socket(URI endpoint, Map<String, String> headers) {
-            super(endpoint, new org.java_websocket.drafts.Draft_6455(), headers, 0);
+            super(endpoint, new Draft_6455(), headers, 0);
             setConnectionLostTimeout((int) ZwpProtocol.DEFAULT_HEARTBEAT.toSeconds()
                     * ZwpProtocol.MISSED_HEARTBEATS_BEFORE_CLOSE);
+        }
+
+        void open(Duration timeout) throws InterruptedException {
+            if (!connectBlocking(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+                throw new ZwpConnectionException("não foi possível conectar em " + getURI());
+            }
+        }
+
+        boolean sendFrame(BinaryFrame frame) {
+            if (!isOpen()) {
+                return false;
+            }
+            try {
+                send(BinaryFrameCodec.encode(frame));
+                return true;
+            } catch (RuntimeException e) {
+                log.debug("frame binário não enviado: {}", e.toString());
+                return false;
+            }
         }
 
         @Override
@@ -252,11 +149,11 @@ public final class ZwpClient implements AutoCloseable {
 
         @Override
         public void onMessage(String message) {
-            handle(message);
+            inbox.receive(message);
         }
 
         @Override
-        public void onMessage(java.nio.ByteBuffer bytes) {
+        public void onMessage(ByteBuffer bytes) {
             try {
                 listener.onBinary(BinaryFrameCodec.decode(bytes));
             } catch (ZwpCodecException e) {
@@ -266,7 +163,7 @@ public final class ZwpClient implements AutoCloseable {
 
         @Override
         public void onClose(int code, String reason, boolean remote) {
-            pending.keySet().forEach(id -> failIfPending(id, new ZwpConnectionException("conexão encerrada")));
+            outbox.failAll();
             listener.onClosed(code, reason);
         }
 

@@ -39,9 +39,9 @@ import zordon.api.security.ZPath;
 import zordon.api.trace.AcceptanceCriteria;
 import zordon.core.zwp.ClientRequests;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 
 /** Pedido de permissão ao desktop e kill switch (SPEC-015). */
@@ -71,8 +71,8 @@ class PermissionFlowTest {
                 List.of(), "Mover 43 arquivos de ~/dev/app/logs para a quarentena");
     }
 
-    private DefaultPermissionEngine engine(DesktopApprover approver) {
-        return new DefaultPermissionEngine(PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")),
+    private PermissionEngine engine(DesktopApprover approver) {
+        return PermissionEngines.standard(PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")),
                 new CommandValidator(Map.of()), new Redactor(), () -> approver);
     }
 
@@ -81,7 +81,7 @@ class PermissionFlowTest {
     void oDesktopMaisRecenteRecebeOPedidoComResumoRiscoOrigemEAlvos() throws Exception {
         Desktop desktop = new Desktop();
         DesktopApprover approver = new DesktopApprover(desktop);
-        DefaultPermissionEngine engine = engine(approver);
+        PermissionEngine engine = engine(approver);
         Principal voice = Principal.user(RequestOrigin.VOICE);
         ActionDescriptor action = quarantine(home.toString());
         Decision.AskUser ask = (Decision.AskUser) engine.evaluate(action, voice,
@@ -132,7 +132,7 @@ class PermissionFlowTest {
         assertThat(reopened.status()).containsEntry("reason", "parece estranho");
 
         PermissionEngine.PolicyContext ctx = new PermissionEngine.PolicyContext(reopened.active(), false, false, true,
-                false, Set.of());
+                false, Set.of(), null);
         assertThat(engine(null).evaluate(quarantine(home.toString()), Principal.user(RequestOrigin.UI), ctx))
                 .isInstanceOf(Decision.Deny.class).extracting(Decision::reason).asString().contains("lockdown");
 

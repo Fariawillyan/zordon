@@ -59,13 +59,13 @@ import zordon.core.tools.ModelToolCaller;
 import zordon.core.tools.ProcessTools;
 import zordon.core.tools.SkillRuntime;
 import zordon.memory.SqliteMemoryStore;
-import zordon.memory.ZordonDatabase;
 import zordon.memory.TaskStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -101,9 +101,9 @@ class TasksTest {
         Files.setPosixFilePermissions(docker, PosixFilePermissions.fromString("rwxr-xr-x"));
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
         CommandValidator validator = new CommandValidator(Map.of("docker", docker.toString()));
-        PermissionEngine.Approver deny = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver deny = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy, validator, new Redactor(),
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(policy, validator, new Redactor(),
                 () -> deny), audit);
         ZPath base = ZPath.ofWsl(home.toString());
         runtime = new SkillRuntime(gatekeeper, bus, () -> false)

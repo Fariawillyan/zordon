@@ -52,13 +52,8 @@ public interface PermissionEngine {
             automationScope = Set.copyOf(automationScope);
         }
 
-        public PolicyContext(boolean lockdown, boolean breakerOpen, boolean tainted, boolean userPresent,
-                boolean newTool, Set<String> automationScope) {
-            this(lockdown, breakerOpen, tainted, userPresent, newTool, automationScope, null);
-        }
-
         public static PolicyContext interactive() {
-            return new PolicyContext(false, false, false, true, false, Set.of());
+            return new PolicyContext(false, false, false, true, false, Set.of(), null);
         }
     }
 
@@ -67,8 +62,10 @@ public interface PermissionEngine {
 
     /** Quem mostra o pedido ao usuário: o desktop (SPEC-015). */
     interface Approver {
-        CompletableFuture<Approval> ask(ActionDescriptor action, Principal actor, RiskLevel risk, Duration ttl,
-                boolean perAction);
+        record ApprovalRequest(ActionDescriptor action, Principal actor, RiskLevel risk, Duration ttl,
+                boolean perAction) {}
+
+        CompletableFuture<Approval> ask(ApprovalRequest request);
     }
 
     /** Classifica. Puro, determinístico e sem efeito colateral. */

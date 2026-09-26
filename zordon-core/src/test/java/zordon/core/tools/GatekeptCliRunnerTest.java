@@ -33,9 +33,9 @@ import zordon.ai.AiRequest;
 import zordon.ai.cli.ClaudeCliProvider;
 import zordon.api.trace.AcceptanceCriteria;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -65,7 +65,7 @@ class GatekeptCliRunnerTest {
         Files.setPosixFilePermissions(fake, PosixFilePermissions.fromString("rwx------"));
         CommandValidator validator = new CommandValidator(Map.of("claude", fake.toString()));
         try (SqliteAuditLog audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC())) {
-            Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+            Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                     PathPolicy.defaults(home.toString(), List.of(), List.of("~")), validator, new Redactor(), () -> null),
                     audit);
             Path work = home.resolve("cli-work");

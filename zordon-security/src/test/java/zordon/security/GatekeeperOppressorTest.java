@@ -18,7 +18,6 @@ package zordon.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,7 @@ class GatekeeperOppressorTest {
 
     /** Sem catálogo: qualquer comando é desconhecido, o pior caso do motor. */
     private Gatekeeper gatekeeper() {
-        return new Gatekeeper(new DefaultPermissionEngine(
+        return new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(dir.toString(), List.of("~"), List.of("~")),
                 new CommandValidator(Map.of()), new Redactor(), () -> null), audit, mode::get);
     }
@@ -59,7 +58,7 @@ class GatekeeperOppressorTest {
 
     private Gatekeeper.Permit autorizar(Gatekeeper gatekeeper, boolean lockdown) throws Exception {
         PermissionEngine.PolicyContext ctx = lockdown
-                ? new PermissionEngine.PolicyContext(true, false, false, true, false, Set.of())
+                ? new PermissionEngine.PolicyContext(true, false, false, true, false, Set.of(), null)
                 : PermissionEngine.PolicyContext.interactive();
         return gatekeeper.authorize(perigosa(), Principal.user(RequestOrigin.UI), ctx, "t1")
                 .get(5, TimeUnit.SECONDS);
@@ -118,7 +117,7 @@ class GatekeeperOppressorTest {
             return entries.size();
         }
 
-        @Override public void complete(String callId, Status status, Duration took, String summary, String error) {}
+        @Override public void complete(String callId, Completion completion) {}
 
         @Override public Verification verify(int lastN) {
             return new Verification(true, entries.size(), -1);

@@ -16,6 +16,7 @@
 package zordon.desktop.ui;
 
 import java.util.Random;
+import java.util.function.IntToDoubleFunction;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -26,7 +27,6 @@ import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
 import javafx.scene.shape.ArcType;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
@@ -43,6 +43,11 @@ import zordon.desktop.audio.SoundPlayer;
  */
 @Spec("SPEC-008")
 final class VoiceVisualizer extends Region {
+
+    record ParticleState(double t, double phase, double bass, double mid, double treble, String activity,
+            double intensity) {}
+    record WaveState(double t, double phase, double bass, double mid, double treble, double wavePhase, double gain,
+            boolean playing, IntToDoubleFunction sample) {}
 
     static final double W = 1000;
     static final double H = 646;
@@ -376,77 +381,8 @@ final class VoiceVisualizer extends Region {
     }
 
     private void waves(GraphicsContext g) {
-        // Fios das ondas laterais: finos, somem perto da esfera e nas pontas.
-        for (int wave = 0; wave < 26; wave++) {
-            g.setStroke(col("#12DDF2", 0.14 + (wave % 5) * 0.05));
-            g.setLineWidth(0.8);
-            g.beginPath();
-            boolean started = false;
-            for (int x = 0; x <= (int) W; x += 3) {
-                double distance = Math.abs(x - CX);
-                if (distance < 150) {
-                    started = false;
-                    continue;
-                }
-                double side = (distance - 150) / (CX - 150);
-                double envelope = Math.pow(Math.sin(Math.min(1, side) * Math.PI), 1.2);
-                double bassShape = Math.sin(x * 0.014 + wave * 0.11 + wavePhase());
-                double midShape = Math.sin(x * 0.045 - wave * 0.17 + phase * 2);
-                double trebleShape = Math.sin(x * 0.11 + wave * 0.33 + t * 8);
-                double shape = bassShape * (0.55 + micBass * 1.7)
-                        + midShape * (0.25 + micMid * 0.95)
-                        + trebleShape * (0.12 + micTreble * 0.42);
-                double y = CY + shape * envelope * (10 + wave * 2.9) * waveGain();
-                if (!started) {
-                    g.moveTo(x, y);
-                    started = true;
-                } else {
-                    g.lineTo(x, y);
-                }
-            }
-            g.stroke();
-        }
-        // Barras verticais nas pontas, como o espectro da referência.
-        g.setLineCap(StrokeLineCap.ROUND);
-        Random random = new Random(11);
-        for (int side = 0; side < 2; side++) {
-            for (int bar = 0; bar < 14; bar++) {
-                double x = side == 0 ? -4 + bar * 4.2 : W + 4 - bar * 4.2;
-                double band = bar < 5 ? micBass : bar < 10 ? micMid : micTreble;
-                double height = 8 + random.nextDouble() * 24 * (1 - bar / 16.0) + band * 46;
-                g.setStroke(col("#1BE4F8", 0.35 + random.nextDouble() * 0.45));
-                g.setLineWidth(1.4);
-                g.strokeLine(x, CY - height, x, CY + height);
-            }
-        }
-        g.setLineCap(StrokeLineCap.BUTT);
-        // O traço central claro só mostra amostras do som que está tocando.
-        if (player.level() > 0 && !reducedMotion) {
-            for (int glow = 2; glow >= 0; glow--) {
-                g.setStroke(col("#21EAFF", glow == 0 ? 0.95 : 0.09));
-                g.setLineWidth(glow == 0 ? 1.5 : glow * 4);
-                g.beginPath();
-                for (int x = 0; x <= (int) W; x += 2) {
-                    double y = CY + player.sample(-2048 + x * 2) * 420;
-                    if (x == 0) {
-                        g.moveTo(x, y);
-                    } else {
-                        g.lineTo(x, y);
-                    }
-                }
-                g.stroke();
-            }
-        }
-        g.setStroke(col("#1CEBFF", 0.55));
-        g.setLineWidth(1);
-        g.strokeLine(0, CY, CX - 150, CY);
-        g.strokeLine(CX + 150, CY, W, CY);
-        // Marcadores curtos dos dois lados da esfera.
-        g.setStroke(col("#12E3F7", 1));
-        g.setLineWidth(3.2);
-        double marker = 18 + Math.min(22, (micBass + micMid + micTreble) * 10);
-        g.strokeLine(CX - 229, CY - marker, CX - 229, CY + marker);
-        g.strokeLine(CX + 231, CY - marker, CX + 231, CY + marker);
+        WaveField.draw(g, new WaveState(t, phase, micBass, micMid, micTreble, wavePhase(), waveGain(),
+                player.level() > 0 && !reducedMotion, player::sample));
     }
 
     private void orb(GraphicsContext g) {
@@ -459,7 +395,7 @@ final class VoiceVisualizer extends Region {
         rings(g);
         arcs(g);
         glow(g, radius);
-        particles(g, radius);
+        ParticleField.draw(g, radius, new ParticleState(t, phase, micBass, micMid, micTreble, activity, intensity()));
         core(g, radius);
         poles(g, radius);
         emblem(g);
@@ -516,39 +452,6 @@ g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
     }
 
     /** As partículas em órbita e a poeira ao redor: a mesma semente em todo quadro. */
-    private void particles(GraphicsContext g, double radius) {
-        Random random = new Random(19);
-        // Plano distante: pontos lentos, com paralaxe quase invisível.
-        for (int i = 0; i < 260; i++) {
-            double x = (random.nextDouble() * W + Math.sin(t * 0.12 + i) * 5 + W) % W;
-            double y = (random.nextDouble() * H + Math.cos(t * 0.08 + i) * 3 + H) % H;
-            g.setFill(col("#2ACDE0", 0.08 + random.nextDouble() * 0.14));
-            g.fillOval(x, y, 0.7, 0.7);
-        }
-        // Plano orbital: a densidade e a expansão respondem ao grave e ao médio.
-        for (int i = 0; i < 1700; i++) {
-            double angle = random.nextDouble() * Math.PI * 2;
-            double z = random.nextDouble() * 2 - 1;
-            double orbit = radius * (0.78 + micMid * 0.18) * Math.sqrt(1 - z * z);
-            double rotation = angle + phase * 0.11 + particleSpin() + micBass * 0.18;
-            double x = orbit * Math.cos(rotation);
-            double y = radius * z;
-            double depth = Math.sin(rotation);
-            g.setFill(col("#27EAFF", 0.07 + 0.34 * Math.abs(depth) + micTreble * 0.1));
-            double pull = "understanding".equals(activity) ? 0.86 + 0.14 * Math.cos(t * 3) : 1;
-            g.fillOval(CX + x * pull, CY + y * pull, depth > 0.5 ? 1.4 : 0.8, depth > 0.5 ? 1.4 : 0.8);
-        }
-        // Plano próximo: partículas maiores, mais brilhantes e com deriva própria.
-        for (int i = 0; i < 900; i++) {
-            double angle = random.nextDouble() * Math.PI * 2;
-            double r = radius + random.nextGaussian() * (4.2 + micTreble * 7);
-            double drift = Math.sin(t * 0.9 + i * 0.17) * (1 + micMid * 5);
-            double size = 0.5 + random.nextDouble() * 1.6 + micTreble * 0.8;
-            g.setFill(col("#50EDFF", 0.14 + random.nextDouble() * 0.48 + micTreble * 0.12));
-            g.fillOval(CX + Math.cos(angle) * r + drift, CY + Math.sin(angle) * r, size, size);
-        }
-    }
-
     /** O miolo escuro, a borda que pulsa e a onda de conclusão. */
     private void core(GraphicsContext g, double radius) {
         g.setFill(new RadialGradient(0, 0, CX, CY, radius * 0.86, false, CycleMethod.NO_CYCLE,

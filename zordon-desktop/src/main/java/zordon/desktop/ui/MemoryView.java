@@ -56,7 +56,7 @@ final class MemoryView extends DestinationPage {
     private javafx.scene.Node factRow(Map<String, Object> fact) {
         String id = text(fact, "id");
         Label line = wrapped(text(fact, "content")
-                + "\n" + VoiceSettingsView.kindLabel(text(fact, "kind"))
+                + "\n" + VoiceSettingsLabels.kind(text(fact, "kind"))
                 + (text(fact, "observedAt").isEmpty() ? "" : " · " + text(fact, "observedAt"))
                 + (text(fact, "source").isEmpty() ? "" : " · origem: " + text(fact, "source")));
         line.getStyleClass().add("settings-row");

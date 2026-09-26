@@ -234,7 +234,7 @@ public final class SkillRuntime {
                 && tool.effects().contains(zordon.api.security.Effect.READ_FS)) {
             tainted.add(turnId);
         }
-        gatekeeper.complete(permit, status, took, result.text(), error);
+        permit.complete(new zordon.security.AuditLog.Completion(status, took, result.text(), error));
         if (status == AuditLog.Status.OK) {
             try {
                 completed.accept(permit.action(), turnId);

@@ -40,10 +40,10 @@ import zordon.core.chat.IntentRouter;
 import zordon.core.event.ZordonEventBus;
 import zordon.core.zwp.ClientRequests;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -89,12 +89,12 @@ class ToolsTest {
         bus = new ZordonEventBus(zordon.core.StartId.generate());
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
         CommandValidator validator = new CommandValidator(Map.of("echo", "/bin/echo"));
-        PermissionEngine.Approver approver = (action, actor, risk, ttl, perAction) -> {
-            asked.add(action.tool() + " " + actor.origin().wire() + " " + perAction);
+        PermissionEngine.Approver approver = request -> {
+            asked.add(request.action().tool() + " " + request.actor().origin().wire() + " " + request.perAction());
             return CompletableFuture.completedFuture(answer);
         };
         Gatekeeper gatekeeper = new Gatekeeper(
-                new DefaultPermissionEngine(policy, validator, new Redactor(), () -> approver), audit);
+                PermissionEngines.standard(policy, validator, new Redactor(), () -> approver), audit);
         windows = new WindowsBridge(host);
         vault = new zordon.security.vault.QuarantineVault(home.resolve("quarentena"), Clock.systemUTC());
         ZPath base = ZPath.ofWsl(home.toString());
@@ -220,13 +220,14 @@ class ToolsTest {
             Files.writeString(logs.resolve("app-" + i + ".log"), "linha " + i);
         }
         List<Map<String, Object>> seen = new CopyOnWriteArrayList<>();
-        PermissionEngine.Approver watching = (action, actor, risk, ttl, perAction) -> {
+        PermissionEngine.Approver watching = request -> {
+            var action = request.action();
             seen.add(Map.of("summary", action.humanSummary(), "targets", action.touchedPaths().size(),
-                    "count", action.targets(), "risk", risk.wire(), "perAction", perAction));
+                    "count", action.targets(), "risk", request.risk().wire(), "perAction", request.perAction()));
             return CompletableFuture.completedFuture(answer);
         };
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
-        SkillRuntime quarantine = new SkillRuntime(new Gatekeeper(new DefaultPermissionEngine(policy,
+        SkillRuntime quarantine = new SkillRuntime(new Gatekeeper(PermissionEngines.standard(policy,
                 new CommandValidator(Map.of()), new Redactor(), () -> watching), audit), bus, () -> false)
                 .register(QuarantineTools.quarantine(policy, ZPath.ofWsl(home.toString()), vault));
 

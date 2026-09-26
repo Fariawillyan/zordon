@@ -39,6 +39,10 @@ import zordon.api.trace.Spec;
 @Spec("SPEC-014")
 public final class PathPolicy {
 
+    /** Todas as áreas de uma política, mantidas juntas para evitar configuração parcial. */
+    public record Config(String home, List<String> workspaces, List<String> readable, List<String> forbidden,
+            List<String> critical, List<String> install) {}
+
     /** Como um caminho canônico cai nas áreas. */
     public record Verdict(boolean forbidden, boolean install, boolean critical, boolean workspace, boolean readable) {}
 
@@ -55,16 +59,15 @@ public final class PathPolicy {
      * @param critical fora de {@code forbidden}, mas sempre RED ({@code %APPDATA%}, {@code /etc})
      * @param install onde o Zordon está instalado: escrita sempre negada
      */
-    public PathPolicy(String home, List<String> workspaces, List<String> readable, List<String> forbidden,
-            List<String> critical, List<String> install) {
-        this.home = Objects.requireNonNull(home, "home");
-        this.raw = List.of(List.copyOf(workspaces), List.copyOf(readable), List.copyOf(forbidden),
-                List.copyOf(critical), List.copyOf(install));
-        this.workspaces = rules(workspaces);
-        this.readable = rules(readable);
-        this.forbidden = rules(forbidden);
-        this.critical = rules(critical);
-        this.install = rules(install);
+    public PathPolicy(Config config) {
+        this.home = Objects.requireNonNull(config.home(), "home");
+        this.raw = List.of(List.copyOf(config.workspaces()), List.copyOf(config.readable()),
+                List.copyOf(config.forbidden()), List.copyOf(config.critical()), List.copyOf(config.install()));
+        this.workspaces = rules(config.workspaces());
+        this.readable = rules(config.readable());
+        this.forbidden = rules(config.forbidden());
+        this.critical = rules(config.critical());
+        this.install = rules(config.install());
     }
 
     /** As raízes dos workspaces, expandidas e sem curinga: o que é projeto do usuário (SPEC-021 CA-7). */
@@ -74,7 +77,7 @@ public final class PathPolicy {
 
     /** Os padrões da documentação, para quando o {@code config.toml} não diz nada. */
     public static PathPolicy defaults(String home, List<String> workspaces, List<String> readable) {
-        return new PathPolicy(home, workspaces, readable,
+        return new PathPolicy(new Config(home, workspaces, readable,
                 List.of("C:/Windows", "C:/Program Files", "C:/Program Files (x86)", "**/.git/**", "**/.ssh/**",
                         "**/node_modules/**", "**/.env", "**/*.env", "**/*.pem", "**/*.key",
                         "~/.zordon/secrets.env", "~/.zordon/secrets.age", "~/.zordon/key", "~/.gnupg/**",
@@ -82,14 +85,14 @@ public final class PathPolicy {
                 List.of("C:/Users/*/AppData/**", "C:/ProgramData/**", "/etc/**", "/usr/**", "/boot/**",
                         "/var/lib/**"),
                 List.of("~/.local/share/zordon/**", "C:/Users/*/AppData/Local/Programs/Zordon/**",
-                        "/etc/systemd/system/zordon*"));
+                        "/etc/systemd/system/zordon*")));
     }
 
     /** A mesma política com mais padrões proibidos: o usuário só pode apertar, nunca afrouxar. */
     public PathPolicy withForbidden(List<String> extra) {
         List<String> forbiddenAll = new ArrayList<>(raw.get(2));
         forbiddenAll.addAll(extra);
-        return new PathPolicy(home, raw.get(0), raw.get(1), forbiddenAll, raw.get(3), raw.get(4));
+        return new PathPolicy(new Config(home, raw.get(0), raw.get(1), forbiddenAll, raw.get(3), raw.get(4)));
     }
 
     public Verdict classify(ZPath path) {

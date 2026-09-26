@@ -53,8 +53,9 @@ class NotificationCenterTest {
     }
 
     private static ZordonMessage message(NotificationCenter center, Severity severity, String title) {
-        return center.message(severity, "SYSTEM", title, "o que houve", "por que importa", "quem viu",
-                "o que foi feito", "recurso", true, "estado agora", List.of("Ver na tela"));
+        return center.message(new NotificationCenter.MessageFields(severity, "SYSTEM", title, "o que houve",
+                "por que importa", "quem viu", "o que foi feito", "recurso", true, "estado agora",
+                List.of("Ver na tela")));
     }
 
     @AcceptanceCriteria("SPEC-015/CA-3")
@@ -100,14 +101,14 @@ class NotificationCenterTest {
     @Test
     void mensagemSemUmDosOitoCamposNaoExiste() {
         try (NotificationCenter center = open(new CopyOnWriteArrayList<>())) {
-            assertThatThrownBy(() -> center.message(Severity.HIGH, "SECURITY", "t", "o que", "",
-                    "quem", "ação", "recurso", true, "estado", List.of("x")))
+            assertThatThrownBy(() -> center.message(new NotificationCenter.MessageFields(Severity.HIGH, "SECURITY",
+                    "t", "o que", "", "quem", "ação", "recurso", true, "estado", List.of("x"))))
                     .hasMessageContaining("whySuspicious");
-            assertThatThrownBy(() -> center.message(Severity.HIGH, "SECURITY", "t", "o que", "por que",
-                    "quem", " ", "recurso", true, "estado", List.of("x")))
+            assertThatThrownBy(() -> center.message(new NotificationCenter.MessageFields(Severity.HIGH, "SECURITY",
+                    "t", "o que", "por que", "quem", " ", "recurso", true, "estado", List.of("x"))))
                     .hasMessageContaining("actionTaken");
-            assertThatThrownBy(() -> center.message(Severity.HIGH, "SECURITY", "t", "o que", "por que",
-                    "quem", "ação", "recurso", true, "estado", List.of()))
+            assertThatThrownBy(() -> center.message(new NotificationCenter.MessageFields(Severity.HIGH, "SECURITY",
+                    "t", "o que", "por que", "quem", "ação", "recurso", true, "estado", List.of())))
                     .hasMessageContaining("options");
             Map<String, Object> payload = message(center, Severity.INFO, "ok").payload();
             assertThat(payload).containsKeys("whatHappened", "whySuspicious", "detectedBy", "actionTaken",

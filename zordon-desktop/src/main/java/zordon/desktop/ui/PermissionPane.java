@@ -36,8 +36,6 @@ import javafx.stage.Window;
 import javafx.util.Duration;
 import zordon.api.trace.Spec;
 import zordon.desktop.shell.SecurityPresentation;
-import zordon.desktop.shell.SecurityPresentation.Choice;
-import zordon.desktop.shell.SecurityPresentation.Prompt;
 
 /**
  * O diálogo de permissão (SPEC-015 CA-2): o que o núcleo resumiu, os alvos
@@ -47,12 +45,12 @@ import zordon.desktop.shell.SecurityPresentation.Prompt;
 @Spec("SPEC-015")
 public final class PermissionPane extends VBox {
 
-    private final CompletableFuture<Choice> result = new CompletableFuture<>();
+    private final CompletableFuture<zordon.desktop.shell.SecurityPresentation.Choice> result = new CompletableFuture<>();
     private final AtomicBoolean decided = new AtomicBoolean();
     private final Timeline countdown;
     private int remaining;
 
-    public PermissionPane(Prompt prompt) {
+    public PermissionPane(zordon.desktop.shell.SecurityPresentation.Prompt prompt) {
         getStyleClass().add("permission-dialog");
         setId("permission-dialog");
         setSpacing(12);
@@ -93,10 +91,10 @@ public final class PermissionPane extends VBox {
         deny.setId("permission-deny");
         deny.setDefaultButton(true);   // Enter nega (Segurança §2, regra 4)
         deny.setCancelButton(true);    // Esc também
-        deny.setOnAction(event -> decide(Choice.DENY));
+        deny.setOnAction(event -> decide(zordon.desktop.shell.SecurityPresentation.Choice.DENY));
         Button once = new Button(prompt.requiresCheck() ? "Autorizar esta ação" : "Autorizar");
         once.setId("permission-allow");
-        once.setOnAction(event -> decide(Choice.ONCE));
+        once.setOnAction(event -> decide(zordon.desktop.shell.SecurityPresentation.Choice.ONCE));
         HBox buttons = new HBox(8);
         buttons.setAlignment(Pos.CENTER_RIGHT);
         Region spacer = new Region();
@@ -105,7 +103,7 @@ public final class PermissionPane extends VBox {
         if (prompt.offersSession()) {
             Button session = new Button("Autorizar nesta sessão");
             session.setId("permission-session");
-            session.setOnAction(event -> decide(Choice.SESSION));
+            session.setOnAction(event -> decide(zordon.desktop.shell.SecurityPresentation.Choice.SESSION));
             buttons.getChildren().add(session);
         }
         buttons.getChildren().add(once);
@@ -123,19 +121,19 @@ public final class PermissionPane extends VBox {
             remaining--;
             timer.setText(remainingText());
             if (remaining <= 0) {
-                decide(Choice.DENY);
+                decide(zordon.desktop.shell.SecurityPresentation.Choice.DENY);
             }
         }));
         countdown.setCycleCount(Math.max(1, prompt.seconds()));
         countdown.play();
     }
 
-    public CompletableFuture<Choice> result() {
+    public CompletableFuture<zordon.desktop.shell.SecurityPresentation.Choice> result() {
         return result;
     }
 
     /** Fechar a janela, perder a conexão ou o tempo acabar: nega. */
-    public void decide(Choice choice) {
+    public void decide(zordon.desktop.shell.SecurityPresentation.Choice choice) {
         if (decided.compareAndSet(false, true)) {
             countdown.stop();
             result.complete(choice);
@@ -147,7 +145,8 @@ public final class PermissionPane extends VBox {
     }
 
     /** Mostra o diálogo por cima da janela do Zordon, que vem para a frente. */
-    public static CompletableFuture<String> show(Window owner, Prompt prompt, String stylesheet) {
+    public static CompletableFuture<String> show(Window owner,
+            zordon.desktop.shell.SecurityPresentation.Prompt prompt, String stylesheet) {
         PermissionPane pane = new PermissionPane(prompt);
         Stage stage = new Stage();
         stage.setTitle("Zordon — autorização");
@@ -160,7 +159,7 @@ public final class PermissionPane extends VBox {
             scene.getStylesheets().add(stylesheet);
         }
         stage.setScene(scene);
-        stage.setOnCloseRequest(event -> pane.decide(Choice.DENY));
+        stage.setOnCloseRequest(event -> pane.decide(zordon.desktop.shell.SecurityPresentation.Choice.DENY));
         pane.result().whenComplete((choice, failure) -> javafx.application.Platform.runLater(stage::close));
         stage.show();
         stage.toFront();

@@ -59,13 +59,13 @@ import zordon.core.tools.Tool;
 import zordon.core.tools.ToolException;
 import zordon.core.tools.ToolResult;
 import zordon.memory.SqliteMemoryStore;
-import zordon.memory.ZordonDatabase;
 import zordon.memory.TaskStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -92,8 +92,8 @@ class AutomationTest {
         store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), clock);
         bus = new ZordonEventBus("test", clock);
-        PermissionEngine.Approver deny = (a, b, c, d, e) -> CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        PermissionEngine.Approver deny = request -> CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~"), List.of("~")), new CommandValidator(Map.of()),
                 new Redactor(), () -> deny), audit);
         runtime = new SkillRuntime(gatekeeper, bus, lockdown::get);

@@ -16,13 +16,9 @@
 package zordon.defense;
 
 import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +32,6 @@ import zordon.api.trace.Spec;
  */
 @Spec("SPEC-026")
 public final class DetectionEngine {
-
-    static final Duration WINDOW = Duration.ofSeconds(60);
 
     /** Peso acumulado para cada severidade. */
     static Severity severity(double weight) {
@@ -55,7 +49,7 @@ public final class DetectionEngine {
     private final List<Detector> detectors;
     private final Clock clock;
     private final Consumer<Finding> onFinding;
-    private final Map<String, Finding> open = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Finding> open = new LinkedHashMap<>();
 
     public DetectionEngine(List<Detector> detectors, Clock clock, Consumer<Finding> onFinding) {
         this.detectors = List.copyOf(detectors);
@@ -78,10 +72,10 @@ public final class DetectionEngine {
     }
 
     private synchronized void correlate(Subject subject, Signal signal) {
-        Instant now = clock.instant();
+        var now = clock.instant();
         String key = subject.toString();
         Finding current = open.get(key);
-        if (current != null && Duration.between(current.lastSeen(), now).compareTo(WINDOW) > 0) {
+        if (current != null && FindingWindow.expired(current, now)) {
             current = null;   // a janela fechou: o próximo sinal começa outro achado
         }
         List<Signal> signals = new ArrayList<>(current == null ? List.of() : current.signals());
@@ -89,8 +83,8 @@ public final class DetectionEngine {
         double weight = signals.stream().mapToDouble(Signal::weight).sum();
         Severity severity = severity(weight);
         String detector = signals.stream().map(Signal::detectorId).distinct().reduce((a, b) -> a + ", " + b).orElse("");
-        Finding finding = new Finding(current == null ? "fnd-" + UUID.randomUUID() : current.id(), severity, detector,
-                subject, title(subject, signals), rationale(signals, weight), signals, signals.size(),
+        Finding finding = new Finding(current == null ? FindingId.next() : current.id(), severity, detector,
+                subject, FindingText.title(subject, signals), FindingText.rationale(signals, weight), signals, signals.size(),
                 current == null ? now : current.firstSeen(), now);
         open.put(key, finding);
         log.info("achado {} · {} · {} (peso {})", finding.id(), severity.wire(), subject, String.format("%.2f", weight));
@@ -99,30 +93,6 @@ public final class DetectionEngine {
         } catch (RuntimeException e) {
             log.warn("entrega do achado falhou: {}", e.getMessage());
         }
-    }
-
-    /** O motivo, escrito por código: é o que o usuário lê para decidir (Defesa §4). */
-    static String rationale(List<Signal> signals, double weight) {
-        Map<String, Integer> counted = new LinkedHashMap<>();
-        signals.forEach(signal -> counted.merge(signal.detectorId() + " (" + signal.kind() + ")", 1, Integer::sum));
-        StringBuilder out = new StringBuilder();
-        counted.forEach((name, times) -> out.append(out.isEmpty() ? "" : "; ").append(name)
-                .append(times > 1 ? " ×" + times : ""));
-        return out + ". Peso somado " + String.format(java.util.Locale.ROOT, "%.2f", weight)
-                + " na janela de " + WINDOW.toSeconds() + " s.";
-    }
-
-    static String title(Subject subject, List<Signal> signals) {
-        String first = signals.getLast().kind();
-        return switch (subject.kind()) {
-            case "agent" -> "Agente " + subject.id() + ": " + first;
-            case "mcp" -> "Servidor MCP " + subject.id() + ": " + first;
-            case "self" -> "Integridade do Zordon: " + first;
-            case "turn" -> "Nesta conversa: " + first;
-            case "process" -> "Processo " + subject.id() + ": " + first;
-            case "file" -> "Arquivo " + subject.id() + ": " + first;
-            default -> subject.id() + ": " + first;
-        };
     }
 
     /** Os achados abertos, do mais novo para o mais antigo. */

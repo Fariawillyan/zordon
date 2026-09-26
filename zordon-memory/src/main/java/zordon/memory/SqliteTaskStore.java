@@ -15,17 +15,13 @@
  */
 package zordon.memory;
 
-import java.io.IOException;
 import java.security.SecureRandom;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -54,8 +50,6 @@ public final class SqliteTaskStore implements TaskStore {
 
     // tarefas (SPEC-023) ---------------------------------------------------
 
-    private static final com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
-
     @Override
     public String createTask(String goal, String origin, List<PlanStep> steps) {
         synchronized (sql) {
@@ -81,7 +75,7 @@ public final class SqliteTaskStore implements TaskStore {
                         step.setInt(3, i);
                         step.setString(4, plan.title());
                         step.setString(5, plan.agent());
-                        step.setString(6, json.writeValueAsString(plan.dependsOn()));
+                        step.setString(6, TaskJson.write(plan.dependsOn()));
                         step.setString(7, plan.risk());
                         step.setString(8, plan.doneWhen());
                         step.addBatch();
@@ -89,7 +83,7 @@ public final class SqliteTaskStore implements TaskStore {
                     step.executeBatch();
                     transitionRow(id, null, null, "planned", "plano com " + steps.size() + " etapa(s)", now);
                     sql.connection().commit();
-                } catch (SQLException | com.fasterxml.jackson.core.JsonProcessingException e) {
+                } catch (SQLException e) {
                     sql.connection().rollback();
                     throw new SQLException(e.getMessage(), e);
                 } finally {
@@ -240,7 +234,7 @@ public final class SqliteTaskStore implements TaskStore {
                     try (ResultSet step = steps.executeQuery()) {
                         while (step.next()) {
                             views.add(new StepView(step.getString(1), step.getInt(2), step.getString(3), step.getString(4),
-                                    List.of(json.readValue(step.getString(5), String[].class)), step.getString(6),
+                                    TaskJson.read(step.getString(5)), step.getString(6),
                                     step.getString(7), step.getString(8), step.getInt(9), step.getString(10)));
                         }
                     }
@@ -248,7 +242,7 @@ public final class SqliteTaskStore implements TaskStore {
                             row.getString(4), row.getString(5), Instant.parse(row.getString(6)),
                             Instant.parse(row.getString(7)), List.copyOf(views)));
                 }
-            } catch (SQLException | IOException e) {
+            } catch (SQLException e) {
                 throw new IllegalStateException("memória (tarefa): " + e.getMessage(), e);
             }
         }
@@ -266,28 +260,7 @@ public final class SqliteTaskStore implements TaskStore {
     @Override
     public Map<String, Object> taskStats() {
         synchronized (sql) {
-            Map<String, Object> out = new LinkedHashMap<>();
-            Map<String, Long> byState = new LinkedHashMap<>();
-            Map<String, Long> verdicts = new LinkedHashMap<>();
-            try (Statement statement = sql.statement()) {
-                try (ResultSet row = statement.executeQuery("SELECT state, count(*) FROM task GROUP BY state ORDER BY state")) {
-                    while (row.next()) {
-                        byState.put(row.getString(1), row.getLong(2));
-                    }
-                }
-                String since = clock.instant().minus(Duration.ofDays(7)).toString().replace("'", "");
-                try (ResultSet row = statement.executeQuery("SELECT verdict, count(*) FROM verdict WHERE at >= '" + since
-                        + "' GROUP BY verdict ORDER BY verdict")) {
-                    while (row.next()) {
-                        verdicts.put(row.getString(1), row.getLong(2));
-                    }
-                }
-            } catch (SQLException e) {
-                throw Sql.failure("estatística de tarefas", e);
-            }
-            out.put("byState", byState);
-            out.put("verdicts7d", verdicts);
-            return out;
+            return TaskStats.read(sql, clock);
         }
     }
 

@@ -45,8 +45,8 @@ class PermissionEngineTest {
 
     private static final String HOME = "/home/u";
 
-    private static DefaultPermissionEngine engine(PermissionEngine.Approver approver) {
-        return new DefaultPermissionEngine(
+    private static PermissionEngine engine(PermissionEngine.Approver approver) {
+        return PermissionEngines.standard(
                 PathPolicy.defaults(HOME, List.of("~/dev", "D:/projetos"), List.of("~", "D:/")),
                 new CommandValidator(Map.of("git", "/usr/bin/git", "docker", "/usr/bin/docker",
                         "gradle", "/opt/gradle/bin/gradle")),
@@ -88,7 +88,7 @@ class PermissionEngineTest {
                 flags.stream().filter(flag -> flag.startsWith("scope=")).forEach(flag -> scope.add(flag.substring(6)));
                 PermissionEngine.PolicyContext ctx = new PermissionEngine.PolicyContext(flags.contains("lockdown"),
                         flags.contains("breaker"), flags.contains("tainted"), !flags.contains("absent"),
-                        flags.contains("newtool"), scope);
+                        flags.contains("newtool"), scope, null);
                 ActionDescriptor action = new ActionDescriptor(f[1], args, RiskLevel.valueOf(f[2].toUpperCase()),
                         effects, paths, Integer.parseInt(f[5]), command, "caso " + f[0]);
                 Principal principal = new Principal(f[9].equals("1") ? "agent:executor" : "user",
@@ -106,7 +106,7 @@ class PermissionEngineTest {
     @AcceptanceCriteria("SPEC-014/CA-6")
     @Test
     void cadaCasoDaTabelaGoldenDaExatamenteORiscoEADecisaoRegistrados() throws IOException {
-        DefaultPermissionEngine engine = engine(null);
+        PermissionEngine engine = engine(null);
         List<Case> cases = golden();
         assertThat(cases).hasSizeGreaterThanOrEqualTo(40);
         List<String> mismatches = new ArrayList<>();
@@ -143,14 +143,14 @@ class PermissionEngineTest {
         assertThat(engine(null).requestApproval(quarantine(), user, ask).get(1, TimeUnit.SECONDS))
                 .isInstanceOf(Decision.Deny.class).extracting(Decision::reason).asString().contains("nenhuma tela");
 
-        PermissionEngine.Approver silent = (action, actor, risk, ttl, perAction) -> new CompletableFuture<>();
+        PermissionEngine.Approver silent = request -> new CompletableFuture<>();
         Decision.AskUser quick = new Decision.AskUser(RiskLevel.RED, "x", Duration.ofMillis(50), true);
         assertThat(engine(silent).requestApproval(quarantine(), Principal.user(RequestOrigin.UI), quick).get(2, TimeUnit.SECONDS))
                 .isInstanceOf(Decision.Deny.class).extracting(Decision::reason).asString().contains("sem resposta");
 
         // "Nesta sessão" não vale para RED: autoriza só esta, e a próxima pergunta de novo.
-        DefaultPermissionEngine sessionClick = engine(
-                (action, actor, risk, ttl, perAction) -> CompletableFuture.completedFuture(PermissionEngine.Approval.SESSION));
+        PermissionEngine sessionClick = engine(
+                request -> CompletableFuture.completedFuture(PermissionEngine.Approval.SESSION));
         assertThat(sessionClick.requestApproval(quarantine(), user, ask).get(1, TimeUnit.SECONDS))
                 .isEqualTo(new Decision.Allow(RiskLevel.RED, "autorizado pelo usuário, só desta vez", false));
         assertThat(sessionClick.evaluate(quarantine(), user, ctx)).isInstanceOf(Decision.AskUser.class);
@@ -160,8 +160,8 @@ class PermissionEngineTest {
     @Test
     void tetoDoAgenteNegaSemPerguntarEADelegacaoSoPedeConfirmacao() {
         List<String> asked = new ArrayList<>();
-        DefaultPermissionEngine engine = engine((action, actor, risk, ttl, perAction) -> {
-            asked.add(action.tool());
+        PermissionEngine engine = engine(request -> {
+            asked.add(request.action().tool());
             return CompletableFuture.completedFuture(PermissionEngine.Approval.ONCE);
         });
         PermissionEngine.PolicyContext green = new PermissionEngine.PolicyContext(false, false, false, true, false,
@@ -186,8 +186,8 @@ class PermissionEngineTest {
 
     @Test
     void yellowNaSessaoValeParaAMesmaFerramentaEArea() throws Exception {
-        DefaultPermissionEngine engine = engine(
-                (action, actor, risk, ttl, perAction) -> CompletableFuture.completedFuture(PermissionEngine.Approval.SESSION));
+        PermissionEngine engine = engine(
+                request -> CompletableFuture.completedFuture(PermissionEngine.Approval.SESSION));
         Principal user = Principal.user(RequestOrigin.UI);
         PermissionEngine.PolicyContext ctx = PermissionEngine.PolicyContext.interactive();
         ActionDescriptor first = write(HOME + "/dev/app/a.txt");
@@ -205,17 +205,17 @@ class PermissionEngineTest {
     @AcceptanceCriteria("SPEC-014/CA-8")
     @Test
     void lockdownDisjuntorETetoDaOrigem() {
-        DefaultPermissionEngine engine = engine(null);
+        PermissionEngine engine = engine(null);
         Principal user = Principal.user(RequestOrigin.UI);
         PermissionEngine.PolicyContext lockdown = new PermissionEngine.PolicyContext(true, false, false, true, false,
-                Set.of());
+                Set.of(), null);
         assertThat(engine.evaluate(write(HOME + "/dev/a"), user, lockdown)).isInstanceOf(Decision.Deny.class);
         PermissionEngine.PolicyContext breaker = new PermissionEngine.PolicyContext(false, true, false, true, false,
-                Set.of());
+                Set.of(), null);
         assertThat(engine.evaluate(write(HOME + "/dev/a"), user, breaker)).isInstanceOf(Decision.Deny.class);
 
         PermissionEngine.PolicyContext scoped = new PermissionEngine.PolicyContext(false, false, false, true, false,
-                Set.of("fs.quarantine"));
+                Set.of("fs.quarantine"), null);
         assertThat(engine.evaluate(quarantine(), new Principal("automation:limpeza", RequestOrigin.AUTOMATION, false),
                 scoped)).isInstanceOf(Decision.Deny.class);
         assertThat(engine.evaluate(quarantine(), new Principal("defense", RequestOrigin.AUTONOMOUS, false),

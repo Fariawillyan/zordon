@@ -220,8 +220,9 @@ public final class McpManager implements AutoCloseable {
                 fail(connection, "início negado: " + permit.decision().reason(), false);
                 return;
             }
-            ProcessRunner.Live live = runner.start(granted, workDir);
-            gatekeeper.complete(granted, zordon.security.AuditLog.Status.OK, Duration.ZERO, "processo iniciado", null);
+            zordon.security.LiveProcess live = runner.start(granted, workDir);
+            granted.complete(new zordon.security.AuditLog.Completion(
+                    zordon.security.AuditLog.Status.OK, Duration.ZERO, "processo iniciado", null));
             McpClient client = new McpClient(server.name(), live, () -> dropped(connection));
             connection.client = client;
             client.request("initialize", Map.of("protocolVersion", PROTOCOL, "capabilities", Map.of(),
@@ -235,7 +236,7 @@ public final class McpManager implements AutoCloseable {
             if (approved != null && !approved.equals(hash)) {
                 connection.pendingSurface = surface;
                 log.warn("MCP {}: a superfície mudou; ferramentas suspensas até aprovação", server.name());
-                notifications.publish(notifications.message(Severity.HIGH, "AI_DEFENSE",
+                notifications.publish(notifications.message(new NotificationCenter.MessageFields(Severity.HIGH, "AI_DEFENSE",
                         "O servidor MCP " + server.name() + " mudou o que oferece",
                         "As ferramentas declaradas por " + server.name() + " não são mais as que você aprovou.",
                         "Um servidor que muda de superfície depois de uma atualização pode passar a expor algo perigoso.",
@@ -243,7 +244,7 @@ public final class McpManager implements AutoCloseable {
                         "As ferramentas desse servidor não foram oferecidas ao modelo.",
                         "servidor MCP " + server.name(), true,
                         "Servidor conectado, ferramentas suspensas.",
-                        List.of("Revisar e aprovar a superfície nova na tela", "Manter suspenso")));
+                        List.of("Revisar e aprovar a superfície nova na tela", "Manter suspenso"))));
                 connection.state = State.DRIFT;
                 return;
             }

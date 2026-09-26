@@ -23,16 +23,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import zordon.api.event.EventType;
-import zordon.api.event.Topic;
 import zordon.api.zwp.EndpointFile;
 import zordon.api.zwp.ZwpCloseCode;
 import zordon.core.endpoint.EndpointPublisher;
-import zordon.core.event.QueuePolicy;
 import zordon.core.event.ZordonEventBus;
 import zordon.core.platform.SystemdNotifier;
 import zordon.ai.Pricing;
@@ -121,7 +118,7 @@ public final class ZordonCore implements AutoCloseable {
     private zordon.core.tasks.TaskRunner tasks;
     /** Memória de longo prazo e destilação (SPEC-021). */
     private zordon.memory.ZordonDatabase database;
-    private zordon.memory.SqliteMemoryStore memory;
+    private zordon.memory.MemoryStore memory;
     private zordon.core.memory.Distiller distiller;
     /** Servidores MCP do {@code config.toml} (SPEC-020). */
     private zordon.core.mcp.McpManager mcp;
@@ -150,6 +147,7 @@ public final class ZordonCore implements AutoCloseable {
     private final String startId;
     private final Instant startedAt;
     private final String token;
+    private final SecuritySettingsLoader securitySettings;
 
     public ZordonCore(ZordonConfig config, SystemdNotifier systemd) {
         this(config, systemd, System.getenv());
@@ -163,6 +161,7 @@ public final class ZordonCore implements AutoCloseable {
     public ZordonCore(ZordonConfig config, SystemdNotifier systemd, Map<String, String> environment) {
         this.config = config;
         this.systemd = systemd;
+        this.securitySettings = new SecuritySettingsLoader(config.home().resolve("config.toml"), environment);
         this.startId = StartId.generate();
         this.startedAt = Instant.now();
         this.token = EndpointPublisher.newToken();
@@ -197,7 +196,7 @@ public final class ZordonCore implements AutoCloseable {
 
                     @Override
                     public boolean available(String program) {
-                        return securitySettings(environment).catalog().containsKey(program);
+                        return securitySettings.load().catalog().containsKey(program);
                     }
                 });
     }
@@ -216,15 +215,11 @@ public final class ZordonCore implements AutoCloseable {
         // O motor de voz é o sidecar zordon-voice, num socket Unix (SPEC-011, ADR-0028).
         this.engine = new SidecarVoiceEngine(Path.of(
                 environment.getOrDefault("ZORDON_VOICE_SOCKET", "/run/zordon-voice/voice.sock")));
-        this.voice = new VoiceService(
-                new VoiceStore(config.home().resolve("state").resolve("voice.json")),
-                engine,
-                server,
-                snapshot -> bus.publish(EventType.VOICE_STATE, snapshot),
-                Clock.systemUTC(),
+        this.voice = new VoiceService(new VoiceService.Dependencies(
+                new VoiceStore(config.home().resolve("state").resolve("voice.json")), engine, server,
+                snapshot -> bus.publish(EventType.VOICE_STATE, snapshot), Clock.systemUTC(),
                 Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("voice-deadlines").factory()),
-                audio,
-                System::nanoTime);
+                audio, System::nanoTime));
         this.trace = new LiveTrace(config.home().resolve("trace"), Clock.systemDefaultZone());
         // A fala sai pelo narrador (SPEC-012) e é tocada no host pelo motor (SPEC-011).
         this.speech = new SpeechPlayer(engine, voice, server, server::sendBinary);
@@ -237,8 +232,8 @@ public final class ZordonCore implements AutoCloseable {
         this.audit = new zordon.security.SqliteAuditLog(config.home().resolve("state").resolve("audit.db"),
                 redactor, Clock.systemUTC());
         this.approver = new zordon.core.permission.DesktopApprover(server);
-        this.permissions = new zordon.security.DefaultPermissionEngine(securitySettings(environment).paths(),
-                securitySettings(environment).validator(), redactor, () -> approver);
+        this.permissions = zordon.security.PermissionEngines.standard(securitySettings.load().paths(),
+                securitySettings.load().validator(), redactor, () -> approver);
         this.notifications = new zordon.core.notify.NotificationCenter(
                 config.home().resolve("state").resolve("notifications.db"), Clock.systemUTC(),
                 message -> bus.publish(EventType.SECURITY_NOTIFICATION, message.payload()));
@@ -249,13 +244,13 @@ public final class ZordonCore implements AutoCloseable {
                         payload));
         this.gatekeeper = new zordon.security.Gatekeeper(permissions, audit, oppressor::active);
         this.runner = new zordon.security.ProcessRunner(
-                securitySettings(environment).validator());
+                securitySettings.load().validator());
         this.userHome = zordon.api.security.ZPath.ofWsl(
                 environment.getOrDefault("HOME", System.getProperty("user.home")));
-        this.policy = securitySettings(environment).paths();
+        this.policy = securitySettings.load().paths();
         this.windows = new zordon.core.tools.WindowsBridge(server);
         cliRunner.set(new zordon.core.tools.GatekeptCliRunner(gatekeeper, runner, config.home().resolve("cli-work"),
-                program -> securitySettings(environment).catalog().containsKey(program)));
+                program -> securitySettings.load().catalog().containsKey(program)));
         this.vault = new zordon.security.vault.QuarantineVault(config.home().resolve("quarantine"),
                 Clock.systemUTC());
         this.lockdown = new zordon.core.permission.LockdownService(
@@ -394,7 +389,7 @@ public final class ZordonCore implements AutoCloseable {
                 Clock.systemDefaultZone(), System::nanoTime);
         automationRef.set(automations);
         tools.register(zordon.core.automation.AutomationTools.propose(automations));
-        this.dockerEvents = securitySettings(environment).catalog().containsKey("docker")
+        this.dockerEvents = securitySettings.load().catalog().containsKey("docker")
                 ? new zordon.core.monitor.DockerEvents(gatekeeper, runner, config.home().resolve("monitor-work"),
                         payload -> bus.publish(EventType.CONTAINER_EVENT, payload),
                         zordon.core.monitor.DockerEvents.defaultBackoff())
@@ -415,7 +410,8 @@ public final class ZordonCore implements AutoCloseable {
 
     /** O disjuntor de uma execução abriu: aviso HIGH, com os sinais (SPEC-022 CA-5). */
     private void agentSuspended(zordon.core.agents.AgentProfile agent, String reason) {
-        notifications.publish(notifications.message(zordon.api.security.Severity.HIGH, "AI_DEFENSE",
+        notifications.publish(notifications.message(new zordon.core.notify.NotificationCenter.MessageFields(
+                zordon.api.security.Severity.HIGH, "AI_DEFENSE",
                 "O agente " + agent.id() + " foi suspenso",
                 "A execução do agente " + agent.id() + " parou: " + reason + ".",
                 "Negações seguidas, tentativa acima do teto ou repetição sem progresso são o comportamento de um agente"
@@ -424,7 +420,7 @@ public final class ZordonCore implements AutoCloseable {
                 "A execução foi encerrada; nenhuma ação a mais foi feita.",
                 "agente " + agent.id(), true,
                 "Encerrado. Um pedido novo começa do zero.",
-                List.of("Ver o que o agente fez no Live Trace", "Pedir de novo")));
+                List.of("Ver o que o agente fez no Live Trace", "Pedir de novo"))));
     }
 
     /** O repositório do Zordon no disco, quando ele estiver lá: a fonte da documentação (SPEC-028). */
@@ -462,28 +458,6 @@ public final class ZordonCore implements AutoCloseable {
         }
     }
 
-    private zordon.security.SecuritySettings securitySettings;
-
-    /** Política inválida não derruba o núcleo: vale a padrão, que é a mais restrita, e isso é avisado. */
-    private zordon.security.SecuritySettings securitySettings(Map<String, String> environment) {
-        if (securitySettings == null) {
-            String home = environment.getOrDefault("HOME", System.getProperty("user.home"));
-            try {
-                securitySettings = zordon.security.SecuritySettings.load(config.home().resolve("config.toml"), home,
-                        environment.get("PATH"));
-            } catch (java.io.IOException e) {
-                log.warn("política de segurança do config.toml ignorada: {}", e.getMessage());
-                try {
-                    securitySettings = zordon.security.SecuritySettings.load(
-                            config.home().resolve("config.toml.ausente"), home, environment.get("PATH"));
-                } catch (java.io.IOException impossible) {
-                    throw new IllegalStateException(impossible);
-                }
-            }
-        }
-        return securitySettings;
-    }
-
     /** Confere a cadeia da auditoria; quebrada, é alerta crítico (SPEC-014 §13). */
     private void verifyAudit() {
         zordon.security.AuditLog.Verification verification = audit.verify(1000);
@@ -502,7 +476,8 @@ public final class ZordonCore implements AutoCloseable {
             log.error("auditoria: cadeia quebrada na linha {}", verification.firstBroken());
             defense.auditChainBroken("cadeia quebrada a partir da linha " + verification.firstBroken());
             lockdown.enter("a cadeia da auditoria está quebrada", "audit");
-            notifications.publish(notifications.message(zordon.api.security.Severity.CRITICAL, "SECURITY",
+            notifications.publish(notifications.message(new zordon.core.notify.NotificationCenter.MessageFields(
+                    zordon.api.security.Severity.CRITICAL, "SECURITY",
                     "A auditoria foi alterada por fora",
                     "A cadeia de hash da auditoria não confere a partir da linha " + verification.firstBroken() + ".",
                     "Uma linha só muda assim se alguém mexer no arquivo audit.db fora do Zordon.",
@@ -511,7 +486,7 @@ public final class ZordonCore implements AutoCloseable {
                     "~/.zordon/state/audit.db",
                     true,
                     "Só leitura: nenhuma ação acima de GREEN executa.",
-                    java.util.List.of("Conferir o arquivo e retomar na tela", "Manter pausado")));
+                    java.util.List.of("Conferir o arquivo e retomar na tela", "Manter pausado"))));
         } else {
             log.info("auditoria: cadeia íntegra ({} linhas conferidas de {})", verification.checked(), audit.entries());
         }
@@ -544,7 +519,7 @@ public final class ZordonCore implements AutoCloseable {
                                 () -> Map.of("dir", trace.dir().toString(), "file", trace.today().toString(),
                                         "activity", activity.state()),
                                 () -> Map.of("audit", auditState,
-                                        "programs", securitySettings.catalog().keySet().stream().sorted().toList())))
+                                        "programs", securitySettings.load().catalog().keySet().stream().sorted().toList())))
                 .with("rag", knowledge::status)
                 .with("usage", () -> usage.summary(7))
                 .with("monitor", monitor::status)
@@ -594,7 +569,7 @@ public final class ZordonCore implements AutoCloseable {
         engine.start();
         speech.start();
         new VoiceMethods(voice).registerOn(server);
-        forwardEventsToClients();
+        CoreEventForwarder.forward(bus, server);
     }
 
     /** Escuta, publica o endpoint e só então se declara pronto ao systemd. */
@@ -643,7 +618,8 @@ public final class ZordonCore implements AutoCloseable {
         }
         // Tarefas que o núcleo deixou pela metade: bloqueadas e avisadas, nunca reexecutadas sozinhas (SPEC-023 CA-4).
         for (zordon.memory.TaskStore.TaskView interrupted : tasks.recover()) {
-            notifications.publish(notifications.message(zordon.api.security.Severity.WARNING, "SYSTEM",
+            notifications.publish(notifications.message(new zordon.core.notify.NotificationCenter.MessageFields(
+                    zordon.api.security.Severity.WARNING, "SYSTEM",
                     "Uma tarefa foi interrompida",
                     "O núcleo reiniciou no meio da tarefa \"" + interrupted.goal() + "\".",
                     "Uma etapa pode ter feito só metade; repetir sozinho poderia duplicar um efeito.",
@@ -651,7 +627,7 @@ public final class ZordonCore implements AutoCloseable {
                     "A tarefa ficou bloqueada; nada foi reexecutado.",
                     "tarefa " + interrupted.id(), true,
                     "Bloqueada, esperando você.",
-                    List.of("Continuar pela tela", "Cancelar")));
+                    List.of("Continuar pela tela", "Cancelar"))));
         }
         automations.start();
         integrity.start();
@@ -705,19 +681,6 @@ public final class ZordonCore implements AutoCloseable {
         // O endpoint.json fica onde está: o Zordon não apaga arquivos (ADR-0015).
         // O cliente descobre que o núcleo saiu pela conexão, não pela ausência do
         // arquivo, e o token deste boot deixa de valer no próximo.
-    }
-
-    /**
-     * Duas assinaturas, porque as políticas de fila diferem: tópicos obrigatórios
-     * falham alto em vez de descartar em silêncio (ADR-0011).
-     */
-    private void forwardEventsToClients() {
-        Set<String> droppable = Topic.ALL.stream()
-                .filter(topic -> !Topic.MANDATORY.contains(topic))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-
-        bus.subscribe("zwp-mandatory", Topic.MANDATORY, QueuePolicy.rejectPublish(512), server::broadcastEvent);
-        bus.subscribe("zwp", droppable, QueuePolicy.dropOldest(1_024), server::broadcastEvent);
     }
 
     private String version() {

@@ -15,8 +15,6 @@
  */
 package zordon.core.mcp;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -30,32 +28,21 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import zordon.api.trace.Spec;
-import zordon.security.ProcessRunner;
 
 /**
  * Um servidor MCP pelo transporte {@code stdio}: JSON-RPC 2.0, uma mensagem por
  * linha (SPEC-020). Todo pedido tem prazo; uma resposta que nunca vem não trava
  * ninguém.
  */
-@Spec("SPEC-020")
 public final class McpClient implements AutoCloseable {
 
     /** Uma linha maior que isto é cortada: o servidor não enche a memória do núcleo. */
     public static final int MAX_LINE = 1024 * 1024;
     /** Três mensagens seguidas que não são JSON derrubam a conexão (SPEC-020 §13). */
     static final int MAX_INVALID = 3;
-    private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
-
-    private static final Logger log = LoggerFactory.getLogger(McpClient.class);
-    private static final ObjectMapper json = new ObjectMapper();
 
     private final String name;
-    private final ProcessRunner.Live live;
+    private final zordon.security.LiveProcess live;
     private final OutputStream out;
     private final Map<Long, CompletableFuture<Map<String, Object>>> pending = new ConcurrentHashMap<>();
     private final AtomicLong ids = new AtomicLong();
@@ -63,7 +50,7 @@ public final class McpClient implements AutoCloseable {
     private volatile boolean closed;
     private int invalid;
 
-    public McpClient(String name, ProcessRunner.Live live, Runnable onClosed) {
+    public McpClient(String name, zordon.security.LiveProcess live, Runnable onClosed) {
         this.name = Objects.requireNonNull(name, "name");
         this.live = Objects.requireNonNull(live, "live");
         this.out = live.stdin();
@@ -98,7 +85,7 @@ public final class McpClient implements AutoCloseable {
         if (closed) {
             throw new IOException("o servidor MCP " + name + " está fechado");
         }
-        out.write(json.writeValueAsBytes(message));
+        out.write(McpJson.encode(message));
         out.write('\n');
         out.flush();
     }
@@ -125,12 +112,10 @@ public final class McpClient implements AutoCloseable {
                 line.setLength(0);
                 oversized = false;
                 if (invalid >= MAX_INVALID) {
-                    log.warn("MCP {}: {} mensagens seguidas que não são JSON; conexão encerrada", name, invalid);
                     break;
                 }
             }
         } catch (IOException e) {
-            log.debug("MCP {}: leitura encerrada: {}", name, e.getMessage());
         } finally {
             closed = true;
             if (invalid >= MAX_INVALID) {
@@ -145,10 +130,9 @@ public final class McpClient implements AutoCloseable {
 
     /** A resposta passou de 1 MB: falha o pedido dela em vez de esperar o prazo. */
     private void tooLarge(CharSequence start) {
-        log.warn("MCP {}: mensagem maior que 1 MB descartada", name);
-        Matcher id = ID.matcher(start.subSequence(0, Math.min(start.length(), 256)));
-        if (id.find()) {
-            CompletableFuture<Map<String, Object>> answer = pending.get(Long.parseLong(id.group(1)));
+        Long id = McpJson.id(start.subSequence(0, Math.min(start.length(), 256)));
+        if (id != null) {
+            CompletableFuture<Map<String, Object>> answer = pending.get(id);
             if (answer != null) {
                 answer.completeExceptionally(new IOException("resposta do servidor MCP " + name + " maior que 1 MB"));
             }
@@ -158,10 +142,9 @@ public final class McpClient implements AutoCloseable {
     private void dispatch(String line) {
         Map<String, Object> message;
         try {
-            message = json.readValue(line, new TypeReference<Map<String, Object>>() { });
+            message = McpJson.decode(line);
         } catch (IOException e) {
             invalid++;
-            log.warn("MCP {}: linha que não é JSON ignorada", name);
             return;
         }
         invalid = 0;

@@ -156,7 +156,7 @@ public final class DefenseEngine {
         state.ifPresent(value -> {
             bus.publish(EventType.CIRCUIT_BREAKER_CLOSED, Map.of("subject", subject, "by", "user", "state",
                     value.name().toLowerCase(java.util.Locale.ROOT)));
-            notifications.publish(notifications.message(Severity.INFO, "SECURITY",
+            notifications.publish(notifications.message(new NotificationCenter.MessageFields(Severity.INFO, "SECURITY",
                     "Disjuntor liberado: " + subject,
                     "Você liberou " + subject + " como " + mode + ".",
                     "Liberar é decisão do dono: a defesa nunca fecha um disjuntor sozinha.",
@@ -164,7 +164,7 @@ public final class DefenseEngine {
                     "O sujeito voltou a poder agir" + (value == CircuitBreakers.State.HALF_OPEN
                             ? ", com cada ação confirmada na tela." : "."),
                     subject, true, value.name().toLowerCase(java.util.Locale.ROOT),
-                    List.of("Acompanhar na tela de Segurança")));
+                    List.of("Acompanhar na tela de Segurança"))));
         });
         return state.map(value -> value.name().toLowerCase(java.util.Locale.ROOT));
     }

@@ -253,7 +253,7 @@ final class VoiceSettingsView extends ScrollPane {
             open.getChildren().clear();
             for (Map<String, Object> breaker : state.breakers()) {
                 String subject = String.valueOf(breaker.get("subject"));
-                Label line = new Label(subject + " · " + breakerLabel(String.valueOf(breaker.get("state"))) + " · "
+                Label line = new Label(subject + " · " + VoiceSettingsLabels.breaker(String.valueOf(breaker.get("state"))) + " · "
                         + breaker.get("reason"));
                 line.setWrapText(true);
                 javafx.scene.control.Button supervised = new javafx.scene.control.Button("Liberar supervisionado");
@@ -446,7 +446,7 @@ final class VoiceSettingsView extends ScrollPane {
             for (Map<String, Object> task : state.tasks()) {
                 String taskId = String.valueOf(task.get("taskId"));
                 VBox box = new VBox(4);
-                Label goal = new Label(task.get("goal") + " · " + taskLabel(String.valueOf(task.get("state")))
+                Label goal = new Label(task.get("goal") + " · " + VoiceSettingsLabels.task(String.valueOf(task.get("state")))
                         + (task.get("reason") instanceof String reason ? " · " + reason : ""));
                 goal.setWrapText(true);
                 box.getChildren().add(goal);
@@ -456,7 +456,7 @@ final class VoiceSettingsView extends ScrollPane {
                             continue;
                         }
                         String stepId = String.valueOf(step.get("id"));
-                        Label line = new Label("  " + taskLabel(String.valueOf(step.get("state"))) + " · "
+                        Label line = new Label("  " + VoiceSettingsLabels.task(String.valueOf(step.get("state"))) + " · "
                                 + step.get("title"));
                         line.setWrapText(true);
                         HBox row = row(line);
@@ -488,20 +488,6 @@ final class VoiceSettingsView extends ScrollPane {
         Label hint = muted("Uma etapa só conta como concluída depois de conferida. Tarefa interrompida espera você"
                 + " decidir: nada é repetido sozinho.");
         return section("Tarefas", new VBox(8, hint, list), refresh);
-    }
-
-    static String taskLabel(String state) {
-        return switch (state) {
-            case "planned" -> "planejada";
-            case "running" -> "em andamento";
-            case "verifying" -> "conferindo";
-            case "done" -> "concluída";
-            case "failed" -> "falhou";
-            case "waiting_human" -> "espera você";
-            case "blocked" -> "bloqueada";
-            case "cancelled" -> "cancelada";
-            default -> state;
-        };
     }
 
     static javafx.scene.Node automations(DesktopState state, ShellActions actions) {
@@ -557,36 +543,6 @@ final class VoiceSettingsView extends ScrollPane {
         return controls;
     }
 
-
-    static String breakerLabel(String state) {
-        return switch (state) {
-            case "open" -> "aberto (bloqueado)";
-            case "half_open" -> "em prova (cada ação confirmada)";
-            default -> state;
-        };
-    }
-
-    static String kindLabel(String kind) {
-        return switch (kind) {
-            case "PREFERENCE" -> "preferência";
-            case "PROJECT" -> "projeto";
-            case "EVENT" -> "evento";
-            case "PROCEDURE" -> "procedimento";
-            default -> "fato";
-        };
-    }
-
-
-    static String stateLabel(String state) {
-        return switch (state) {
-            case "connected" -> "conectado";
-            case "starting" -> "iniciando";
-            case "reconnecting" -> "reconectando";
-            case "drift" -> "mudou, aguardando aprovação";
-            case "failed" -> "falhou";
-            default -> "parado";
-        };
-    }
 
 
     private void showLevel(double[] level) {

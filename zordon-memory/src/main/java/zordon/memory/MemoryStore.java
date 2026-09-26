@@ -16,7 +16,6 @@
 package zordon.memory;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +48,7 @@ public interface MemoryStore extends AutoCloseable {
     List<Fact> facts(FactKind kind, String subject, int limit);
 
     /** Fatos usados num contexto: sobe o contador de acessos. */
-    void touched(Collection<String> factIds);
+    void touched(Iterable<String> factIds);
 
     /** Apaga de verdade, inclusive do índice (Memória §8). */
     boolean forget(String factId);

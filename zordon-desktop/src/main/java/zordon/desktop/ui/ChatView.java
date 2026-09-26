@@ -17,8 +17,6 @@ package zordon.desktop.ui;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
@@ -65,7 +63,7 @@ final class ChatView extends VBox {
 
     private final ObservableList<Item> items = FXCollections.observableArrayList();
     private final ListView<Item> list = new ListView<>(items);
-    private final Map<String, Item> streaming = new HashMap<>();
+    private final java.util.HashMap<String, Item> streaming = new java.util.HashMap<>();
     private final ScrollFollow follow = new ScrollFollow();
     private final Button newMessages = new Button("Novas mensagens ↓");
 

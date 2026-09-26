@@ -21,7 +21,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
-import javafx.scene.control.Tooltip;
 import zordon.api.trace.Spec;
 import zordon.desktop.shell.DesktopState;
 import zordon.desktop.shell.VoicePresentation;
@@ -80,7 +79,7 @@ final class VoiceView extends StackPane {
         });
         state.connectionProperty().addListener((observable, before, now) -> showPill());
         state.lockdownProperty().addListener((observable, before, now) -> showPill());
-        Tooltip.install(pill, pillHint);
+        javafx.scene.control.Tooltip.install(pill, pillHint);
         // O estado visual do núcleo e o nível do microfone chegam do núcleo (SPEC-012).
         state.activityProperty().addListener((observable, before, now) -> effects.activity(now));
         effects.activity(state.activityProperty().get());

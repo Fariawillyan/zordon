@@ -223,47 +223,21 @@ public final class DesktopState {
 
     /** Um evento do núcleo: atualiza sincronização, turno em andamento e consumo. */
     public void accept(EventEnvelope event) {
-        lastSync.set(Instant.now(clock));
-        Map<String, Object> payload = event.payload();
-        switch (event.type()) {
-            case USER_COMMAND -> {
-                turnRunning.set(true);
-                currentTurnId.set(String.valueOf(payload.get("turnId")));
-            }
-            case AI_THINKING -> turnRunning.set(true);
-            case AI_ERROR -> turnRunning.set(false);
-            case VOICE_STATE -> voice(payload);
-            case ACTIVITY_STATE -> activity.set(String.valueOf(payload.getOrDefault("state", "idle")));
-            case VOICE_LEVEL -> voiceLevel.set(new double[] {
-                number(payload.get("rms")), number(payload.get("peak")),
-                number(payload.getOrDefault("bass", -90)), number(payload.getOrDefault("mid", -90)),
-                number(payload.getOrDefault("treble", -90))});
-            case LOCKDOWN_ENTERED -> lockdown(true, String.valueOf(payload.getOrDefault("reason", "")));
-            case LOCKDOWN_EXITED -> lockdown(false, "");
-            case OPPRESSOR_ENTERED -> {
-                // Se entrou, é porque havia senha: os dois passam a valer.
-                oppressor.set(true);
-                oppressorConfigured.set(true);
-            }
-            case OPPRESSOR_EXITED -> oppressor.set(false);
-            case SECURITY_NOTIFICATION -> notification(payload);
-            case VOICE_STOPPED -> {
-                transcriptions.addFirst(java.time.format.DateTimeFormatter.ofPattern("HH:mm")
-                                .format(java.time.LocalTime.now(clock))
-                        + " · " + (payload.get("text") instanceof String text ? text
-                                : "(" + payload.getOrDefault("outcome", "sem texto") + ")")
-                        + " · confiança " + payload.getOrDefault("confidence", "?"));
-                if (transcriptions.size() > TRANSCRIPTIONS_KEPT) {
-                    transcriptions.remove(TRANSCRIPTIONS_KEPT, transcriptions.size());
-                }
-            }
-            case AI_RESPONSE -> TurnSummary.fromResponse(payload).ifPresent(turn -> {
-                turnRunning.set(false);
-                lastTurn.set(turn);
-                usage.set(usage.get().plus(turn));
-            });
-            default -> { }
-        }
+        DesktopEventApplier.apply(this, event, clock);
+    }
+
+    void transcription(Map<String, Object> payload, Clock eventClock) {
+        transcriptions.addFirst(java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+                .format(java.time.LocalTime.now(eventClock)) + " · "
+                + (payload.get("text") instanceof String text ? text : "(" + payload.getOrDefault("outcome", "sem texto") + ")")
+                + " · confiança " + payload.getOrDefault("confidence", "?"));
+        if (transcriptions.size() > TRANSCRIPTIONS_KEPT) transcriptions.remove(TRANSCRIPTIONS_KEPT, transcriptions.size());
+    }
+
+    void response(Map<String, Object> payload) {
+        TurnSummary.fromResponse(payload).ifPresent(turn -> {
+            turnRunning.set(false); lastTurn.set(turn); usage.set(usage.get().plus(turn));
+        });
     }
 
     /**

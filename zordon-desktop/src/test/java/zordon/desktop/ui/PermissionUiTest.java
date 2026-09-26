@@ -224,7 +224,7 @@ class PermissionUiTest {
             return null;
         });
         assertThat(approved).containsExactly("docker");
-        assertThat(VoiceSettingsView.stateLabel("drift")).isEqualTo("mudou, aguardando aprovação");
+        assertThat(VoiceSettingsLabels.state("drift")).isEqualTo("mudou, aguardando aprovação");
     }
 
     @Test
@@ -254,6 +254,6 @@ class PermissionUiTest {
             return null;
         });
         assertThat(forgotten).containsExactly("f_1");
-        assertThat(VoiceSettingsView.kindLabel("EVENT")).isEqualTo("evento");
+        assertThat(VoiceSettingsLabels.kind("EVENT")).isEqualTo("evento");
     }
 }

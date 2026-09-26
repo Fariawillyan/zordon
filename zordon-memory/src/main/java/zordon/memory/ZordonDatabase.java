@@ -15,13 +15,7 @@
  */
 package zordon.memory;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
@@ -64,23 +58,9 @@ public final class ZordonDatabase implements AutoCloseable {
     ZordonDatabase(Path file, Clock clock, Embedder embedder, List<String> migrations) {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.embedder = embedder;
-        Connection connection = null;
-        try {
-            Files.createDirectories(file.toAbsolutePath().getParent());
-            connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
-            try (Statement pragma = connection.createStatement()) {
-                pragma.execute("PRAGMA journal_mode=WAL");
-                pragma.execute("PRAGMA busy_timeout=5000");
-            }
-            this.schemaVersion = Migrations.apply(connection, file, List.copyOf(migrations), clock);
-        } catch (SQLException | IOException | RuntimeException e) {
-            closeQuietly(connection);
-            if (e instanceof IllegalStateException clear) {
-                throw clear;
-            }
-            throw new IllegalStateException("memória não abriu em " + file + ": " + e.getMessage(), e);
-        }
-        this.sql = new Sql(connection);
+        DatabaseConnection.Open opened = DatabaseConnection.open(file, clock, migrations);
+        this.schemaVersion = opened.schemaVersion();
+        this.sql = new Sql(opened.connection());
         this.memory = new SqliteMemoryStore(this);
         this.tasks = new SqliteTaskStore(this);
         this.automations = new SqliteAutomationStateStore(this);
@@ -88,17 +68,6 @@ public final class ZordonDatabase implements AutoCloseable {
         this.securityEvents = new SqliteSecurityEventStore(this);
         this.knowledge = new SqliteKnowledgeStore(this);
         this.usage = new SqliteUsageStore(this);
-    }
-
-    private static void closeQuietly(Connection connection) {
-        if (connection == null) {
-            return;
-        }
-        try {
-            connection.close();
-        } catch (SQLException ignored) {
-            // já estamos falhando; o motivo que importa é o de cima
-        }
     }
 
     public SqliteMemoryStore memory() {

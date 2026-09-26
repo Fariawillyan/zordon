@@ -63,10 +63,10 @@ import zordon.memory.NewFact;
 import zordon.memory.SqliteMemoryStore;
 import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -103,9 +103,9 @@ class MemoryFlowTest {
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.CHAT), QueuePolicy.dropOldest(256), events::add);
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
-        PermissionEngine.Approver deny = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver deny = request ->
                 java.util.concurrent.CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy,
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(policy,
                 new CommandValidator(Map.of()), new Redactor(), () -> deny), audit);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false)
                 .register(MemoryTools.remember(store, clock, written::add))

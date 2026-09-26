@@ -52,10 +52,10 @@ import zordon.defense.CircuitBreakers;
 import zordon.memory.SqliteMemoryStore;
 import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -96,9 +96,9 @@ class DefenseResponseTest {
             @Override public void lockdown(String reason) { lockdowns.add(reason); }
         }, Clock.systemUTC());
         defense.respondWith(response::respond);
-        PermissionEngine.Approver allow = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver allow = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.ONCE);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")), new CommandValidator(Map.of()),
                 new Redactor(), () -> allow), audit);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false).observedBy(defense)

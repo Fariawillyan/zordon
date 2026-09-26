@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -104,8 +105,9 @@ final class Migrations {
         if (Files.exists(copy)) {
             copy = file.resolveSibling(file.getFileName() + ".bak." + version + "-" + clock.millis());
         }
-        try (Statement statement = db.createStatement()) {
-            statement.execute("VACUUM INTO '" + copy.toAbsolutePath().toString().replace("'", "''") + "'");
+        try (PreparedStatement vacuum = db.prepareStatement("VACUUM INTO ?")) {
+            vacuum.setString(1, copy.toAbsolutePath().toString());
+            vacuum.execute();
         }
         log.info("cópia da memória antes de migrar: {}", copy);
     }

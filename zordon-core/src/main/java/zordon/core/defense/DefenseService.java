@@ -146,14 +146,13 @@ public final class DefenseService implements SkillRuntime.CallObserver {
                 finding.severity().wire(), "detector", finding.detector(), "subject", finding.subject().toString(),
                 "title", finding.title(), "rationale", finding.rationale()));
         if (finding.severity().compareTo(Severity.WARNING) >= 0 && finding.count() == countThreshold(finding)) {
-            messageId = notifications.publish(notifications.message(finding.severity(), "AI_DEFENSE", finding.title(),
-                    finding.rationale(),
+            messageId = notifications.publish(notifications.message(new NotificationCenter.MessageFields(
+                    finding.severity(), "AI_DEFENSE", finding.title(), finding.rationale(),
                     "O detector é uma regra escrita, não um palpite: ele vê o que aconteceu no caminho mediado.",
                     "detecção " + finding.detector() + " (SPEC-026)",
                     "O que a defesa fez, se fez algo, está no histórico da tela de Segurança.",
-                    finding.subject().toString(), true,
-                    "Aberto, esperando sua leitura.",
-                    List.of("Ver os detalhes na tela de Segurança", "Ignorar")));
+                    finding.subject().toString(), true, "Aberto, esperando sua leitura.",
+                    List.of("Ver os detalhes na tela de Segurança", "Ignorar"))));
         }
         try {
             // A resposta vem depois do aviso: é o aviso que o SecurityEvent referencia.

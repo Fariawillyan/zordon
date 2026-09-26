@@ -50,10 +50,10 @@ import zordon.core.tools.ToolResult;
 import zordon.memory.SqliteMemoryStore;
 import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -82,9 +82,9 @@ class DefenseFlowTest {
         bus.subscribe("teste", Set.of(Topic.SECURITY), QueuePolicy.dropOldest(256), events::add);
         notifications = new NotificationCenter(home.resolve("notifications.db"), Clock.systemUTC(), notices::add);
         defense = new DefenseService(db.findings(), notifications, bus, new Redactor(), Clock.systemUTC(), System::nanoTime);
-        PermissionEngine.Approver allow = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver allow = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.ONCE);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")), new CommandValidator(Map.of()),
                 new Redactor(), () -> allow), audit);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false).observedBy(defense);

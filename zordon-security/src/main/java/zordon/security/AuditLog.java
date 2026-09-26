@@ -66,11 +66,18 @@ public interface AuditLog extends AutoCloseable {
     /** @param firstBroken id da primeira linha inválida, ou {@code -1} */
     record Verification(boolean ok, int checked, long firstBroken) {}
 
+    /** Dados do desfecho, agrupados para manter a operação auditável e estável. */
+    record Completion(Status status, Duration took, String summary, String error) {
+        public Completion {
+            Objects.requireNonNull(status, "status");
+        }
+    }
+
     /** Grava a intenção. Sempre, inclusive quando a decisão é negar. @return o id da linha */
     long begin(Entry entry);
 
     /** Grava o desfecho numa linha nova. */
-    void complete(String callId, Status status, Duration took, String summary, String error);
+    void complete(String callId, Completion completion);
 
     /** Confere as últimas {@code lastN} linhas: cada hash e o encadeamento. */
     Verification verify(int lastN);

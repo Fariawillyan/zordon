@@ -15,29 +15,18 @@
  */
 package zordon.zwp;
 
-import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.function.Consumer;
 import zordon.api.event.EventEnvelope;
-import zordon.api.zwp.ClientInfo;
-import zordon.api.zwp.EndpointFile;
-import zordon.api.zwp.HelloParams;
-import zordon.api.zwp.HelloResult;
-import zordon.api.zwp.ProtocolRange;
-import zordon.api.zwp.ResumeRequest;
-import zordon.api.zwp.ZwpProtocol;
 import zordon.api.trace.Spec;
+import zordon.api.zwp.BinaryFrame;
+import zordon.api.zwp.ClientInfo;
+import zordon.api.zwp.HelloResult;
 
 /**
  * Mantém um cliente conectado ao núcleo: descobre o endereço pelo
@@ -46,6 +35,9 @@ import zordon.api.trace.Spec;
  *
  * <p>Esta classe não sabe nada de interface gráfica, de propósito: ela é o que
  * torna possível testar reconexão sem abrir uma janela.
+ *
+ * <p>O laço de reconexão fica em {@link ConnectionLoop}; a conexão atual e os
+ * tratadores, em {@link ActiveClient}.
  */
 @Spec("SPEC-002")
 public final class CoreConnection implements AutoCloseable {
@@ -71,193 +63,55 @@ public final class CoreConnection implements AutoCloseable {
         default void onEvent(EventEnvelope event) {}
 
         /** Frame binário do núcleo, como a fala a tocar (ZWP §7). */
-        default void onBinary(zordon.api.zwp.BinaryFrame frame) {}
+        default void onBinary(BinaryFrame frame) {}
     }
 
-    private static final Logger log = LoggerFactory.getLogger(CoreConnection.class);
-    private static final Duration ENDPOINT_POLL = Duration.ofMillis(250);
-
-    private final Path endpointFile;
-    private final ClientInfo client;
-    private final List<String> capabilities;
-    private final Listener listener;
-    private final EndpointFileStore store = new EndpointFileStore();
-    private final ReconnectBackoff backoff = new ReconnectBackoff();
-    private final AtomicReference<State> state = new AtomicReference<>(State.OFFLINE);
-    private final AtomicReference<ZwpClient> active = new AtomicReference<>();
-    private final Map<String, RequestHandler> handlers = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, java.util.function.Consumer<Map<String, Object>>> notifications =
-            new java.util.concurrent.ConcurrentHashMap<>();
-
-    private volatile boolean running;
+    private final ActiveClient active = new ActiveClient();
+    private final ConnectionLoop loop;
     private volatile Thread worker;
-    private volatile String lastStartId;
-    private volatile long lastEventSeq;
 
     public CoreConnection(Path endpointFile, ClientInfo client, List<String> capabilities, Listener listener) {
-        this.endpointFile = Objects.requireNonNull(endpointFile, "endpointFile");
-        this.client = Objects.requireNonNull(client, "client");
-        this.capabilities = List.copyOf(capabilities);
-        this.listener = Objects.requireNonNull(listener, "listener");
+        this.loop = new ConnectionLoop(new EndpointWatch(Objects.requireNonNull(endpointFile, "endpointFile")),
+                new SessionResume(Objects.requireNonNull(client, "client"), capabilities), active,
+                Objects.requireNonNull(listener, "listener"));
     }
 
-    public void start() {
-        if (running) {
-            return;
+    public synchronized void start() {
+        if (worker == null) {
+            worker = Thread.ofVirtual().name("zordon-core-connection").start(loop);
         }
-        running = true;
-        worker = Thread.ofVirtual().name("zordon-core-connection").start(this::loop);
     }
 
     /** Atende {@code method} vindo do núcleo, nesta conexão e nas próximas. */
     public CoreConnection handle(String method, RequestHandler handler) {
-        handlers.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+        active.handle(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
         return this;
     }
 
     /** Recebe a notificação {@code method} do núcleo, nesta conexão e nas próximas. */
-    public CoreConnection onNotification(String method, java.util.function.Consumer<Map<String, Object>> handler) {
-        notifications.put(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
+    public CoreConnection onNotification(String method, Consumer<Map<String, Object>> handler) {
+        active.onNotification(Objects.requireNonNull(method, "method"), Objects.requireNonNull(handler, "handler"));
         return this;
     }
 
     /** Envia um frame binário pela conexão atual. @return falso se offline. */
-    public boolean sendBinary(zordon.api.zwp.BinaryFrame frame) {
-        ZwpClient current = active.get();
-        return current != null && current.sendBinary(frame);
+    public boolean sendBinary(BinaryFrame frame) {
+        return active.sendBinary(frame);
     }
 
     public State state() {
-        return state.get();
+        return loop.state();
     }
 
     /** Envia uma requisição se houver conexão; falha rápido se não houver. */
     public CompletableFuture<Map<String, Object>> request(String method, Map<String, Object> params) {
-        ZwpClient current = active.get();
-        if (current == null || !current.isOpen()) {
-            return CompletableFuture.failedFuture(new ZwpConnectionException("núcleo offline"));
-        }
-        return current.request(method, params);
+        return active.request(method, params);
     }
 
     @Override
     public void close() {
-        running = false;
-        Optional.ofNullable(active.getAndSet(null)).ifPresent(ZwpClient::close);
+        loop.stop();
+        active.close();
         Optional.ofNullable(worker).ifPresent(Thread::interrupt);
-    }
-
-    private void loop() {
-        while (running) {
-            Optional<EndpointFile> endpoint = store.read(endpointFile);
-            if (endpoint.isEmpty()) {
-                goOffline("núcleo não publicou endpoint.json");
-                waitBeforeRetry();
-                continue;
-            }
-            if (!tryConnect(endpoint.get())) {
-                waitBeforeRetry();
-            }
-        }
-    }
-
-    private boolean tryConnect(EndpointFile endpoint) {
-        state.set(State.CONNECTING);
-        for (String address : endpoint.endpoints()) {
-            if (!running) {
-                return true;
-            }
-            CountDownLatch closed = new CountDownLatch(1);
-            try (ZwpClient candidate = new ZwpClient(URI.create(address), endpoint.token(), new ZwpClientListener() {
-                @Override
-                public void onEvent(EventEnvelope event) {
-                    lastEventSeq = Math.max(lastEventSeq, event.seq());
-                    listener.onEvent(event);
-                }
-
-                @Override
-                public void onBinary(zordon.api.zwp.BinaryFrame frame) {
-                    listener.onBinary(frame);
-                }
-
-                @Override
-                public void onClosed(int code, String reason) {
-                    closed.countDown();
-                }
-            })) {
-                handlers.forEach(candidate::handle);
-                notifications.forEach(candidate::onNotification);
-                HelloResult hello = candidate.connect(helloFor(endpoint), Duration.ofSeconds(10));
-                active.set(candidate);
-                state.set(State.ONLINE);
-                backoff.reset();
-                onHello(hello);
-                closed.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return true;
-            } catch (RuntimeException e) {
-                log.debug("falha ao conectar em {}: {}", address, e.getMessage());
-                continue;
-            } finally {
-                active.set(null);
-            }
-            goOffline("conexão encerrada");
-            return false;
-        }
-        goOffline("nenhum endereço do endpoint.json respondeu");
-        return false;
-    }
-
-    private void onHello(HelloResult hello) {
-        boolean sameCore = hello.core().startId().equals(lastStartId);
-        boolean resumed = hello.resumed() && sameCore;
-        if (!resumed) {
-            lastEventSeq = 0;
-        }
-        lastStartId = hello.core().startId();
-        listener.onOnline(hello, resumed);
-    }
-
-    private HelloParams helloFor(EndpointFile endpoint) {
-        ResumeRequest resume = lastStartId != null && lastEventSeq > 0
-                ? new ResumeRequest(lastStartId, lastEventSeq)
-                : null;
-        return new HelloParams(client, ProtocolRange.exactly(ZwpProtocol.VERSION), capabilities, resume);
-    }
-
-    private void goOffline(String reason) {
-        if (state.getAndSet(State.OFFLINE) != State.OFFLINE) {
-            listener.onOffline(reason);
-        }
-    }
-
-    /**
-     * Espera o backoff, mas acorda assim que o {@code endpoint.json} mudar: um
-     * núcleo que acabou de reiniciar não deve esperar dez segundos para ser achado.
-     */
-    private void waitBeforeRetry() {
-        long deadline = System.nanoTime() + backoff.nextDelay().toNanos();
-        long seen = lastModified();
-        while (running && System.nanoTime() < deadline) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(ENDPOINT_POLL.toMillis());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-            if (lastModified() != seen) {
-                backoff.reset();
-                return;
-            }
-        }
-    }
-
-    private long lastModified() {
-        try {
-            return Files.exists(endpointFile) ? Files.getLastModifiedTime(endpointFile).toMillis() : -1;
-        } catch (java.io.IOException e) {
-            return -1;
-        }
     }
 }

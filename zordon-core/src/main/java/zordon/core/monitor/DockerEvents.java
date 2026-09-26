@@ -15,39 +15,27 @@
  */
 package zordon.core.monitor;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import zordon.api.security.ActionDescriptor;
-import zordon.api.security.Effect;
-import zordon.api.security.Principal;
-import zordon.api.security.RequestOrigin;
-import zordon.api.security.RiskLevel;
-import zordon.api.trace.Spec;
 import zordon.security.AuditLog;
 import zordon.security.Gatekeeper;
-import zordon.security.PermissionEngine;
 import zordon.security.ProcessRunner;
 
 /**
  * Eventos de container por push: {@code docker events} como processo longo, pelo
  * caminho auditado (SPEC-024). Nada de consultar a cada N segundos: o Docker avisa.
  */
-@Spec("SPEC-024")
 public final class DockerEvents implements AutoCloseable {
 
     /** O que interessa a um assistente; o resto (exec_start, attach…) é ruído. */
@@ -57,8 +45,6 @@ public final class DockerEvents implements AutoCloseable {
             "type=container");
 
     private static final Logger log = LoggerFactory.getLogger(DockerEvents.class);
-    private static final ObjectMapper json = new ObjectMapper();
-
     private final Gatekeeper gatekeeper;
     private final ProcessRunner runner;
     private final Path workDir;
@@ -68,7 +54,7 @@ public final class DockerEvents implements AutoCloseable {
     private volatile boolean running;
     private volatile String state = "stopped";
     private volatile String reason;
-    private volatile ProcessRunner.Live live;
+    private volatile zordon.security.LiveProcess live;
 
     public DockerEvents(Gatekeeper gatekeeper, ProcessRunner runner, Path workDir,
             Consumer<Map<String, Object>> events, List<Duration> backoff) {
@@ -113,12 +99,9 @@ public final class DockerEvents implements AutoCloseable {
 
     /** Uma conexão, até o stream acabar. @return se chegou a abrir */
     private boolean follow() {
-        ActionDescriptor action = new ActionDescriptor("monitor.docker", Map.of(), RiskLevel.GREEN,
-                Set.of(Effect.SPAWN_PROCESS), List.of(), 1, COMMAND, "Acompanhar os eventos dos containers");
         Gatekeeper.Permit.Granted granted;
         try {
-            Gatekeeper.Permit permit = gatekeeper.authorize(action, new Principal("system:monitor", RequestOrigin.UI,
-                    false), PermissionEngine.PolicyContext.interactive(), null).get(70, TimeUnit.SECONDS);
+            Gatekeeper.Permit permit = DockerEventAuthorization.authorize(gatekeeper, COMMAND);
             if (!(permit instanceof Gatekeeper.Permit.Granted ok)) {
                 state = "unavailable";
                 reason = permit.decision().reason();
@@ -137,9 +120,9 @@ public final class DockerEvents implements AutoCloseable {
         } catch (java.io.IOException e) {
             reason = "pasta de trabalho: " + e.getMessage();
         }
-        try (ProcessRunner.Live process = runner.start(granted, workDir)) {
+        try (zordon.security.LiveProcess process = runner.start(granted, workDir)) {
             live = process;
-            gatekeeper.complete(granted, AuditLog.Status.OK, Duration.ZERO, "stream aberto", null);
+            granted.complete(new AuditLog.Completion(AuditLog.Status.OK, Duration.ZERO, "stream aberto", null));
             audited = true;
             state = "streaming";
             reason = null;
@@ -154,7 +137,8 @@ public final class DockerEvents implements AutoCloseable {
             return true;
         } catch (Exception e) {
             if (!audited) {
-                gatekeeper.complete(granted, AuditLog.Status.FAILED, Duration.ZERO, null, e.getMessage());
+                granted.complete(new AuditLog.Completion(AuditLog.Status.FAILED, Duration.ZERO, null,
+                        e.getMessage()));
             }
             reason = e.getMessage();
             return audited;
@@ -165,30 +149,10 @@ public final class DockerEvents implements AutoCloseable {
 
     /** Uma linha do {@code docker events}. Pacote para os testes. */
     void handle(String line) {
-        JsonNode event;
-        try {
-            event = json.readTree(line);
-        } catch (java.io.IOException e) {
-            log.warn("eventos do Docker: linha que não é JSON ignorada");
-            return;
-        }
-        String action = event.path("Action").asText(event.path("status").asText(""));
-        if (!ACTIONS.contains(action)) {
-            return;
-        }
-        JsonNode attributes = event.path("Actor").path("Attributes");
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("container", attributes.path("name").asText(event.path("id").asText("?")));
-        payload.put("image", attributes.path("image").asText(event.path("from").asText("")));
-        payload.put("action", action.startsWith("health_status: ") ? action.substring("health_status: ".length())
-                : action);
-        if (attributes.hasNonNull("exitCode")) {
-            payload.put("exitCode", attributes.path("exitCode").asInt());
-        }
-        long seconds = event.path("time").asLong(0);
-        payload.put("at", (seconds > 0 ? Instant.ofEpochSecond(seconds) : Instant.now()).toString());
-        received.incrementAndGet();
-        events.accept(payload);
+        DockerEventParser.parse(line).ifPresent(payload -> {
+            received.incrementAndGet();
+            events.accept(payload);
+        });
     }
 
     public Map<String, Object> status() {
@@ -204,7 +168,7 @@ public final class DockerEvents implements AutoCloseable {
     @Override
     public void close() {
         running = false;
-        ProcessRunner.Live current = live;
+        zordon.security.LiveProcess current = live;
         if (current != null) {
             current.close();
         }
