@@ -34,6 +34,10 @@ public record SecurityEvent(String id, Instant ts, Severity severity, String det
 
     public static final String NONE = "NONE";
 
+    /** Campos da forma observada, que não executa ação. */
+    public record Observed(String id, Instant ts, Severity severity, String detector, String subject,
+            String findingId, String proposed) {}
+
     public SecurityEvent {
         if (!NONE.equals(executed) && (userMessageId == null || userMessageId.isBlank())) {
             // Se a defesa agiu, o usuário soube. Sem isso, não existe "nenhuma iniciativa silenciosa".
@@ -44,9 +48,9 @@ public record SecurityEvent(String id, Instant ts, Severity severity, String det
         }
     }
 
-    public static SecurityEvent observed(String id, Instant ts, Severity severity, String detector, String subject,
-            String findingId, String proposed) {
-        return new SecurityEvent(id, ts, severity, detector, subject, findingId, proposed, NONE, "OBSERVED",
+    public static SecurityEvent observed(Observed observed) {
+        return new SecurityEvent(observed.id(), observed.ts(), observed.severity(), observed.detector(),
+                observed.subject(), observed.findingId(), observed.proposed(), NONE, "OBSERVED",
                 "POLICY", false, null);
     }
 }

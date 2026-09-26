@@ -60,11 +60,12 @@ import zordon.core.tools.ProcessTools;
 import zordon.core.tools.SkillRuntime;
 import zordon.memory.SqliteMemoryStore;
 import zordon.memory.TaskStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -77,6 +78,7 @@ class TasksTest {
 
     private final List<EventEnvelope> events = new CopyOnWriteArrayList<>();
     private final AtomicLong nanos = new AtomicLong(1);
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private SqliteAuditLog audit;
     private ZordonEventBus bus;
@@ -88,7 +90,8 @@ class TasksTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), Clock.systemUTC());
+        db = new ZordonDatabase(home.resolve("zordon.db"), Clock.systemUTC());
+        store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.AGENTS), QueuePolicy.dropOldest(1024), events::add);
@@ -98,9 +101,9 @@ class TasksTest {
         Files.setPosixFilePermissions(docker, PosixFilePermissions.fromString("rwxr-xr-x"));
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
         CommandValidator validator = new CommandValidator(Map.of("docker", docker.toString()));
-        PermissionEngine.Approver deny = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver deny = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy, validator, new Redactor(),
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(policy, validator, new Redactor(),
                 () -> deny), audit);
         ZPath base = ZPath.ofWsl(home.toString());
         runtime = new SkillRuntime(gatekeeper, bus, () -> false)
@@ -115,13 +118,14 @@ class TasksTest {
         AgentRunner agents = new AgentRunner(providers, new PromptComposer(),
                 new ModelToolCaller(runtime, new TurnScopes()), bus);
         planner = new Planner(providers, registry, () -> Set.of("docker.ps", "system.metrics", "fs.read"));
-        runner = new TaskRunner(store, planner, new Verifier(providers, runtime), registry, agents, bus, nanos::get);
+        runner = new TaskRunner(db.tasks(), planner, new Verifier(providers, runtime),
+                new TaskRunner.Agents(registry, agents), bus, nanos::get);
         runtime.register(TaskTools.create(runner));
     }
 
     @AfterEach
     void tearDown() {
-        store.close();
+        db.close();
         audit.close();
         bus.close();
     }
@@ -138,11 +142,11 @@ class TasksTest {
     }
 
     private String state(String taskId) {
-        return store.task(taskId).orElseThrow().state();
+        return db.tasks().task(taskId).orElseThrow().state();
     }
 
     private List<String> stepStates(String taskId) {
-        return store.task(taskId).orElseThrow().steps().stream().map(TaskStore.StepView::state).toList();
+        return db.tasks().task(taskId).orElseThrow().steps().stream().map(TaskStore.StepView::state).toList();
     }
 
     private List<String> taskEvents(String taskId) {
@@ -172,7 +176,7 @@ class TasksTest {
                 Principal.user(RequestOrigin.VOICE), "t1").get(15, TimeUnit.SECONDS).text();
 
         assertThat(answer).isEqualTo("Plano com 2 etapas: Ver os containers; Avisar o resultado. Começando.");
-        String taskId = store.tasks(1).getFirst().id();
+        String taskId = db.tasks().tasks(1).getFirst().id();
         await(() -> "waiting_human".equals(state(taskId)), "esperar o usuário");
         assertThat(taskEvents(taskId)).startsWith("planned", "running", "s1:running")
                 .contains("s1:done", "s2:running", "s2:waiting_human", "waiting_human");
@@ -209,7 +213,7 @@ class TasksTest {
         assertThat(runner.confirm(taskId, "s1", true)).as("s1 não espera o usuário").isEmpty();
         assertThat(runner.confirm(taskId, "s3", true)).contains("done");
         await(() -> "failed".equals(state(taskId)), "fechar como falha");
-        assertThat(store.taskStats()).as("todo veredito fica, inclusive o que mandou para a tela")
+        assertThat(db.tasks().taskStats()).as("todo veredito fica, inclusive o que mandou para a tela")
                 .containsEntry("verdicts7d", Map.of("fail", 2L, "inconclusive", 1L, "pass", 1L));
     }
 
@@ -238,11 +242,11 @@ class TasksTest {
     @AcceptanceCriteria("SPEC-023/CA-4")
     @Test
     void quedaNoMeioBloqueiaAvisaENaoRepeteSemRetomada() throws Exception {
-        String taskId = store.createTask("rodar o build e publicar", "ui", List.of(
+        String taskId = db.tasks().createTask("rodar o build e publicar", "ui", List.of(
                 new TaskStore.PlanStep("s1", "Rodar o build", "developer", List.of(), "yellow",
                         "{\"type\":\"human\",\"criterion\":\"build verde\"}")));
-        store.taskState(taskId, "running", null);
-        store.stepState(taskId, "s1", "running", null);
+        db.tasks().taskState(taskId, "running", null);
+        db.tasks().stepState(taskId, "s1", "running", null);
 
         List<TaskStore.TaskView> interrupted = runner.recover();
 
@@ -256,7 +260,7 @@ class TasksTest {
         provider.thenChat("Build rodado.");
         assertThat(runner.resume(taskId)).isTrue();
         await(() -> "waiting_human".equals(state(taskId)), "retomar");
-        assertThat(store.task(taskId).orElseThrow().steps().getFirst().attempts()).isEqualTo(2);
+        assertThat(db.tasks().task(taskId).orElseThrow().steps().getFirst().attempts()).isEqualTo(2);
     }
 
     @Test

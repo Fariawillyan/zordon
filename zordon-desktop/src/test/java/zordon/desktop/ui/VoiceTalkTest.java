@@ -34,7 +34,7 @@ class VoiceTalkTest {
 
     private final List<String> calls = new CopyOnWriteArrayList<>();
 
-    private final ShellActions actions = new ShellActions() {
+    private final ShellActions actions = new FakeShellActions() {
         @Override public void send(String text, ComposerTarget target) {}
         @Override public void newConversation() {}
         @Override public void cancelTurn(String turnId) {}
@@ -63,7 +63,7 @@ class VoiceTalkTest {
             assertThat(orb.getAccessibleText()).isEqualTo("Falar com o Zordon");
 
             orb.fire();
-            state.voice(Map.of("mode", "off", "effective", "off", "activity", "listening",
+            state.voice().apply(Map.of("mode", "off", "effective", "off", "activity", "listening",
                     "capture", Map.of("state", "on"), "host", Map.of("connected", true),
                     "engine", Map.of("state", "ready")));
             orb.fire();

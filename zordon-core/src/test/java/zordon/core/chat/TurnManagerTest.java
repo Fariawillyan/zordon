@@ -292,7 +292,10 @@ class TurnManagerTest {
     void cancelarLogoDepoisDeEnviarNaoSePerde() throws Exception {
         // Regressão: o turno só era registrado depois de o provider começar a
         // transmitir. Um cancelamento nessa janela devolvia false e o modelo seguia.
-        FakeAiProvider provider = FakeAiProvider.answering("não deveria chegar aqui");
+        // O provider fica pendurado de propósito: um que responde na hora podia
+        // terminar o turno antes do cancelamento, e aí false seria a resposta certa.
+        // Sem esperar o latch: o que se testa é justamente a janela antes do stream.
+        FakeAiProvider provider = FakeAiProvider.hanging(new CountDownLatch(1));
         TurnManager turns = managerWith(provider);
 
         TurnId turn = turns.send(session, "algo", "text");

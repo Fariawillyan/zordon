@@ -63,10 +63,10 @@ import zordon.core.tools.ModelToolCaller;
 import zordon.core.tools.ProcessTools;
 import zordon.core.tools.SkillRuntime;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -110,11 +110,11 @@ class AgentsTest {
         Files.setPosixFilePermissions(docker, PosixFilePermissions.fromString("rwxr-xr-x"));
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
         CommandValidator validator = new CommandValidator(Map.of("docker", docker.toString()));
-        PermissionEngine.Approver approver = (action, actor, risk, ttl, perAction) -> {
-            asked.add(action.tool() + " " + risk.wire() + " " + actor.actor());
+        PermissionEngine.Approver approver = request -> {
+            asked.add(request.action().tool() + " " + request.risk().wire() + " " + request.actor().actor());
             return CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
         };
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy, validator, new Redactor(),
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(policy, validator, new Redactor(),
                 () -> approver), audit);
         ZPath base = ZPath.ofWsl(home.toString());
         ProcessRunner runner = new ProcessRunner(validator);
@@ -148,9 +148,9 @@ class AgentsTest {
         AgentRunner runner = new AgentRunner(providers, new PromptComposer(), modelTools, bus)
                 .onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
         runtime.unregister(TurnScope.DELEGATE).register(new DelegateTool(registry, scopes, runner, nanos::get));
-        turns.onToolCalls(modelTools);
-        turns.onAgents(registry);
-        turns.onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
+        turns.hooks().onToolCalls(modelTools);
+        turns.hooks().onAgents(registry);
+        turns.hooks().onSuspended((agent, reason) -> suspensions.add(agent.id() + ": " + reason));
         return turns;
     }
 
@@ -284,7 +284,7 @@ class AgentsTest {
         ToolLoopTestSupport.Scripted slow = new ToolLoopTestSupport.Scripted()
                 .then(calls("system_metrics", Map.of("x", 1))).then(calls("system_metrics", Map.of("x", 2)));
         TurnManager clocked = turns(slow);
-        clocked.nanoClock(() -> nanos.addAndGet(Duration.ofSeconds(40).toNanos()));
+        clocked.hooks().nanoClock(() -> nanos.addAndGet(Duration.ofSeconds(40).toNanos()));
         Map<String, Object> third = awaitDone(clocked.send(session(), "curto: meça devagar", "text"));
         assertThat(third.get("text")).asString().contains("Parei no limite de tempo do agente curto.");
     }

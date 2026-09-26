@@ -3,6 +3,7 @@ import org.gradle.api.artifacts.VersionCatalogsExtension
 plugins {
     `java-library`
     jacoco
+    checkstyle
     id("com.diffplug.spotless")
 }
 
@@ -55,6 +56,33 @@ tasks.withType<JacocoReport>().configureEach {
         html.required = true
     }
 }
+
+/**
+ * Os tetos rígidos de complexidade do [code-standards §5].
+ *
+ * <p>O portão existe porque a Definition of Done afirma que "Clean Code validado"
+ * tem sinal objetivo. Antes disto o sinal era a opinião de quem revisava, e por
+ * isso três classes passaram do limite sem ninguém notar (ADR-0040).
+ *
+ * <p>Só o teto que a tabela marca como bloqueante entra aqui. O limite menor
+ * dispara revisão humana e continua sendo julgamento, não reprovação.
+ */
+checkstyle {
+    toolVersion = libs.findVersion("checkstyle").get().requiredVersion
+    // Segurança e defesa leem 30% mais apertado: código de segurança ilegível
+    // não é código de segurança (code-standards §5).
+    val strict = project.name in setOf("zordon-security", "zordon-defense")
+    configFile = rootProject.file(
+        if (strict) "config/checkstyle/checkstyle-strict.xml" else "config/checkstyle/checkstyle.xml"
+    )
+    // Um aviso que não reprova é um limite que não existe.
+    maxWarnings = 0
+}
+
+// Os tetos do §5 governam o código de produção. Um teste referencia a classe sob
+// teste, seus colaboradores, fixtures e asserts — fan-out alto ali é da natureza
+// do teste, não design ruim. O gate roda só no código principal.
+tasks.named("checkstyleTest") { enabled = false }
 
 spotless {
     java {

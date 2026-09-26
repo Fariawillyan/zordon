@@ -50,8 +50,8 @@ class VoiceWakeTest {
 
     @BeforeEach
     void setUp() {
-        voice = new VoiceService(new VoiceStore(home.resolve("voice.json")), engine, clients, snapshot -> { },
-                clock, null, ingest, ticker::get);
+        voice = new VoiceService(new VoiceService.Dependencies(new VoiceStore(home.resolve("voice.json")), engine,
+                clients, snapshot -> { }, clock, null, ingest, ticker::get));
         voice.onCommand(commands::add);
         voice.onTranscript(transcripts::add);
         voice.onWakeOutcome(wakes::add);

@@ -60,11 +60,12 @@ import zordon.core.tools.ToolException;
 import zordon.core.tools.ToolResult;
 import zordon.memory.SqliteMemoryStore;
 import zordon.memory.TaskStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -75,6 +76,7 @@ class AutomationTest {
     private final AtomicInteger calls = new AtomicInteger();
     private final List<String> notices = new CopyOnWriteArrayList<>();
     private Clock clock = Clock.fixed(Instant.parse("2026-09-19T12:00:00Z"), ZoneId.of("UTC"));
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private SqliteAuditLog audit;
     private ZordonEventBus bus;
@@ -86,11 +88,12 @@ class AutomationTest {
     private ToolLoopTestSupport.Scripted provider;
 
     @BeforeEach void setup() {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), clock);
+        db = new ZordonDatabase(home.resolve("zordon.db"), clock);
+        store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), clock);
         bus = new ZordonEventBus("test", clock);
-        PermissionEngine.Approver deny = (a, b, c, d, e) -> CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        PermissionEngine.Approver deny = request -> CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~"), List.of("~")), new CommandValidator(Map.of()),
                 new Redactor(), () -> deny), audit);
         runtime = new SkillRuntime(gatekeeper, bus, lockdown::get);
@@ -98,11 +101,15 @@ class AutomationTest {
         provider = new ToolLoopTestSupport.Scripted();
         runner = new AgentRunner(ProviderRegistry.of(Map.of(ModelPolicy.DEFAULT_PROVIDER, provider), ModelPolicy.defaults()),
                 new PromptComposer(), new ModelToolCaller(runtime), bus);
-        workflow = new WorkflowEngine(store, runtime, registry, runner,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, clock, nanos::get);
-        engine = new AutomationEngine(home.resolve("automations"), store, store, runtime, registry, workflow,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, lockdown::get,
-                () -> SystemSampler.Snapshot.EMPTY, clock, nanos::get);
+        workflow = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)), bus, clock, nanos::get);
+        engine = new AutomationEngine(home.resolve("automations"),
+                new AutomationEngine.Stores(db.automations(), db.tasks()),
+                new AutomationEngine.Engines(runtime, registry, workflow,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)),
+                new AutomationEngine.Env(bus, lockdown::get, () -> SystemSampler.Snapshot.EMPTY),
+                clock, nanos::get);
         runtime.register(tool("test.check", RiskLevel.GREEN, () -> new ToolResult("API caiu", Map.of("status", 503))));
     }
 
@@ -110,7 +117,7 @@ class AutomationTest {
         engine.close();
         bus.close();
         audit.close();
-        store.close();
+        db.close();
     }
 
     private Tool tool(String name, RiskLevel risk, java.util.concurrent.Callable<ToolResult> run) {
@@ -144,7 +151,7 @@ class AutomationTest {
 
     private void finished(String id) throws Exception {
         await(() -> ((Number) engine.diagnostics().get("running")).intValue() == 0);
-        assertThat(store.task(id).orElseThrow().state()).isIn("done", "failed", "blocked", "cancelled");
+        assertThat(db.tasks().task(id).orElseThrow().state()).isIn("done", "failed", "blocked", "cancelled");
     }
 
     static void await(BooleanSupplier condition) throws InterruptedException {
@@ -184,7 +191,7 @@ class AutomationTest {
         assertThat(result.ok()).isTrue();
         assertThat(calls).hasValue(1);
         assertThat(notices).containsExactly("Falhou:API caiu");
-        assertThat(store.task(result.taskId()).orElseThrow().steps()).extracting(TaskStore.StepView::state)
+        assertThat(db.tasks().task(result.taskId()).orElseThrow().steps()).extracting(TaskStore.StepView::state)
                 .containsExactly("done", "done", "done", "skipped");
     }
 
@@ -193,12 +200,14 @@ class AutomationTest {
         AutomationSpec original = AutomationSpec.fromMap(raw("api", List.of(Map.of("id", "check", "tool", "test.check"),
                 Map.of("id", "tell", "notify", Map.of("title", "Original", "body", "{{check.text}} {{event.container}}")))));
         String task = workflow.prepare(original, Map.of("container", "api"));
-        store.completeStep(task, "check", "{\"text\":\"salvo antes da queda\"}", "done", null);
-        store.taskState(task, "blocked", "reiniciou");
-        store.close();
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), clock);
-        WorkflowEngine restarted = new WorkflowEngine(store, runtime, registry, runner,
-                (spec, title, body, severity) -> notices.add(title + ":" + body), bus, clock, nanos::get);
+        db.tasks().completeStep(task, "check", "{\"text\":\"salvo antes da queda\"}", "done", null);
+        db.tasks().taskState(task, "blocked", "reiniciou");
+        db.close();
+        db = new ZordonDatabase(home.resolve("zordon.db"), clock);
+        store = db.memory();
+        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner,
+                        (spec, title, body, severity) -> notices.add(title + ":" + body)), bus, clock, nanos::get);
         AutomationSpec changed = AutomationSpec.fromMap(raw("api", List.of(notifyStep("new", "Alterada"))));
         assertThat(restarted.resume(changed, task).ok()).isTrue();
         assertThat(calls).hasValue(0);
@@ -236,11 +245,11 @@ class AutomationTest {
         approve(raw("bad", List.of(Map.of("id", "check", "tool", "test.fail"))));
         lockdown.set(true);
         assertThat(engine.fire("bad", Map.of())).isEmpty();
-        assertThat(store.tasks(10)).isEmpty();
+        assertThat(db.tasks().tasks(10)).isEmpty();
         lockdown.set(false);
         for (int i = 0; i < 20; i++) { finished(engine.fire("bad", Map.of()).orElseThrow()); }
-        assertThat(store.automationState("bad").disabled()).isTrue();
-        assertThat(store.automationState("bad").failures()).isEqualTo(20);
+        assertThat(db.automations().automationState("bad").disabled()).isTrue();
+        assertThat(db.automations().automationState("bad").failures()).isEqualTo(20);
         assertThat(engine.fire("bad", Map.of())).isEmpty();
         assertThat(calls).hasValue(20);
         assertThat(notices).anyMatch(text -> text.contains("20 falhas seguidas"));
@@ -259,30 +268,31 @@ class AutomationTest {
                 Map.of("type", "event", "event", "CONTAINER_EVENT", "match", Map.of("container", "api", "action", "die")),
                 "step", List.of(Map.of("id", "logs", "tool", "test.wait"), notifyStep("tell", "Caiu"))));
         engine.event(bus.publish(EventType.CONTAINER_EVENT, Map.of("container", "outro", "action", "die")));
-        assertThat(store.tasks(10)).isEmpty();
+        assertThat(db.tasks().tasks(10)).isEmpty();
         engine.event(bus.publish(EventType.CONTAINER_EVENT, Map.of("container", "api", "action", "die")));
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
         engine.event(bus.publish(EventType.CONTAINER_EVENT, Map.of("container", "api", "action", "die")));
         release.countDown();
-        finished(store.tasks(1).getFirst().id());
-        assertThat(store.tasks(10)).hasSize(1);
+        finished(db.tasks().tasks(1).getFirst().id());
+        assertThat(db.tasks().tasks(10)).hasSize(1);
         assertThat(notices).contains("Caiu:api");
     }
 
     @Test @AcceptanceCriteria("SPEC-025/CA-5")
     void orcamentoDiarioSobreviveReinicioESoViraNoDiaSeguinte() {
         LocalDate today = LocalDate.now(clock);
-        assertThat(store.reserveAutomationTokens(today, 200_000, 200_000)).isEqualTo(200_000);
-        store.close();
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), clock);
-        WorkflowEngine restarted = new WorkflowEngine(store, runtime, registry, runner,
-                (s, t, b, v) -> { }, bus, clock, nanos::get);
+        assertThat(db.automations().reserveAutomationTokens(today, 200_000, 200_000)).isEqualTo(200_000);
+        db.close();
+        db = new ZordonDatabase(home.resolve("zordon.db"), clock);
+        store = db.memory();
+        WorkflowEngine restarted = new WorkflowEngine(db.tasks(), db.automations(),
+                new WorkflowEngine.Engines(runtime, registry, runner, (s, t, b, v) -> { }), bus, clock, nanos::get);
         AutomationSpec spec = AutomationSpec.fromMap(raw("agent", List.of(Map.of("id", "think", "agent", "zordon", "task", "Explique"))));
         assertThat(restarted.run(spec, Map.of()).ok()).isFalse();
         assertThat(provider.chats).isEmpty();
         assertThat(restarted.tokensToday()).isEqualTo(200_000);
-        assertThat(store.automationTokens(today.plusDays(1))).isZero();
-        store.settleAutomationTokens(today, 200_000, 100);
+        assertThat(db.automations().automationTokens(today.plusDays(1))).isZero();
+        db.automations().settleAutomationTokens(today, 200_000, 100);
         assertThat(restarted.run(spec, Map.of()).ok()).isTrue();
         assertThat(restarted.tokensToday()).isGreaterThanOrEqualTo(100).isLessThan(200_000);
         assertThat(provider.chats).hasSize(1);

@@ -35,11 +35,11 @@ final class MemoryView extends DestinationPage {
     private final ShellActions actions;
 
     MemoryView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "Memória", actions::loadMemory);
+        super("RECURSOS", "Memória", actions.memory()::loadMemory);
         this.state = state;
         this.actions = actions;
         setId("memory-view");
-        repaintOn(state.memoryFacts());
+        repaintOn(state.resources().memoryFacts());
         render();
     }
 
@@ -47,19 +47,19 @@ final class MemoryView extends DestinationPage {
     void render() {
         Label hint = muted("Cada fato guarda de onde veio. Esquecer é definitivo, e só esta janela faz isso —"
                 + " o modelo pede para lembrar, nunca para apagar.");
-        VBox list = rows(List.copyOf(state.memoryFacts()),
+        VBox list = rows(List.copyOf(state.resources().memoryFacts()),
                 "O Zordon ainda não lembra de nada. Diga \"lembre que …\" na conversa.", this::factRow);
         list.setId("memory-list");
-        show(Cards.section("Fatos (" + state.memoryFacts().size() + ")", new VBox(8, hint, list)));
+        show(Cards.section("Fatos (" + state.resources().memoryFacts().size() + ")", new VBox(8, hint, list)));
     }
 
     private javafx.scene.Node factRow(Map<String, Object> fact) {
         String id = text(fact, "id");
         Label line = wrapped(text(fact, "content")
-                + "\n" + VoiceSettingsView.kindLabel(text(fact, "kind"))
+                + "\n" + VoiceSettingsLabels.kind(text(fact, "kind"))
                 + (text(fact, "observedAt").isEmpty() ? "" : " · " + text(fact, "observedAt"))
                 + (text(fact, "source").isEmpty() ? "" : " · origem: " + text(fact, "source")));
         line.getStyleClass().add("settings-row");
-        return actionRow(line, button("memory-forget-" + id, "Esquecer", () -> actions.forgetFact(id)));
+        return actionRow(line, button("memory-forget-" + id, "Esquecer", () -> actions.memory().forgetFact(id)));
     }
 }

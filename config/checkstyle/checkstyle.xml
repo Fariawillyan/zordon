@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Os limites de docs/process/code-standards.md §5 que a tabela marca como
+  "Bloqueia: sim". O limite menor da tabela dispara revisão humana e não cabe
+  numa ferramenta: ultrapassá-lo exige justificativa escrita, não reprovação
+  automática. O que está aqui é só o teto rígido.
+
+  zordon-security e zordon-defense usam checkstyle-strict.xml, 30% mais apertado.
+-->
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+  <property name="severity" value="error"/>
+  <property name="fileExtensions" value="java"/>
+
+  <!-- Linhas por classe: 400 dispara revisão, acima de 700 bloqueia. -->
+  <module name="FileLength">
+    <property name="max" value="700"/>
+  </module>
+
+  <module name="TreeWalker">
+
+    <!-- Complexidade ciclomática por método: 10 dispara revisão, acima de 15 bloqueia. -->
+    <module name="CyclomaticComplexity">
+      <property name="max" value="15"/>
+    </module>
+
+    <!-- Linhas por método: 40 dispara revisão, acima de 80 bloqueia. -->
+    <module name="MethodLength">
+      <property name="max" value="80"/>
+      <property name="countEmpty" value="false"/>
+    </module>
+
+    <!-- Métodos públicos por classe: 12 dispara revisão, acima de 20 bloqueia. -->
+    <module name="MethodCount">
+      <property name="maxPublic" value="20"/>
+    </module>
+
+    <!-- Parâmetros por método: 4 dispara revisão, acima de 6 bloqueia. -->
+    <module name="ParameterNumber">
+      <property name="max" value="6"/>
+    </module>
+
+    <!-- Profundidade de aninhamento: 3 dispara revisão, acima de 5 bloqueia. -->
+    <module name="NestedIfDepth">
+      <property name="max" value="5"/>
+    </module>
+    <module name="NestedForDepth">
+      <property name="max" value="5"/>
+    </module>
+    <module name="NestedTryDepth">
+      <property name="max" value="5"/>
+    </module>
+
+    <!-- Dependências de saída por classe: 10 dispara revisão, acima de 15 bloqueia. -->
+    <module name="ClassFanOutComplexity">
+      <property name="max" value="15"/>
+    </module>
+
+  </module>
+</module>

@@ -15,19 +15,12 @@
  */
 package zordon.security.vault;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,8 +46,6 @@ public final class QuarantineVault {
     public static final int MAX_FILES = 10_000;
 
     private static final Logger log = LoggerFactory.getLogger(QuarantineVault.class);
-    private static final ObjectMapper json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
-
     private final Path root;
     private final Clock clock;
 
@@ -98,10 +89,10 @@ public final class QuarantineVault {
         manifest.put("restored", false);
         List<Map<String, Object>> entries = new ArrayList<>();
         manifest.put("entries", entries);
-        write(item, manifest);
+        VaultManifest.write(item, manifest);
         int index = 0;
         for (Path file : files) {
-            String sha = sha256(file);
+            String sha = VaultHash.sha256(file);
             long size = Files.size(file);
             Path stored = payload.resolve(String.format("%05d-%s", index++, file.getFileName()));
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -111,20 +102,20 @@ public final class QuarantineVault {
             entry.put("bytes", size);
             entry.put("state", "moving");
             entries.add(entry);
-            write(item, manifest);
+            VaultManifest.write(item, manifest);
             Files.move(file, stored);
-            boolean intact = sha.equals(sha256(stored));
+            boolean intact = sha.equals(VaultHash.sha256(stored));
             entry.put("state", intact ? "stored" : "stored-hash-mismatch");
-            write(item, manifest);
+            VaultManifest.write(item, manifest);
         }
         log.info("quarentena {}: {} arquivos de {}", vaultId, files.size(), base);
-        return describe(manifest);
+        return VaultManifest.describe(manifest);
     }
 
     /** Devolve cada arquivo ao lugar de origem, sem nunca sobrescrever o que estiver lá. */
     public synchronized Item restore(String vaultId) throws IOException {
         Path item = locate(vaultId);
-        Map<String, Object> manifest = read(item);
+        Map<String, Object> manifest = VaultManifest.read(item);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> entries = (List<Map<String, Object>>) manifest.get("entries");
         for (Map<String, Object> entry : entries) {
@@ -140,14 +131,14 @@ public final class QuarantineVault {
             } catch (FileAlreadyExistsException e) {
                 entry.put("state", "stored-original-occupied");
             }
-            write(item, manifest);
+            VaultManifest.write(item, manifest);
         }
         boolean all = entries.stream().allMatch(entry -> "restored".equals(entry.get("state")));
         manifest.put("restored", all);
         manifest.put("restoredAt", clock.instant().toString());
-        write(item, manifest);
+        VaultManifest.write(item, manifest);
         log.info("quarentena {} restaurada{}", vaultId, all ? "" : " em parte");
-        return describe(manifest);
+        return VaultManifest.describe(manifest);
     }
 
     public synchronized List<Item> list() {
@@ -157,7 +148,7 @@ public final class QuarantineVault {
         try (Stream<Path> items = Files.list(root)) {
             List<Item> out = new ArrayList<>();
             for (Path item : items.filter(path -> Files.isRegularFile(path.resolve("manifest.json"))).sorted().toList()) {
-                out.add(describe(read(item)));
+                out.add(VaultManifest.describe(VaultManifest.read(item)));
             }
             return out.reversed();
         } catch (IOException e) {
@@ -167,7 +158,7 @@ public final class QuarantineVault {
     }
 
     public synchronized Item get(String vaultId) throws IOException {
-        return describe(read(locate(vaultId)));
+        return VaultManifest.describe(VaultManifest.read(locate(vaultId)));
     }
 
     private Path locate(String vaultId) throws IOException {
@@ -181,41 +172,4 @@ public final class QuarantineVault {
         return item;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Item describe(Map<String, Object> manifest) {
-        List<Map<String, Object>> entries = (List<Map<String, Object>>) manifest.getOrDefault("entries", List.of());
-        long bytes = entries.stream().mapToLong(entry -> ((Number) entry.getOrDefault("bytes", 0)).longValue()).sum();
-        List<String> notes = entries.stream()
-                .filter(entry -> String.valueOf(entry.get("state")).contains("-"))
-                .map(entry -> entry.get("original") + ": " + entry.get("state")).toList();
-        return new Item(String.valueOf(manifest.get("vaultId")), String.valueOf(manifest.get("ts")),
-                String.valueOf(manifest.get("reason")), String.valueOf(manifest.get("root")), entries.size(), bytes,
-                Boolean.TRUE.equals(manifest.get("restored")), notes);
-    }
-
-    private static void write(Path item, Map<String, Object> manifest) throws IOException {
-        Path part = item.resolve("manifest.json.part");
-        json.writeValue(part.toFile(), manifest);
-        Files.move(part, item.resolve("manifest.json"), StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> read(Path item) throws IOException {
-        return json.readValue(item.resolve("manifest.json").toFile(), LinkedHashMap.class);
-    }
-
-    private static String sha256(Path file) throws IOException {
-        try (InputStream in = Files.newInputStream(file)) {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = in.read(buffer)) >= 0) {
-                digest.update(buffer, 0, read);
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
-    }
 }

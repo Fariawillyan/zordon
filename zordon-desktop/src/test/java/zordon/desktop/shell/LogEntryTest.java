@@ -92,6 +92,22 @@ class LogEntryTest {
         assertThat(entry.detail()).isEqualTo("RATE_LIMITED · limite de taxa do provider");
     }
 
+    /**
+     * O que o compilador garantia quando isto era um {@code switch} exaustivo.
+     *
+     * <p>A tabela que o substituiu (SPEC-035) já falha na carga da classe se
+     * faltar um tipo, mas a carga só acontece quando alguém abre a janela. Este
+     * teste traz a falha para o build, que é onde ela custa menos.
+     */
+    @Test
+    void todoTipoDeEventoTemResumo() {
+        for (EventType type : EventType.values()) {
+            assertThat(LogEntry.of(event(type, Map.of())).detail())
+                    .as("sem resumo para %s", type)
+                    .isNotNull();
+        }
+    }
+
     private EventEnvelope event(EventType type, Map<String, Object> payload) {
         return new EventEnvelope(42, Instant.parse("2026-09-17T22:31:04Z"), type, payload);
     }

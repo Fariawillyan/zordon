@@ -16,6 +16,7 @@
 package zordon.desktop.ui;
 
 import java.util.Random;
+import java.util.function.IntToDoubleFunction;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -25,7 +26,7 @@ import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
 import javafx.scene.shape.ArcType;
-import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
@@ -33,15 +34,26 @@ import zordon.api.trace.Spec;
 import zordon.desktop.audio.SoundPlayer;
 
 /**
- * O console da imagem de referência (SPEC-010), desenhado em Canvas. A cena
- * fica parada em repouso e só se mexe com um som de feedback tocando; ela nunca
- * representa o microfone.
+ * O console da imagem de referência (SPEC-010), desenhado em Canvas. O núcleo
+ * recebe métricas do microfone em tempo real e as transforma em movimento,
+ * profundidade e luz, sem transportar o áudio bruto para a interface.
  *
  * <p>Tudo é desenhado num espaço virtual de {@value #W} × {@value #H}, a moldura
  * da imagem (820 × 530) em escala, e ajustado à área disponível sem distorcer.
  */
 @Spec("SPEC-008")
 final class VoiceVisualizer extends Region {
+
+    /** A cor com a tinta do tema e a opacidade limitada entre 0 e 1: toda camada desenha por aqui. */
+    @FunctionalInterface
+    interface Palette {
+        Color col(String hex, double alpha);
+    }
+
+    record ParticleState(double t, double phase, double bass, double mid, double treble, String activity,
+            double intensity) {}
+    record WaveState(double t, double phase, double bass, double mid, double treble, double wavePhase, double gain,
+            boolean playing, IntToDoubleFunction sample) {}
 
     static final double W = 1000;
     static final double H = 646;
@@ -56,6 +68,8 @@ final class VoiceVisualizer extends Region {
     static final double METER_Y = 120;
 
     private static final Color CYAN = Color.web("#12E3F7");
+    /** O vermelho do OPPRESSOR MODE, o mesmo do tema da janela. */
+    private static final Color OPPRESSOR = Color.web("#FF3B4E");
     private static final Color FRAME = Color.web("#1C6272", 0.75);
     private static final Color TEXT = Color.web("#9FB6C6");
 
@@ -65,11 +79,19 @@ final class VoiceVisualizer extends Region {
     private boolean reducedMotion;
     /** Estado visual do núcleo (SPEC-012): só animação, nenhum texto. */
     private String activity = "idle";
+    /** OPPRESSOR MODE (SPEC-036): sobrepõe a cor do estado e acelera tudo. */
+    private boolean oppressor;
     private long activitySince = System.nanoTime();
     private double micEnergy;
+    private double micBass;
+    private double micMid;
+    private double micTreble;
     /** Tempo de animação do estado atual, em segundos; parado em repouso e com movimento reduzido. */
     private double t;
     private Color tintColor;
+    private final double[] starX = new double[180];
+    private final double[] starY = new double[180];
+    private final double[] starDepth = new double[180];
     private final javafx.animation.AnimationTimer motion = new javafx.animation.AnimationTimer() {
         private long last;
 
@@ -86,9 +108,19 @@ final class VoiceVisualizer extends Region {
     VoiceVisualizer(SoundPlayer player) {
         this.player = player;
         setMinSize(0, 0);
-        setAccessibleText("Console do Zordon. Visualização do som de feedback local; não mede o microfone.");
+        setAccessibleText("Núcleo audiovisual do Zordon. Reage ao estado da voz e ao espectro do microfone.");
         getChildren().add(canvas);
         setMouseTransparent(true);
+        Rectangle boundsClip = new Rectangle();
+        boundsClip.widthProperty().bind(widthProperty());
+        boundsClip.heightProperty().bind(heightProperty());
+        setClip(boundsClip);
+        Random random = new Random(73);
+        for (int i = 0; i < starX.length; i++) {
+            starX[i] = random.nextDouble() * W;
+            starY[i] = random.nextDouble() * H;
+            starDepth[i] = 0.25 + random.nextDouble() * 0.75;
+        }
     }
 
     @Override protected double computePrefWidth(double height) {
@@ -100,8 +132,19 @@ final class VoiceVisualizer extends Region {
     }
 
     @Override protected void layoutChildren() {
-        canvas.setWidth(getWidth());
-        canvas.setHeight(getHeight());
+        double width = Math.max(0, getWidth());
+        double height = Math.max(0, getHeight());
+        double oldWidth = canvas.getWidth();
+        double oldHeight = canvas.getHeight();
+        if (oldWidth != width || oldHeight != height) {
+            // JavaFX pode preservar a textura antiga quando o Canvas encolhe
+            // durante uma troca de estado. Limpa antes de alterar a superfície
+            // para que nenhum frame antigo fique "afundando" para a direita.
+            canvas.getGraphicsContext2D().clearRect(0, 0, oldWidth, oldHeight);
+            canvas.setWidth(width);
+            canvas.setHeight(height);
+        }
+        canvas.resizeRelocate(0, 0, width, height);
         draw();
     }
 
@@ -129,7 +172,7 @@ final class VoiceVisualizer extends Region {
         draw();
     }
 
-    /** Muda o estado visual; a animação roda enquanto ele não for o repouso. */
+    /** Muda o estado visual; até o repouso tem uma deriva quase imperceptível. */
     void activity(String state) {
         String next = state == null ? "idle" : state;
         if (!next.equals(activity)) {
@@ -144,13 +187,64 @@ final class VoiceVisualizer extends Region {
         return activity;
     }
 
-    /** Nível do microfone em dBFS, para o anel respirar enquanto ouve. */
-    void micLevel(double dbfs) {
-        micEnergy = Math.max(0, Math.min(1, (dbfs + 60) / 45));
+    /**
+     * Liga o OPPRESSOR MODE no desenho (SPEC-036 CA-8).
+     *
+     * <p>Sobrepõe a cor de qualquer estado: enquanto o modo dura, o que a tela
+     * precisa dizer não é "ouvindo" ou "pensando", é que nada está sendo
+     * perguntado antes de executar.
+     */
+    void oppressor(boolean value) {
+        oppressor = value;
+        draw();
+    }
+
+    /** Quanto o OPPRESSOR MODE acelera e amplia o movimento. */
+    private double intensity() {
+        return oppressor ? 1.8 : 1;
+    }
+
+    /**
+     * Nível do microfone em dBFS: RMS, pico, graves, médios e agudos.
+     *
+     * <p>Só guarda o valor: quem desenha é o {@code motion}. Com áudio ativo
+     * chegam ~20 níveis por segundo, e desenhar em cada um somava aos 30
+     * quadros do próprio timer e aos 30 do {@code VoiceEffectsPane} — ~80
+     * quadros por segundo de uma cena com cerca de 13 mil comandos de Canvas,
+     * o triplo do que o timer já entrega, sem nada em troca.
+     */
+    void micLevel(double[] levels) {
+        if (levels == null || levels.length == 0) {
+            return;
+        }
+        micEnergy = smooth(micEnergy, normalized(levels[0]));
+        if (levels.length > 2) {
+            micBass = smooth(micBass, normalized(levels[2]));
+        }
+        if (levels.length > 3) {
+            micMid = smooth(micMid, normalized(levels[3]));
+        }
+        if (levels.length > 4) {
+            micTreble = smooth(micTreble, normalized(levels[4]));
+        }
+        if (reducedMotion) {
+            // Com movimento reduzido o timer está parado, e as barras do espectro
+            // congelariam. Aqui não há enxurrada: este é o único desenho.
+            draw();
+        }
+    }
+
+    private static double normalized(double dbfs) {
+        return Math.clamp((dbfs + 60) / 60, 0, 1);
+    }
+
+    private static double smooth(double current, double target) {
+        double factor = target > current ? 0.48 : 0.16;
+        return current + (target - current) * factor;
     }
 
     private void animate() {
-        if (!"idle".equals(activity) && !reducedMotion) {
+        if (!reducedMotion) {
             motion.start();
         } else {
             motion.stop();
@@ -160,6 +254,12 @@ final class VoiceVisualizer extends Region {
     /** A cor do estado: âmbar em atenção, vermelho em erro, verde no instante do concluído. */
     static Color tintFor(String state) {
         return switch (state) {
+            case "listening" -> Color.web("#16DFF3");
+            case "understanding" -> Color.web("#8A86FF");
+            case "planning" -> Color.web("#D6B56A");
+            case "speaking" -> Color.web("#B3F8FF");
+            case "executing" -> Color.web("#5BE0A4");
+            case "agents" -> Color.web("#9F8BFF");
             case "attention" -> Color.web("#F0B341");
             case "error" -> Color.web("#FF5B6B");
             case "done" -> Color.web("#35D48A");
@@ -167,16 +267,25 @@ final class VoiceVisualizer extends Region {
         };
     }
 
-    /** Uma cor do desenho, puxada para a cor do estado quando ele tem uma. */
+    /**
+     * Uma cor do desenho, puxada para a cor do estado quando ele tem uma.
+     *
+     * <p>O alfa é limitado aqui porque vários deles somam faixas do microfone e
+     * podem passar de 1. {@code Color.web} lança nesse caso, a exceção sobe até
+     * o {@code AnimationTimer} e o quadro morre no meio: some tudo o que viria
+     * depois — o emblema, a moldura e os textos. Um desenho fora de faixa é um
+     * desenho saturado, nunca uma tela pela metade.
+     */
     private Color col(String hex, double alpha) {
-        Color base = Color.web(hex, alpha);
+        double safe = alpha > 0 ? Math.min(1, alpha) : 0;
+        Color base = Color.web(hex, safe);
         return tintColor == null ? base
-                : base.interpolate(Color.color(tintColor.getRed(), tintColor.getGreen(), tintColor.getBlue(), alpha), 0.75);
+                : base.interpolate(Color.color(tintColor.getRed(), tintColor.getGreen(), tintColor.getBlue(), safe), 0.75);
     }
 
+    /** Avança a fase da forma de onda. Não desenha: ver {@link #micLevel(double[])}. */
     void tick() {
         phase = player.playing() && !reducedMotion ? player.frame() / 44100.0 : 0;
-        draw();
     }
 
     private void draw() {
@@ -185,9 +294,14 @@ final class VoiceVisualizer extends Region {
         if (width <= 0 || height <= 0) {
             return;
         }
-        t = reducedMotion || "idle".equals(activity) ? 0 : (System.nanoTime() - activitySince) / 1e9;
-        tintColor = tintFor(activity);
+        t = reducedMotion ? 0 : (System.nanoTime() - activitySince) / 1e9;
+        tintColor = oppressor ? OPPRESSOR : tintFor(activity);
         GraphicsContext g = canvas.getGraphicsContext2D();
+        // O Canvas do JavaFX no Windows pode manter a matriz do frame anterior
+        // quando uma animação e um resize ocorrem juntos. A limpeza precisa
+        // sempre acontecer em coordenadas físicas da superfície inteira.
+        resetGraphicsState(g);
+        g.clearRect(0, 0, width, height);
         g.setFill(Color.web("#06121A"));
         g.fillRect(0, 0, width, height);
         backgroundGrid(g, width, height);
@@ -195,6 +309,9 @@ final class VoiceVisualizer extends Region {
         g.save();
         g.translate(frame.getMinX(), frame.getMinY());
         g.scale(scale(), scale());
+        // A cena interna vive dentro da moldura. Sem este corte as ondas saem
+        // dela: com a voz forte o ganho leva a curva a ~870 px num espaço de
+        // 646, e o traço vaza pela janela inteira.
         g.beginPath();
         g.rect(0, 0, W, H);
         g.clip();
@@ -203,9 +320,11 @@ final class VoiceVisualizer extends Region {
                 new Stop(1, Color.web("#061319"))));
         g.fillRect(0, 0, W, H);
         stars(g);
+        scanlines(g);
         horizonArcs(g);
         waves(g);
         orb(g);
+        glitch(g);
         g.restore();
         g.save();
         g.translate(frame.getMinX(), frame.getMinY());
@@ -213,6 +332,13 @@ final class VoiceVisualizer extends Region {
         frame(g);
         texts(g);
         g.restore();
+        resetGraphicsState(g);
+    }
+
+    private static void resetGraphicsState(GraphicsContext g) {
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.setGlobalAlpha(1);
+        g.setLineDashes();
     }
 
     /** A grade quase invisível do fundo da janela, fora da moldura. */
@@ -227,14 +353,26 @@ final class VoiceVisualizer extends Region {
         }
     }
 
-    private static void stars(GraphicsContext g) {
-        Random random = new Random(73);
-        for (int i = 0; i < 260; i++) {
-            double x = random.nextDouble() * W;
-            double y = random.nextDouble() * H;
-            double size = random.nextDouble() < 0.9 ? 1.1 : 2;
-            g.setFill(Color.web("#2FD9F0", 0.12 + random.nextDouble() * 0.45));
+    private void stars(GraphicsContext g) {
+        for (int i = 0; i < starX.length; i++) {
+            double depth = starDepth[i];
+            double x = Math.floor((starX[i] + Math.sin(t * (0.05 + depth * 0.08) + i) * depth * 9 + W) % W);
+            double y = Math.floor((starY[i] + Math.cos(t * (0.025 + depth * 0.04) + i) * depth * 4 + H) % H);
+            double size = depth > 0.72 ? 1.8 : depth > 0.45 ? 1.2 : 0.8;
+            double alpha = 0.10 + depth * 0.32 + (micTreble * depth * 0.18);
+            g.setFill(col("#2FD9F0", alpha));
             g.fillOval(x, y, size, size);
+        }
+    }
+
+    /** Linhas holográficas muito sutis: textura, não uma camada dominante. */
+    private void scanlines(GraphicsContext g) {
+        // A grade é fixa. Deslocar uma linha por frações de pixel a cada frame
+        // provoca cintilação no rasterizador do JavaFX, especialmente no Windows.
+        g.setStroke(col("#63EEFF", 0.026));
+        g.setLineWidth(0.8);
+        for (double y = 4; y < H; y += 8) {
+            g.strokeLine(0, y, W, y);
         }
     }
 
@@ -249,88 +387,42 @@ final class VoiceVisualizer extends Region {
     }
 
     private void waves(GraphicsContext g) {
-        // Fios das ondas laterais: finos, somem perto da esfera e nas pontas.
-        for (int wave = 0; wave < 26; wave++) {
-            g.setStroke(col("#12DDF2", 0.14 + (wave % 5) * 0.05));
-            g.setLineWidth(0.8);
-            g.beginPath();
-            boolean started = false;
-            for (int x = 0; x <= (int) W; x += 3) {
-                double distance = Math.abs(x - CX);
-                if (distance < 150) {
-                    started = false;
-                    continue;
-                }
-                double side = (distance - 150) / (CX - 150);
-                double envelope = Math.pow(Math.sin(Math.min(1, side) * Math.PI), 1.2);
-                double y = CY + Math.sin(x * 0.03 + wave * 0.24 + phase * 2 + wavePhase()) * envelope
-                        * (10 + wave * 2.9) * waveGain();
-                if (!started) {
-                    g.moveTo(x, y);
-                    started = true;
-                } else {
-                    g.lineTo(x, y);
-                }
-            }
-            g.stroke();
-        }
-        // Barras verticais nas pontas, como o espectro da referência.
-        g.setLineCap(StrokeLineCap.ROUND);
-        Random random = new Random(11);
-        for (int side = 0; side < 2; side++) {
-            for (int bar = 0; bar < 14; bar++) {
-                double x = side == 0 ? -4 + bar * 4.2 : W + 4 - bar * 4.2;
-                double height = 8 + random.nextDouble() * 34 * (1 - bar / 16.0);
-                g.setStroke(col("#1BE4F8", 0.35 + random.nextDouble() * 0.45));
-                g.setLineWidth(1.4);
-                g.strokeLine(x, CY - height, x, CY + height);
-            }
-        }
-        g.setLineCap(StrokeLineCap.BUTT);
-        // O traço central claro só mostra amostras do som que está tocando.
-        if (player.level() > 0 && !reducedMotion) {
-            for (int glow = 2; glow >= 0; glow--) {
-                g.setStroke(col("#21EAFF", glow == 0 ? 0.95 : 0.09));
-                g.setLineWidth(glow == 0 ? 1.5 : glow * 4);
-                g.beginPath();
-                for (int x = 0; x <= (int) W; x += 2) {
-                    double y = CY + player.sample(-2048 + x * 2) * 420;
-                    if (x == 0) {
-                        g.moveTo(x, y);
-                    } else {
-                        g.lineTo(x, y);
-                    }
-                }
-                g.stroke();
-            }
-        }
-        g.setStroke(col("#1CEBFF", 0.55));
-        g.setLineWidth(1);
-        g.strokeLine(0, CY, CX - 150, CY);
-        g.strokeLine(CX + 150, CY, W, CY);
-        // Marcadores curtos dos dois lados da esfera.
-        g.setStroke(col("#12E3F7", 1));
-        g.setLineWidth(3.2);
-        g.strokeLine(CX - 229, CY - 22, CX - 229, CY + 22);
-        g.strokeLine(CX + 231, CY - 22, CX + 231, CY + 22);
+        WaveField.draw(g, new WaveState(t, phase, micBass, micMid, micTreble, wavePhase(), waveGain(),
+                player.level() > 0 && !reducedMotion, player::sample), this::col);
     }
 
     private void orb(GraphicsContext g) {
-        double energy = reducedMotion ? 0 : Math.min(1, player.level() * 5);
+        double energy = reducedMotion ? 0 : Math.min(1, Math.max(player.level() * 5, micEnergy));
         if ("listening".equals(activity) && !reducedMotion) {
             energy = Math.max(energy, micEnergy);
         }
-        double radius = 150 + energy * 8;
-        g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
+        double radius = 150 + energy * 12 + micBass * 4;
+        halo(g);
+        rings(g);
+        arcs(g);
+        glow(g, radius);
+        // As partículas em órbita e a poeira ao redor: a mesma semente em todo quadro.
+        ParticleField.draw(g, radius, new ParticleState(t, phase, micBass, micMid, micTreble, activity, intensity()),
+                this::col);
+        core(g, radius);
+        poles(g, radius);
+        emblem(g);
+    }
+
+    /** O brilho difuso atrás de tudo. */
+    private void halo(GraphicsContext g) {
+g.setFill(new RadialGradient(0, 0, CX, CY, 260, false, CycleMethod.NO_CYCLE,
                 new Stop(0, col("#00D9EF", 0.05)), new Stop(0.6, col("#00D9EF", 0.04)),
                 new Stop(0.7, col("#00DBFF", 0.10)), new Stop(1, Color.TRANSPARENT)));
         g.fillOval(CX - 260, CY - 260, 520, 520);
+    }
 
+    private void rings(GraphicsContext g) {
         // Anéis concêntricos; o último pontilhado.
         double[] rings = {176, 196, 222, 250, 268};
         for (int i = 0; i < rings.length; i++) {
-            double r = rings[i];
-            g.setStroke(col("#10AFCF", i == 1 ? 0.38 : 0.2));
+            double r = rings[i] + (i < 3 ? micBass * (3 - i) * 3 : 0);
+            g.setStroke(col("#10AFCF", i == 1 ? 0.38 + micMid * 0.12 : 0.2 + micTreble * 0.08));
             g.setLineWidth(i == 1 ? 1.1 : 0.7);
             if (i == rings.length - 1) {
                 g.setLineDashes(1.5, 6);
@@ -338,6 +430,9 @@ final class VoiceVisualizer extends Region {
             g.strokeOval(CX - r, CY - r, r * 2, r * 2);
             g.setLineDashes();
         }
+    }
+
+    private void arcs(GraphicsContext g) {
         // Arco grosso no alto e no pé, e as marcas hachuradas nas diagonais.
         g.setStroke(col("#12E3F7", 1));
         g.setLineWidth(5);
@@ -352,32 +447,20 @@ final class VoiceVisualizer extends Region {
         hatch(g, 128 + sweep, 146 + sweep, 212, col("#12E3F7", 0.75));
         hatch(g, 308 + sweep, 328 + sweep, 212, col("#12E3F7", 0.75));
         satellites(g);
+    }
 
-        for (int glow = 10; glow >= 1; glow--) {
+    private void glow(GraphicsContext g, double radius) {
+        int layers = 10;
+        for (int glow = layers; glow >= 1; glow--) {
             g.setLineWidth(glow * 2.6);
-            g.setStroke(col("#00DBFF", 0.022 + (11 - glow) * 0.006));
+            g.setStroke(col("#00DBFF", 0.018 + (layers + 1 - glow) * 0.005
+                    + micTreble * 0.012));
             g.strokeOval(CX - radius, CY - radius, radius * 2, radius * 2);
         }
-        Random random = new Random(19);
-        for (int i = 0; i < 2400; i++) {
-            double angle = random.nextDouble() * Math.PI * 2;
-            double z = random.nextDouble() * 2 - 1;
-            double orbit = radius * Math.sqrt(1 - z * z);
-            double rotation = angle + phase * 0.11 + particleSpin();
-            double x = orbit * Math.cos(rotation);
-            double y = radius * z;
-            double depth = Math.sin(rotation);
-            g.setFill(col("#27EAFF", 0.08 + 0.38 * Math.abs(depth)));
-            double pull = "understanding".equals(activity) ? 0.86 + 0.14 * Math.cos(t * 3) : 1;
-            g.fillOval(CX + x * pull, CY + y * pull, depth > 0.5 ? 1.4 : 0.8, depth > 0.5 ? 1.4 : 0.8);
-        }
-        for (int i = 0; i < 1700; i++) {
-            double angle = random.nextDouble() * Math.PI * 2;
-            double r = radius + random.nextGaussian() * 4.2;
-            double size = 0.5 + random.nextDouble() * 1.6;
-            g.setFill(col("#50EDFF", 0.15 + random.nextDouble() * 0.55));
-            g.fillOval(CX + Math.cos(angle) * r, CY + Math.sin(angle) * r, size, size);
-        }
+    }
+
+    /** O miolo escuro, a borda que pulsa e a onda de conclusão. */
+    private void core(GraphicsContext g, double radius) {
         g.setFill(new RadialGradient(0, 0, CX, CY, radius * 0.86, false, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#06151E", 0.99)), new Stop(0.7, Color.web("#06151E", 0.93)),
                 new Stop(1, Color.TRANSPARENT)));
@@ -391,6 +474,9 @@ final class VoiceVisualizer extends Region {
             g.setStroke(col("#7DF6FF", 0.8 * (1 - t / 1.2)));
             g.strokeOval(CX - r, CY - r, r * 2, r * 2);
         }
+    }
+
+    private void poles(GraphicsContext g, double radius) {
         for (int i = 0; i < 2; i++) {
             double y = CY + (i == 0 ? -radius : radius);
             g.setFill(new RadialGradient(0, 0, CX, y, 34, false, CycleMethod.NO_CYCLE,
@@ -398,7 +484,9 @@ final class VoiceVisualizer extends Region {
                     new Stop(1, Color.TRANSPARENT)));
             g.fillOval(CX - 34, y - 34, 68, 68);
         }
+    }
 
+    private void emblem(GraphicsContext g) {
         // O símbolo: triângulo com o triângulo interno aberto, como na referência.
         g.setStroke(col("#12E3F7", 1));
         g.setLineWidth(4.2);
@@ -427,10 +515,14 @@ final class VoiceVisualizer extends Region {
 
     /** Altura das ondas: falando, elas pulsam; ouvindo, seguem o microfone. */
     private double waveGain() {
+        double reactive = 0.55 + micBass * 1.15 + micMid * 0.65 + micTreble * 0.3;
         return switch (activity) {
-            case "speaking" -> 0.7 + 0.5 * Math.sin(t * 6);
-            case "listening" -> reducedMotion ? 1 : 0.5 + micEnergy * 1.2;
-            default -> 1;
+            case "speaking" -> reactive + 0.22 * Math.sin(t * 6);
+            case "listening" -> reducedMotion ? 1 : reactive * intensity();
+            case "understanding" -> 0.75 + micMid * 0.7;
+            case "planning" -> 0.7 + micTreble * 0.35;
+            case "executing" -> 0.9 + micBass * 0.5;
+            default -> (0.72 + micEnergy * 0.25) * intensity();
         };
     }
 
@@ -445,23 +537,18 @@ final class VoiceVisualizer extends Region {
         };
     }
 
-    private double particleSpin() {
-        return switch (activity) {
-            case "understanding" -> t * 1.5;
-            case "planning" -> t * 0.3;
-            case "executing" -> t * 0.8;
-            case "agents" -> t * 0.5;
-            default -> 0;
-        };
-    }
-
-    /** Pulso do anel: lento em atenção, rápido em erro. */
+    /** Pulso do anel, de 0 a 1: lento em atenção, rápido em erro. */
     private double pulse() {
-        return switch (activity) {
+        double value = switch (activity) {
             case "attention" -> 0.6 + 0.4 * Math.sin(t * 2);
             case "error" -> 0.55 + 0.45 * Math.sin(t * 4);
-            default -> 1;
+            case "idle" -> 0.82 + 0.05 * Math.sin(t * 0.8);
+            // Com a voz forte esta soma chega a 1,18; quem chama multiplica o
+            // resultado por um alfa, então o teto precisa valer já aqui.
+            default -> 0.86 + Math.min(0.24, micEnergy * 0.35)
+                    + 0.08 * Math.sin(t * (3 + micTreble * 8));
         };
+        return Math.clamp(value, 0, 1);
     }
 
     /** Agentes trabalhando: um satélite em órbita por agente (três até o M5 dizer quantos). */
@@ -491,6 +578,25 @@ final class VoiceVisualizer extends Region {
             double sin = -Math.sin(rad);
             g.strokeLine(CX + cos * radius, CY + sin * radius, CX + cos * (radius + 10), CY + sin * (radius + 10));
         }
+    }
+
+    /** Pequenos saltos de sincronismo, raros e curtos, como uma interface holográfica real. */
+    private void glitch(GraphicsContext g) {
+        if (reducedMotion || "idle".equals(activity)) {
+            return;
+        }
+        double pulse = Math.sin(t * 1.73 + 0.4) * Math.sin(t * 4.91);
+        if (pulse < 0.985) {
+            return;
+        }
+        double y = 120 + Math.abs(Math.sin(t * 12)) * 390;
+        double shift = 3 + micTreble * 9;
+        g.setGlobalAlpha(0.16);
+        g.setFill(col("#8AFFFF", 0.7));
+        g.fillRect(CX - 250 + shift, y, 130 + micMid * 90, 1);
+        g.setFill(col("#8B7CFF", 0.48));
+        g.fillRect(CX + 90 - shift, y + 2, 70 + micTreble * 60, 1);
+        g.setGlobalAlpha(1);
     }
 
     private void frame(GraphicsContext g) {
@@ -534,11 +640,20 @@ final class VoiceVisualizer extends Region {
         g.setFont(Font.font("Inter", 10));
         g.fillText("N Í V E L   R M S", METER_X, METER_Y);
         // Em repouso as barras ficam apagadas: acesas sem som seria um nível inventado.
-        int lit = (int) Math.round(Math.min(1, player.level() * 4) * 24);
+        double rms = Math.max(player.level() * 4, micEnergy);
+        int lit = (int) Math.round(Math.min(1, rms) * 24);
         for (int i = 0; i < 24; i++) {
-            g.setFill(i < lit ? CYAN : Color.web("#12E3F7", 0.24));
+            g.setFill(i < lit ? col("#12E3F7", 0.92) : col("#12E3F7", 0.24));
             g.fillRect(METER_X + i * 6.1, METER_Y + 12, 3, 13);
         }
+        g.setFont(Font.font("JetBrains Mono", 8));
+        g.setFill(col("#63EAF5", 0.58));
+        g.fillText("B", METER_X, METER_Y + 39);
+        g.fillText("M", METER_X + 58, METER_Y + 39);
+        g.fillText("A", METER_X + 116, METER_Y + 39);
+        bandMeter(g, METER_X + 10, METER_Y + 36, micBass);
+        bandMeter(g, METER_X + 68, METER_Y + 36, micMid);
+        bandMeter(g, METER_X + 126, METER_Y + 36, micTreble);
 
         g.setTextAlign(TextAlignment.CENTER);
         g.setFill(Color.web("#56DDEF"));
@@ -548,5 +663,12 @@ final class VoiceVisualizer extends Region {
         g.setLineWidth(1);
         g.strokeLine(283, 627, 367, 627);
         g.strokeLine(598, 627, 682, 627);
+    }
+
+    private void bandMeter(GraphicsContext g, double x, double y, double value) {
+        g.setFill(col("#12E3F7", 0.18));
+        g.fillRect(x, y, 43, 2);
+        g.setFill(col("#12E3F7", 0.72));
+        g.fillRect(x, y, 43 * Math.min(1, value * 1.7), 2);
     }
 }

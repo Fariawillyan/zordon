@@ -19,13 +19,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.DataLine;
-import javax.sound.sampled.Mixer;
-import javax.sound.sampled.SourceDataLine;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import zordon.api.trace.Spec;
 
 /** One bounded output worker. The audio device's frame cursor drives visualization. */
@@ -53,7 +46,6 @@ public final class SoundPlayer implements AutoCloseable {
             "Esta janela roda no WSL, que não tem saída de áudio. Abra o Zordon pelo atalho do Windows.";
     static final String OUTPUT_UNAVAILABLE = "Saída de áudio indisponível. Verifique o dispositivo e tente novamente.";
 
-    private static final Logger log = LoggerFactory.getLogger(SoundPlayer.class);
 
     public interface Output extends AutoCloseable {
         /** Nome da saída, como o sistema a apresenta. */
@@ -75,11 +67,8 @@ public final class SoundPlayer implements AutoCloseable {
     private final LongSupplier nanos;
     private volatile Outcome outcome;
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 10, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(1), runnable -> {
-                Thread thread = new Thread(runnable, "voice-feedback");
-                thread.setDaemon(true);
-                return thread;
-            }, new ThreadPoolExecutor.DiscardOldestPolicy());
+            new ArrayBlockingQueue<>(1), Thread.ofPlatform().name("voice-feedback").daemon().factory(),
+            new ThreadPoolExecutor.DiscardOldestPolicy());
     private volatile Output output;
     private volatile SoundSynthesizer.Sound sound;
     private volatile double volume = 0.35;
@@ -87,7 +76,7 @@ public final class SoundPlayer implements AutoCloseable {
     private volatile String error = "";
     private long generation;
 
-    public SoundPlayer() { this(SoundPlayer::openDefault); }
+    public SoundPlayer() { this(JavaSoundOutput::open); }
     public SoundPlayer(OutputFactory factory) {
         this(factory, System::nanoTime);
     }
@@ -139,9 +128,9 @@ public final class SoundPlayer implements AutoCloseable {
         } catch (Exception failure) {
             synchronized (this) {
                 if (ticket == generation) {
-                    error = unavailableMessage();
-                    outcome = new Failed(error);
-                    log.warn("efeito sonoro não tocou: {}", failure.toString());
+                    Failed failed = PlaybackProof.unavailable(failure);
+                    error = failed.reason();
+                    outcome = failed;
                 }
             }
         } finally {
@@ -161,20 +150,11 @@ public final class SoundPlayer implements AutoCloseable {
         if (ticket != generation) {
             return;
         }
-        long position = line.framePosition();
-        if (position < rendered.frames() - POSITION_TOLERANCE) {
-            error = NOT_REPRODUCED;
-        } else if (elapsed < rendered.seconds() * REAL_TIME_FRACTION) {
-            error = NOT_REAL_TIME;
-        } else {
-            outcome = new Played(line.name(), rendered.frames(), rendered.seconds());
-            log.info("efeito sonoro tocou em {}: {} frames, {} s", line.name(), rendered.frames(),
-                    String.format(java.util.Locale.ROOT, "%.2f", elapsed));
-            return;
+        Outcome judged = PlaybackProof.judge(line, rendered, elapsed);
+        if (judged instanceof Failed failed) {
+            error = failed.reason();
         }
-        outcome = new Failed(error);
-        log.warn("efeito sonoro não comprovado em {}: posição {} de {} frames em {} s", line.name(), position,
-                rendered.frames(), String.format(java.util.Locale.ROOT, "%.2f", elapsed));
+        outcome = judged;
     }
 
     public synchronized void stop() {
@@ -213,45 +193,11 @@ public final class SoundPlayer implements AutoCloseable {
 
     /** Nome da saída que o sistema usa por padrão, ou vazio se não houver nenhuma. */
     public static String outputName() {
-        DataLine.Info wanted = new DataLine.Info(SourceDataLine.class, format());
-        for (Mixer.Info info : AudioSystem.getMixerInfo()) {
-            if (AudioSystem.getMixer(info).isLineSupported(wanted)) {
-                return info.getName();
-            }
-        }
-        return "";
+        return JavaSoundOutput.name();
     }
 
     /** No WSL não há saída de áudio (R6); dizer isso é mais útil que uma falha genérica. */
     static boolean inWsl() {
-        return System.getenv("WSL_DISTRO_NAME") != null || System.getenv("WSL_INTEROP") != null;
-    }
-
-    private static String unavailableMessage() {
-        return inWsl() && outputName().isEmpty() ? NO_OUTPUT_IN_WSL : OUTPUT_UNAVAILABLE;
-    }
-
-    private static AudioFormat format() {
-        return new AudioFormat(SoundSynthesizer.SAMPLE_RATE, 16, 2, true, false);
-    }
-
-    private static Output openDefault() throws Exception {
-        AudioFormat format = format();
-        String name = outputName();
-        SourceDataLine line = AudioSystem.getSourceDataLine(format);
-        try {
-            line.open(format, 4096);
-        } catch (Exception failure) {
-            line.close();
-            throw failure;
-        }
-        return new Output() {
-            @Override public String name() { return name.isEmpty() ? "saída padrão" : name; }
-            @Override public void start() { line.start(); }
-            @Override public int write(byte[] data, int offset, int length) { return line.write(data, offset, length); }
-            @Override public long framePosition() { return line.getLongFramePosition(); }
-            @Override public void drain() { line.drain(); }
-            @Override public void close() { line.stop(); line.flush(); line.close(); }
-        };
+        return JavaSoundOutput.inWsl();
     }
 }

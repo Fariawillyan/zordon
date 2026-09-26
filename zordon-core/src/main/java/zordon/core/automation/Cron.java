@@ -26,23 +26,22 @@ import java.util.BitSet;
  */
 public final class Cron {
 
+    /**
+     * O casamento de dia: dia-do-mês e dia-da-semana andam juntos porque o cron
+     * os combina — com os dois preenchidos, qualquer um que bata serve.
+     */
+    private record Days(BitSet ofMonth, BitSet ofWeek, boolean anyDay, boolean anyWeekday) {}
+
     private final BitSet minutes;
     private final BitSet hours;
-    private final BitSet days;
     private final BitSet months;
-    private final BitSet weekdays;
-    private final boolean anyDay;
-    private final boolean anyWeekday;
+    private final Days days;
 
-    private Cron(BitSet minutes, BitSet hours, BitSet days, BitSet months, BitSet weekdays, boolean anyDay,
-            boolean anyWeekday) {
+    private Cron(BitSet minutes, BitSet hours, BitSet months, Days days) {
         this.minutes = minutes;
         this.hours = hours;
-        this.days = days;
         this.months = months;
-        this.weekdays = weekdays;
-        this.anyDay = anyDay;
-        this.anyWeekday = anyWeekday;
+        this.days = days;
     }
 
     public static Cron parse(String expression) {
@@ -58,8 +57,8 @@ public final class Cron {
             weekdays.set(0);   // 7 também é domingo
         }
         return new Cron(field(fields[0], 0, 59, "minuto"), field(fields[1], 0, 23, "hora"),
-                field(fields[2], 1, 31, "dia"), field(fields[3], 1, 12, "mês"), weekdays, fields[2].equals("*"),
-                fields[4].equals("*"));
+                field(fields[3], 1, 12, "mês"),
+                new Days(field(fields[2], 1, 31, "dia"), weekdays, fields[2].equals("*"), fields[4].equals("*")));
     }
 
     private static BitSet field(String text, int min, int max, String name) {
@@ -133,15 +132,15 @@ public final class Cron {
     }
 
     private boolean dayMatches(ZonedDateTime at) {
-        boolean day = days.get(at.getDayOfMonth());
-        boolean weekday = weekdays.get(at.getDayOfWeek().getValue() % 7);
-        if (anyDay && anyWeekday) {
+        boolean day = days.ofMonth().get(at.getDayOfMonth());
+        boolean weekday = days.ofWeek().get(at.getDayOfWeek().getValue() % 7);
+        if (days.anyDay() && days.anyWeekday()) {
             return true;
         }
-        if (anyDay) {
+        if (days.anyDay()) {
             return weekday;
         }
-        if (anyWeekday) {
+        if (days.anyWeekday()) {
             return day;
         }
         return day || weekday;

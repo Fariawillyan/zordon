@@ -171,10 +171,10 @@ class VoicePresentationTest {
 
         state.accept(new EventEnvelope(1, java.time.Instant.now(), EventType.VOICE_STATE,
                 snapshot("push", "unavailable", "off", false, true)));
-        assertThat(state.voiceProperty().get().mode()).isEqualTo("push");
+        assertThat(state.voice().statusProperty().get().mode()).isEqualTo("push");
 
         state.offline("conexão encerrada");
-        assertThat(state.voiceProperty().get()).isNull();
+        assertThat(state.voice().statusProperty().get()).isNull();
     }
 
     @Test
@@ -185,8 +185,8 @@ class VoicePresentationTest {
                     Map.of("text", "frase " + i, "confidence", 0.9)));
         }
 
-        assertThat(state.transcriptions()).hasSize(DesktopState.TRANSCRIPTIONS_KEPT);
-        assertThat(state.transcriptions().getFirst()).contains("frase 24");
+        assertThat(state.voice().transcriptions()).hasSize(VoiceState.TRANSCRIPTIONS_KEPT);
+        assertThat(state.voice().transcriptions().getFirst()).contains("frase 24");
     }
 
     private static String header(Map<String, Object> snapshot) {

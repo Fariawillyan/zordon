@@ -39,10 +39,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import zordon.api.trace.AcceptanceCriteria;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -110,9 +110,9 @@ class MonitorTest {
     private DockerEvents docker(Path script, List<Map<String, Object>> sink) throws Exception {
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         CommandValidator validator = new CommandValidator(Map.of("docker", script.toString()));
-        PermissionEngine.Approver none = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver none = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")), validator, new Redactor(),
                 () -> none), audit);
         return new DockerEvents(gatekeeper, new ProcessRunner(validator), home.resolve("work"), sink::add,

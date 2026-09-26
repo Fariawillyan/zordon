@@ -34,10 +34,10 @@ final class SkillsView extends DestinationPage {
     private final DesktopState state;
 
     SkillsView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "Skills", actions::loadSkills);
+        super("RECURSOS", "Skills", actions.data()::loadSkills);
         this.state = state;
         setId("skills-view");
-        repaintOn(state.skills());
+        repaintOn(state.resources().skills());
         render();
     }
 
@@ -45,7 +45,7 @@ final class SkillsView extends DestinationPage {
     void render() {
         Label hint = muted("Cada Skill tem um risco base. GREEN roda direto; YELLOW pede confirmação;"
                 + " RED é negado sem perguntar. Nada aqui contorna o motor de permissão.");
-        VBox list = rows(List.copyOf(state.skills()), "Nenhuma ferramenta disponível — o núcleo não respondeu ainda.",
+        VBox list = rows(List.copyOf(state.resources().skills()), "Nenhuma ferramenta disponível — o núcleo não respondeu ainda.",
                 skill -> {
                     String effects = skill.get("effects") instanceof List<?> found && !found.isEmpty()
                             ? found.stream().map(String::valueOf).reduce((a, b) -> a + ", " + b).orElse("")
@@ -56,7 +56,7 @@ final class SkillsView extends DestinationPage {
                     return line;
                 });
         list.setId("skill-list");
-        show(Cards.section("Ferramentas (" + state.skills().size() + ")", new VBox(8, hint, list)));
+        show(Cards.section("Ferramentas (" + state.resources().skills().size() + ")", new VBox(8, hint, list)));
     }
 
     /** O risco em palavras: "green" não diz nada a quem não leu a SPEC. */

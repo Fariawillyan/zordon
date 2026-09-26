@@ -45,10 +45,10 @@ import zordon.core.notify.NotificationCenter;
 import zordon.core.notify.ZordonMessage;
 import zordon.core.tools.SkillRuntime;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.ProcessRunner;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
@@ -81,11 +81,11 @@ class McpManagerTest {
                 delivered::add);
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
         CommandValidator validator = new CommandValidator(Map.of("python3", "/usr/bin/python3"));
-        PermissionEngine.Approver approver = (action, actor, risk, ttl, perAction) -> {
-            asked.add(action.tool() + " " + risk.wire());
+        PermissionEngine.Approver approver = request -> {
+            asked.add(request.action().tool() + " " + request.risk().wire());
             return CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
         };
-        gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy, validator, new Redactor(), () -> approver),
+        gatekeeper = new Gatekeeper(PermissionEngines.standard(policy, validator, new Redactor(), () -> approver),
                 audit);
         runner = new ProcessRunner(validator);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false);
@@ -111,7 +111,8 @@ class McpManagerTest {
         McpManager manager = new McpManager(
                 List.of(new McpManager.Server("fake", List.of(program, script.toString(), config.toString()), floor,
                         true)),
-                gatekeeper, runner, runtime, notifications, home.resolve("state"), home.resolve("mcp-work"),
+                new McpManager.Deps(gatekeeper, runner, runtime, notifications),
+                new McpManager.Dirs(home.resolve("state"), home.resolve("mcp-work")),
                 Clock.systemUTC(), nanos::get)
                 .timings(Duration.ofMillis(800), List.of(Duration.ofMillis(200)));
         managers.add(manager);
@@ -202,8 +203,9 @@ class McpManagerTest {
         assertThat(asked).contains("mcp.fake.wipe red");
 
         McpManager strict = new McpManager(List.of(new McpManager.Server("strict",
-                List.of("python3", script.toString(), config.toString()), RiskLevel.YELLOW, true)), gatekeeper,
-                runner, runtime, notifications, home.resolve("state"), home.resolve("mcp-work"), Clock.systemUTC(),
+                List.of("python3", script.toString(), config.toString()), RiskLevel.YELLOW, true)),
+                new McpManager.Deps(gatekeeper, runner, runtime, notifications),
+                new McpManager.Dirs(home.resolve("state"), home.resolve("mcp-work")), Clock.systemUTC(),
                 nanos::get);
         managers.add(strict);
         strict.start();

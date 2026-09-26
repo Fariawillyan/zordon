@@ -50,11 +50,12 @@ import zordon.core.tools.Tool;
 import zordon.core.tools.ToolResult;
 import zordon.defense.CircuitBreakers;
 import zordon.memory.SqliteMemoryStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -69,6 +70,7 @@ class DefenseResponseTest {
     private final List<String> isolated = new CopyOnWriteArrayList<>();
     private final List<String> cancelled = new CopyOnWriteArrayList<>();
     private final List<String> lockdowns = new CopyOnWriteArrayList<>();
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private SqliteAuditLog audit;
     private ZordonEventBus bus;
@@ -80,22 +82,24 @@ class DefenseResponseTest {
 
     @BeforeEach
     void setUp() {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), Clock.systemUTC());
+        db = new ZordonDatabase(home.resolve("zordon.db"), Clock.systemUTC());
+        store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.SECURITY), QueuePolicy.dropOldest(256), events::add);
         notifications = new NotificationCenter(home.resolve("notifications.db"), Clock.systemUTC(), notices::add);
-        defense = new DefenseService(store, notifications, bus, new Redactor(), Clock.systemUTC(), System::nanoTime);
+        defense = new DefenseService(new DefenseService.Outlets(db.findings(), notifications, bus), new Redactor(),
+                Clock.systemUTC(), System::nanoTime);
         breakers = new CircuitBreakers(Clock.systemUTC());
-        response = new DefenseEngine(breakers, store, notifications, bus, new DefenseEngine.Actions() {
+        response = new DefenseEngine(breakers, db.securityEvents(), notifications, bus, new DefenseEngine.Actions() {
             @Override public boolean isolateMcp(String server) { return isolated.add(server); }
             @Override public boolean cancelAgent(String agent) { return cancelled.add(agent); }
             @Override public void lockdown(String reason) { lockdowns.add(reason); }
         }, Clock.systemUTC());
         defense.respondWith(response::respond);
-        PermissionEngine.Approver allow = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver allow = request ->
                 CompletableFuture.completedFuture(PermissionEngine.Approval.ONCE);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~")), new CommandValidator(Map.of()),
                 new Redactor(), () -> allow), audit);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false).observedBy(defense)
@@ -107,7 +111,7 @@ class DefenseResponseTest {
         notifications.close();
         audit.close();
         bus.close();
-        store.close();
+        db.close();
     }
 
     private Tool violating() {
@@ -152,7 +156,7 @@ class DefenseResponseTest {
             assertThat(notices).anySatisfy(message ->
                     assertThat(message.id()).isEqualTo(stored.get("userMessageId")));
         });
-        assertThat(store.securityChainOk()).isTrue();
+        assertThat(db.securityEvents().securityChainOk()).isTrue();
 
         String second = runtime.invoke("fs.read", Map.of("path", "~/dev/x.md"), agent, "t2").get(10, TimeUnit.SECONDS)
                 .text();

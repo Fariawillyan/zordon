@@ -36,17 +36,17 @@ final class KnowledgeView extends DestinationPage {
     private final ShellActions actions;
 
     KnowledgeView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "Conhecimento", actions::loadKnowledge);
+        super("RECURSOS", "Conhecimento", actions.memory()::loadKnowledge);
         this.state = state;
         this.actions = actions;
         setId("knowledge-view");
-        state.knowledgeProperty().addListener((observable, before, now) -> render());
+        state.resources().knowledgeProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     @Override
     void render() {
-        Map<String, Object> status = state.knowledgeProperty().get();
+        Map<String, Object> status = state.resources().knowledgeProperty().get();
         if (status.isEmpty()) {
             show(Cards.section("Índice", new VBox(8,
                     muted("Ainda sem resposta do núcleo sobre o índice de documentação."))));
@@ -61,7 +61,7 @@ final class KnowledgeView extends DestinationPage {
             numbers.getChildren().add(muted("Não há índice ainda: use Reindexar para o Zordon ler a documentação"
                     + " antes de responder sobre o projeto."));
         }
-        numbers.getChildren().add(button("knowledge-reindex", "Reindexar", actions::reindexKnowledge));
+        numbers.getChildren().add(button("knowledge-reindex", "Reindexar", actions.memory()::reindexKnowledge));
 
         VBox roots = rows(paths(status.get("roots")), "Nenhuma raiz configurada — veja [rag] roots no config.toml.",
                 root -> wrapped(text(root, "path")));

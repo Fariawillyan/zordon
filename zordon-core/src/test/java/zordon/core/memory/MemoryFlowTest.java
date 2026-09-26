@@ -61,11 +61,12 @@ import zordon.memory.Fact;
 import zordon.memory.FactKind;
 import zordon.memory.NewFact;
 import zordon.memory.SqliteMemoryStore;
+import zordon.memory.ZordonDatabase;
 import zordon.security.CommandValidator;
-import zordon.security.DefaultPermissionEngine;
 import zordon.security.Gatekeeper;
 import zordon.security.PathPolicy;
 import zordon.security.PermissionEngine;
+import zordon.security.PermissionEngines;
 import zordon.security.Redactor;
 import zordon.security.SqliteAuditLog;
 
@@ -87,6 +88,7 @@ class MemoryFlowTest {
     private final Manual clock = new Manual();
     private final List<EventEnvelope> events = new CopyOnWriteArrayList<>();
     private final List<Fact> written = new CopyOnWriteArrayList<>();
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
     private SqliteAuditLog audit;
     private ZordonEventBus bus;
@@ -95,14 +97,15 @@ class MemoryFlowTest {
 
     @BeforeEach
     void setUp() {
-        store = new SqliteMemoryStore(home.resolve("zordon.db"), clock);
+        db = new ZordonDatabase(home.resolve("zordon.db"), clock);
+        store = db.memory();
         audit = new SqliteAuditLog(home.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         bus = new ZordonEventBus("01TESTE00000000000000000000");
         bus.subscribe("teste", Set.of(Topic.CHAT), QueuePolicy.dropOldest(256), events::add);
         PathPolicy policy = PathPolicy.defaults(home.toString(), List.of("~/dev"), List.of("~"));
-        PermissionEngine.Approver deny = (action, actor, risk, ttl, perAction) ->
+        PermissionEngine.Approver deny = request ->
                 java.util.concurrent.CompletableFuture.completedFuture(PermissionEngine.Approval.DENY);
-        Gatekeeper gatekeeper = new Gatekeeper(new DefaultPermissionEngine(policy,
+        Gatekeeper gatekeeper = new Gatekeeper(PermissionEngines.standard(policy,
                 new CommandValidator(Map.of()), new Redactor(), () -> deny), audit);
         runtime = new SkillRuntime(gatekeeper, bus, () -> false)
                 .register(MemoryTools.remember(store, clock, written::add))
@@ -117,7 +120,7 @@ class MemoryFlowTest {
 
     @AfterEach
     void tearDown() {
-        store.close();
+        db.close();
         audit.close();
         bus.close();
     }
@@ -125,11 +128,11 @@ class MemoryFlowTest {
     private TurnManager turns(ToolLoopTestSupport.Scripted provider) {
         TurnManager turns = new TurnManager(bus, conversations, new IntentRouter(), new PromptComposer(),
                 ProviderRegistry.of(Map.of(ModelPolicy.DEFAULT_PROVIDER, provider), ModelPolicy.defaults()));
-        turns.onToolCalls(new ModelToolCaller(runtime));
-        turns.onTool((tool, args, source, turnId) -> runtime.invoke(tool, args,
+        turns.hooks().onToolCalls(new ModelToolCaller(runtime));
+        turns.hooks().onTool((tool, args, source, turnId) -> runtime.invoke(tool, args,
                 zordon.api.security.Principal.user(zordon.api.security.RequestOrigin.UI), turnId)
                 .thenApply(zordon.core.tools.ToolResult::text));
-        turns.onRecall(new MemoryContext(store, clock, ZoneOffset.UTC));
+        turns.hooks().onRecall(new MemoryContext(store, clock, ZoneOffset.UTC));
         return turns;
     }
 

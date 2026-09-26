@@ -83,64 +83,77 @@ public final class ActivityInterpreter {
         List<Output> out = new ArrayList<>();
         Map<String, Object> payload = event.payload();
         switch (event.type()) {
-            case USER_COMMAND -> {
-                turns.put(text(payload.get("turnId")),
-                        new Turn("voice".equals(payload.get("source")), event.ts(), false));
-                show(out, ActivityState.UNDERSTANDING);
-            }
-            case AI_THINKING -> {
-                if (turns.containsKey(text(payload.get("turnId")))) {
-                    show(out, ActivityState.PLANNING);
-                }
-            }
-            case AI_RESPONSE -> {
-                // Fragmento de streaming: nada a dizer nem a mudar.
-                if (Boolean.TRUE.equals(payload.get("done"))) {
-                    Turn turn = turns.remove(text(payload.get("turnId")));
-                    settle(out, ActivityState.DONE, event.ts());
-                    // A voz diz o resumo, sem Markdown, e aponta para a tela
-                    // (Comunicação §3). Ler a resposta inteira, com asteriscos,
-                    // era o que acontecia até 2026-09-20 (SPEC-034).
-                    String spoken = SpokenAnswer.of(text(payload.get("text")));
-                    if (turn != null && turn.voice() && !spoken.isBlank()) {
-                        out.add(new Say(new Narration(spoken, Narration.Priority.HIGH, "resultado")));
-                    }
-                }
-            }
-            case AI_ERROR -> {
-                Turn turn = turns.remove(text(payload.get("turnId")));
-                settle(out, ActivityState.ERROR, event.ts());
-                if (turn != null && turn.voice()) {
-                    out.add(new Say(new Narration(errorPhrase(text(payload.get("kind"))),
-                            Narration.Priority.HIGH, "erro")));
-                }
-            }
+            case USER_COMMAND -> command(out, payload, event.ts());
+            case AI_THINKING -> thinking(out, payload);
+            case AI_RESPONSE -> response(out, payload, event.ts());
+            case AI_ERROR -> failed(out, payload, event.ts());
             case VOICE_STATE -> voice(out, payload);
-            case SECURITY_NOTIFICATION -> {
-                // A voz diz o resumo e aponta para a tela; nunca lê a mensagem inteira (Comunicação §3).
-                if ("critical".equals(payload.get("severity"))) {
-                    show(out, ActivityState.ATTENTION);
-                    out.add(new Say(new Narration(text(payload.get("title")) + ". Os detalhes estão na tela.",
-                            Narration.Priority.AUTHORIZATION, "alerta")));
-                }
-            }
-            case TOOL_CALLED -> {
-                if ("allow".equals(payload.get("decision"))) {
-                    show(out, ActivityState.EXECUTING);
-                }
-            }
+            case SECURITY_NOTIFICATION -> security(out, payload);
+            case TOOL_CALLED -> tool(out, payload);
             case TASK_STATE -> task(out, payload, event.ts());
             case LOCKDOWN_ENTERED -> out.add(new Say(new Narration(PAUSED, Narration.Priority.HIGH, "resultado")));
             case LOCKDOWN_EXITED -> out.add(new Say(new Narration(RESUMED, Narration.Priority.HIGH, "resultado")));
-            case VOICE_STOPPED -> {
-                if ("low_confidence".equals(payload.get("outcome"))) {
-                    out.add(new Say(new Narration(MISHEARD, Narration.Priority.HIGH, "resultado")));
-                }
-            }
+            case VOICE_STOPPED -> misheard(out, payload);
             // Técnicos ou próprios: ficam no trace, não mudam o que o usuário vê ou ouve.
             default -> { }
         }
         return out;
+    }
+
+    private void command(List<Output> out, Map<String, Object> payload, Instant ts) {
+        turns.put(text(payload.get("turnId")), new Turn("voice".equals(payload.get("source")), ts, false));
+        show(out, ActivityState.UNDERSTANDING);
+    }
+
+    private void thinking(List<Output> out, Map<String, Object> payload) {
+        if (turns.containsKey(text(payload.get("turnId")))) {
+            show(out, ActivityState.PLANNING);
+        }
+    }
+
+    private void response(List<Output> out, Map<String, Object> payload, Instant ts) {
+        // Fragmento de streaming: nada a dizer nem a mudar.
+        if (!Boolean.TRUE.equals(payload.get("done"))) {
+            return;
+        }
+        Turn turn = turns.remove(text(payload.get("turnId")));
+        settle(out, ActivityState.DONE, ts);
+        // A voz diz a resposta completa, sem Markdown. Blocos de código são
+        // omitidos para que a conversa continue natural.
+        String spoken = SpokenAnswer.of(text(payload.get("text")));
+        if (turn != null && turn.voice() && !spoken.isBlank()) {
+            out.add(new Say(new Narration(spoken, Narration.Priority.HIGH, "resultado")));
+        }
+    }
+
+    private void failed(List<Output> out, Map<String, Object> payload, Instant ts) {
+        Turn turn = turns.remove(text(payload.get("turnId")));
+        settle(out, ActivityState.ERROR, ts);
+        if (turn != null && turn.voice()) {
+            out.add(new Say(new Narration(errorPhrase(text(payload.get("kind"))),
+                    Narration.Priority.HIGH, "erro")));
+        }
+    }
+
+    private void security(List<Output> out, Map<String, Object> payload) {
+        // Alertas críticos continuam usando uma frase curta e exigem atenção na tela.
+        if ("critical".equals(payload.get("severity"))) {
+            show(out, ActivityState.ATTENTION);
+            out.add(new Say(new Narration(text(payload.get("title")) + ". Os detalhes estão na tela.",
+                    Narration.Priority.AUTHORIZATION, "alerta")));
+        }
+    }
+
+    private void tool(List<Output> out, Map<String, Object> payload) {
+        if ("allow".equals(payload.get("decision"))) {
+            show(out, ActivityState.EXECUTING);
+        }
+    }
+
+    private static void misheard(List<Output> out, Map<String, Object> payload) {
+        if ("low_confidence".equals(payload.get("outcome"))) {
+            out.add(new Say(new Narration(MISHEARD, Narration.Priority.HIGH, "resultado")));
+        }
     }
 
     /** A voz de um plano: o título de cada etapa, e o fim só com veredito (Avaliação §5). */

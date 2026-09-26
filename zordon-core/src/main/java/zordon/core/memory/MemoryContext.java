@@ -69,7 +69,7 @@ public final class MemoryContext implements TurnManager.Recall {
         StringBuilder block = new StringBuilder(OPEN).append('\n');
         List<String> used = new ArrayList<>();
         for (MemoryHit hit : hits) {
-            String line = MemoryTools.line(hit.fact(), zone);
+            String line = MemoryText.line(hit.fact(), zone);
             if (block.length() + line.length() + CLOSE.length() + 1 > MAX_CHARS) {
                 break;
             }

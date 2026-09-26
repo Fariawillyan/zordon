@@ -757,3 +757,39 @@
 .nav-brand-name { -fx-text-fill: #DCEAF4; -fx-font-size: 15px; -fx-font-weight: bold; }
 .nav-brand-tag { -fx-text-fill: #5B7D92; -fx-font-size: 9px; }
 .nav-footer-version { -fx-text-fill: #5B7D92; -fx-font-size: 10px; }
+
+/*
+ * OPPRESSOR MODE (SPEC-036 CA-8).
+ *
+ * Redefinir as variáveis basta para virar a janela inteira, porque todo o resto
+ * do tema as consulta em vez de escrever a cor na mão. O modo tem de ser
+ * impossível de confundir com operação normal: enquanto ele dura, o motor de
+ * permissão está fora do caminho em toda ação do processo.
+ */
+.oppressor {
+    surface-canvas: #12060A;
+    surface-panel: #1C0A10;
+    surface-raised: #2A0E16;
+    surface-selected: #4A1220;
+    border-subtle: #46161F;
+    border-control: #B24A58;
+
+    text-primary: #FFE8EC;
+    text-secondary: #E39AA6;
+    text-muted: #C98793;
+    text-on-accent: #12060A;
+
+    accent-default: #FF3B4E;
+    accent-hover: #FF7080;
+    accent-pressed: #D0212F;
+
+    -fx-background-color: surface-canvas;
+}
+
+.oppressor-banner {
+    -fx-background-color: #FF1F35;
+    -fx-text-fill: #12060A;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 5 16 5 16;
+}

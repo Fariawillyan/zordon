@@ -117,7 +117,7 @@ public final class Preflight {
         }
         // O preflight termina esperando: ele planeja, não executa (Auto-modificação §3).
         tasks.taskState(taskId, "waiting_human", "preflight pronto; esperando a decisão do dono");
-        notifications.publish(notifications.message(trust ? Severity.HIGH : Severity.INFO, "SYSTEM",
+        notifications.publish(notifications.message(new NotificationCenter.MessageFields(trust ? Severity.HIGH : Severity.INFO, "SYSTEM",
                 "Plano de mudança pronto: " + goal,
                 "O preflight de nove passos está registrado na tarefa " + taskId + ".",
                 trust ? "A mudança toca o núcleo de confiança, que só muda por PR humano."
@@ -126,7 +126,7 @@ public final class Preflight {
                 "Nada foi alterado no projeto.",
                 "tarefa " + taskId, true,
                 "Esperando você decidir.",
-                List.of("Ver o plano na tela de Tarefas", "Descartar")));
+                List.of("Ver o plano na tela de Tarefas", "Descartar"))));
         log.info("preflight de '{}' registrado em {} (núcleo de confiança: {})", goal, taskId, trust);
         return new Plan(taskId, goal, List.copyOf(steps), trust, DEFAULT_BUDGET);
     }

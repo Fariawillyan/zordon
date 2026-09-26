@@ -49,7 +49,7 @@ class GatekeeperTest {
     private Gatekeeper gatekeeper() {
         audit = new SqliteAuditLog(dir.resolve("audit.db"), new Redactor(), Clock.systemUTC());
         CommandValidator validator = new CommandValidator(CATALOG);
-        return new Gatekeeper(new DefaultPermissionEngine(
+        return new Gatekeeper(PermissionEngines.standard(
                 PathPolicy.defaults(dir.toString(), List.of("~"), List.of("~")), validator, new Redactor(),
                 () -> null), audit);
     }
@@ -75,7 +75,8 @@ class GatekeeperTest {
             Gatekeeper.Permit.Granted permit = granted(gatekeeper, "echo", "olá");
             ProcessRunner.Result result = new ProcessRunner(new CommandValidator(CATALOG)).run(permit, dir,
                     Duration.ofSeconds(5));
-            gatekeeper.complete(permit, AuditLog.Status.OK, Duration.ofMillis(3), "saída de 1 linha", null);
+            permit.complete(new AuditLog.Completion(AuditLog.Status.OK, Duration.ofMillis(3),
+                    "saída de 1 linha", null));
             assertThat(result.exitCode()).isZero();
             assertThat(result.stdout()).isEqualTo("olá\n");
 

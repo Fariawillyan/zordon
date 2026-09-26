@@ -30,7 +30,8 @@ function Register-ZordonTask {
         [Parameter(Mandatory)] [string] $Description,
         [Parameter(Mandatory)] $Action,
         [TimeSpan] $RepeatEvery = [TimeSpan]::Zero,
-        [switch] $RestartOnFailure
+        [switch] $RestartOnFailure,
+        [switch] $Background
     )
 
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -53,8 +54,21 @@ function Register-ZordonTask {
     }
     $settings = New-ScheduledTaskSettingsSet @options
 
-    Register-ScheduledTask -TaskName $Name -Description $Description `
-        -Trigger $trigger -Action $Action -Settings $settings -Force | Out-Null
+    $register = @{
+        TaskName    = $Name
+        Description = $Description
+        Trigger     = $trigger
+        Action      = $Action
+        Settings    = $settings
+        Force       = $true
+    }
+    if ($Background) {
+        # S4U: roda em segundo plano, sem janela e sem guardar senha. Sem isto, uma
+        # tarefa que executa um app de console (wsl.exe) pisca um console na sessao
+        # do usuario a cada disparo. O supervisor nao precisa de desktop.
+        $register.Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+    }
+    Register-ScheduledTask @register | Out-Null
     Write-Host "  registrada: $Name" -ForegroundColor Green
 }
 
@@ -63,7 +77,8 @@ Write-Host "Zordon - tarefas agendadas" -ForegroundColor Cyan
 Register-ZordonTask -Name 'Zordon WSL Boot' `
     -Description 'Sobe a distro do WSL no logon e a religa a cada 5 min se ela cair (ADR-0027).' `
     -Action (New-ScheduledTaskAction -Execute 'wsl.exe' -Argument "-d $Distro --exec /bin/true") `
-    -RepeatEvery (New-TimeSpan -Minutes 5)
+    -RepeatEvery (New-TimeSpan -Minutes 5) `
+    -Background
 
 if ($HostDir -and $Javaw) {
     Register-ZordonTask -Name 'Zordon Host' `

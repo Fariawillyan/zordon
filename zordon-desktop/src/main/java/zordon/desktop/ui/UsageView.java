@@ -34,16 +34,16 @@ final class UsageView extends DestinationPage {
     private final DesktopState state;
 
     UsageView(DesktopState state, ShellActions actions) {
-        super("OPERAÇÃO", "Uso", actions::loadUsage);
+        super("OPERAÇÃO", "Uso", actions.data()::loadUsage);
         this.state = state;
         setId("usage-view");
-        state.usageSummaryProperty().addListener((observable, before, now) -> render());
+        state.resources().usageSummaryProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     @Override
     void render() {
-        Map<String, Object> summary = state.usageSummaryProperty().get();
+        Map<String, Object> summary = state.resources().usageSummaryProperty().get();
         if (summary.isEmpty()) {
             show(Cards.section("Tokens", new VBox(8, muted("Ainda sem resposta do núcleo sobre o uso."))));
             return;

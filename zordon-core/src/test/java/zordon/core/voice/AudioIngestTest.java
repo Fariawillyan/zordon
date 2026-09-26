@@ -45,6 +45,8 @@ class AudioIngestTest {
         // Seno de amplitude 0,1: pico -20 dBFS, RMS 3 dB abaixo.
         assertThat(sine.peakDbfs()).isCloseTo(-20.0, org.assertj.core.data.Offset.offset(0.2));
         assertThat(sine.rmsDbfs()).isCloseTo(-23.0, org.assertj.core.data.Offset.offset(0.2));
+        assertThat(sine.mid()).isGreaterThan(sine.bass() * 5);
+        assertThat(sine.mid()).isGreaterThan(sine.treble() * 5);
     }
 
     @AcceptanceCriteria("SPEC-009/CA-6")
@@ -65,7 +67,7 @@ class AudioIngestTest {
 
         // 50 frames de 20 ms = 1 s: no máximo 20 níveis.
         assertThat(levels).hasSizeBetween(17, 20);
-        assertThat(levels.getFirst()).containsOnlyKeys("rms", "peak");
+        assertThat(levels.getFirst()).containsOnlyKeys("rms", "peak", "bass", "mid", "treble");
     }
 
     @AcceptanceCriteria("SPEC-009/CA-6")

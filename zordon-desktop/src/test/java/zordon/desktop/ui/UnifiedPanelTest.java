@@ -39,7 +39,7 @@ class UnifiedPanelTest {
         FxTestSupport.start();
     }
 
-    private static final ShellActions NO_ACTIONS = new ShellActions() {
+    private static final ShellActions NO_ACTIONS = new FakeShellActions() {
         @Override
         public void send(String text, ComposerTarget target) {}
 
@@ -108,8 +108,8 @@ class UnifiedPanelTest {
     void oQueEraAbaDeAjustesTemUmaCasaSo() throws Exception {
         onFx(() -> {
             DesktopState state = online();
-            state.memoryFacts().add(Map.of("id", "f_1", "kind", "PREFERENCE", "content", "café sem açúcar"));
-            state.mcpServers().add(Map.of("name", "git", "state", "ready", "tools", List.of("git.status")));
+            state.resources().memoryFacts().add(Map.of("id", "f_1", "kind", "PREFERENCE", "content", "café sem açúcar"));
+            state.resources().mcpServers().add(Map.of("name", "git", "state", "ready", "tools", List.of("git.status")));
             ZordonShell shell = new ZordonShell(state, NO_ACTIONS);
             Stage stage = new Stage();
             try {
@@ -169,7 +169,7 @@ class UnifiedPanelTest {
     void aFaixaMostraOsQuatroEstadosEmPalavras() throws Exception {
         onFx(() -> {
             DesktopState state = online();
-            state.voice(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
+            state.voice().apply(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
                     "capture", Map.of("state", "on", "requested", true, "confirmedAt", "2026-09-20T10:00:00Z"),
                     "host", Map.of("connected", true, "device", "Microfone USB"),
                     "engine", Map.of("state", "ready")));
@@ -181,7 +181,7 @@ class UnifiedPanelTest {
             assertThat(faixa.value(2)).as("modelo").contains("local");
             assertThat(faixa.value(3)).as("memória").isEqualTo("Ativa");
             // Sem host, a palavra muda — não só a cor.
-            state.voice(Map.of("mode", "wake", "effective", "unavailable", "activity", "idle",
+            state.voice().apply(Map.of("mode", "wake", "effective", "unavailable", "activity", "idle",
                     "capture", Map.of("state", "off", "requested", false, "confirmedAt", "2026-09-20T10:00:00Z"),
                     "host", Map.of("connected", false),
                     "engine", Map.of("state", "absent", "reason", "motor de voz não instalado")));
@@ -213,7 +213,7 @@ class UnifiedPanelTest {
     void oDestinoAjustesUsaOMesmoSeletorDeModo() throws Exception {
         onFx(() -> {
             DesktopState state = online();
-            state.voice(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
+            state.voice().apply(Map.of("mode", "wake", "effective", "wake", "activity", "idle",
                     "capture", Map.of("state", "on", "requested", true, "confirmedAt", "2026-09-20T10:00:00Z"),
                     "host", Map.of("connected", true),
                     "engine", Map.of("state", "ready")));

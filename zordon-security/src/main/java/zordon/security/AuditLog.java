@@ -47,7 +47,8 @@ public interface AuditLog extends AutoCloseable {
     /**
      * A intenção de uma ação e a decisão sobre ela.
      *
-     * @param decidedBy {@code policy}, {@code user}, {@code timeout} ou {@code ceiling}
+     * @param decidedBy {@code policy}, {@code user}, {@code timeout}, {@code ceiling}
+     *     ou {@code oppressor} (liberado sem avaliação, SPEC-036)
      */
     record Entry(String callId, String turnId, Principal principal, String tool, Map<String, Object> args,
             Decision decision, String decidedBy) {
@@ -65,11 +66,18 @@ public interface AuditLog extends AutoCloseable {
     /** @param firstBroken id da primeira linha inválida, ou {@code -1} */
     record Verification(boolean ok, int checked, long firstBroken) {}
 
+    /** Dados do desfecho, agrupados para manter a operação auditável e estável. */
+    record Completion(Status status, Duration took, String summary, String error) {
+        public Completion {
+            Objects.requireNonNull(status, "status");
+        }
+    }
+
     /** Grava a intenção. Sempre, inclusive quando a decisão é negar. @return o id da linha */
     long begin(Entry entry);
 
     /** Grava o desfecho numa linha nova. */
-    void complete(String callId, Status status, Duration took, String summary, String error);
+    void complete(String callId, Completion completion);
 
     /** Confere as últimas {@code lastN} linhas: cada hash e o encadeamento. */
     Verification verify(int lastN);

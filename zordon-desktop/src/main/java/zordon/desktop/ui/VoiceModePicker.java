@@ -65,12 +65,12 @@ final class VoiceModePicker extends VBox {
             title.getStyleClass().add("status-card-title");
         }
         getChildren().addAll(title, options, note);
-        state.voiceProperty().addListener((observable, before, now) -> render());
+        state.voice().statusProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     private void render() {
-        VoiceStatus voice = state.voiceProperty().get();
+        VoiceStatus voice = state.voice().statusProperty().get();
         ToggleGroup group = new ToggleGroup();
         options.getChildren().clear();
         for (String mode : MODES) {
@@ -84,12 +84,12 @@ final class VoiceModePicker extends VBox {
             // pedir: o botão volta para o modo em vigor e só muda quando o
             // VOICE_STATE chegar. Marcar na hora mentiria se o pedido falhasse.
             option.setOnAction(event -> {
-                VoiceStatus atual = state.voiceProperty().get();
+                VoiceStatus atual = state.voice().statusProperty().get();
                 group.selectToggle(atual == null ? null : group.getToggles().stream()
                         .filter(toggle -> atual.mode().equals(((ToggleButton) toggle).getId()
                                 .substring("mode-".length())))
                         .findFirst().orElse(null));
-                actions.setVoiceMode(mode);
+                actions.voice().setVoiceMode(mode);
             });
             options.getChildren().add(option);
         }

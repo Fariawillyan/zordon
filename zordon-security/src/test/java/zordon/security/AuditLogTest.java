@@ -88,10 +88,11 @@ class AuditLogTest {
     void aIntencaoVemAntesDoDesfechoInclusiveQuandoNegada() throws Exception {
         try (SqliteAuditLog log = open()) {
             log.begin(entry("ok-1", Map.of("path", "/home/u/dev/a"), ALLOW));
-            log.complete("ok-1", AuditLog.Status.OK, Duration.ofMillis(12), "1 arquivo escrito", null);
+            log.complete("ok-1", new AuditLog.Completion(AuditLog.Status.OK, Duration.ofMillis(12),
+                    "1 arquivo escrito", null));
             log.begin(entry("deny-1", Map.of("path", "C:/Windows/x"),
                     new Decision.Deny(RiskLevel.RED, "caminho proibido pela política")));
-            log.complete("deny-1", AuditLog.Status.CANCELLED, Duration.ZERO, null, "negado");
+            log.complete("deny-1", new AuditLog.Completion(AuditLog.Status.CANCELLED, Duration.ZERO, null, "negado"));
             assertThat(log.verify(10).ok()).isTrue();
             assertThat(log.entries()).isEqualTo(4);
         }
@@ -106,7 +107,8 @@ class AuditLogTest {
         assertThat(rows).containsExactly("ok-1 started allow fs.write", "ok-1 ok allow fs.write",
                 "deny-1 started deny fs.write", "deny-1 cancelled deny fs.write");
         try (SqliteAuditLog log = open()) {
-            assertThatThrownBy(() -> log.complete("nunca-comecou", AuditLog.Status.OK, Duration.ZERO, null, null))
+            assertThatThrownBy(() -> log.complete("nunca-comecou",
+                    new AuditLog.Completion(AuditLog.Status.OK, Duration.ZERO, null, null)))
                     .hasMessageContaining("sem intenção registrada");
         }
     }

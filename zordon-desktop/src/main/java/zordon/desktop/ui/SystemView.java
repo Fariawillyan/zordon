@@ -35,16 +35,16 @@ final class SystemView extends DestinationPage {
     private final DesktopState state;
 
     SystemView(DesktopState state, ShellActions actions) {
-        super("OPERAÇÃO", "Sistema", actions::loadSystem);
+        super("OPERAÇÃO", "Sistema", actions.data()::loadSystem);
         this.state = state;
         setId("system-view");
-        state.systemMetricsProperty().addListener((observable, before, now) -> render());
+        state.resources().systemMetricsProperty().addListener((observable, before, now) -> render());
         render();
     }
 
     @Override
     void render() {
-        Map<String, Object> metrics = state.systemMetricsProperty().get();
+        Map<String, Object> metrics = state.resources().systemMetricsProperty().get();
         if (metrics.isEmpty()) {
             show(Cards.section("Máquina", new VBox(8, muted("Ainda sem medida do núcleo."))));
             return;

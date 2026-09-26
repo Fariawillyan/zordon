@@ -17,23 +17,15 @@ package zordon.desktop.ui;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
-import javafx.util.Duration;
 import zordon.api.trace.Spec;
 import zordon.desktop.shell.SecurityPresentation;
 import zordon.desktop.shell.SecurityPresentation.Choice;
@@ -49,8 +41,7 @@ public final class PermissionPane extends VBox {
 
     private final CompletableFuture<Choice> result = new CompletableFuture<>();
     private final AtomicBoolean decided = new AtomicBoolean();
-    private final Timeline countdown;
-    private int remaining;
+    private final PermissionActions actions;
 
     public PermissionPane(Prompt prompt) {
         getStyleClass().add("permission-dialog");
@@ -83,51 +74,17 @@ public final class PermissionPane extends VBox {
         targetList.setFitToWidth(true);
         targetList.setPrefViewportHeight(Math.min(160, 22 * Math.max(1, targets.getChildren().size())));
 
-        remaining = prompt.seconds();
-        Label timer = new Label();
-        timer.setId("permission-countdown");
-        timer.getStyleClass().add("muted");
-        timer.setText(remainingText());
-
-        Button deny = new Button("Negar");
-        deny.setId("permission-deny");
-        deny.setDefaultButton(true);   // Enter nega (Segurança §2, regra 4)
-        deny.setCancelButton(true);    // Esc também
-        deny.setOnAction(event -> decide(Choice.DENY));
-        Button once = new Button(prompt.requiresCheck() ? "Autorizar esta ação" : "Autorizar");
-        once.setId("permission-allow");
-        once.setOnAction(event -> decide(Choice.ONCE));
-        HBox buttons = new HBox(8);
-        buttons.setAlignment(Pos.CENTER_RIGHT);
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        buttons.getChildren().addAll(timer, spacer, deny);
-        if (prompt.offersSession()) {
-            Button session = new Button("Autorizar nesta sessão");
-            session.setId("permission-session");
-            session.setOnAction(event -> decide(Choice.SESSION));
-            buttons.getChildren().add(session);
-        }
-        buttons.getChildren().add(once);
+        actions = new PermissionActions(prompt, this::decide);
 
         getChildren().addAll(title, risk, origin, summary, targetList);
         if (prompt.requiresCheck()) {
             CheckBox checked = new CheckBox("Conferi os alvos acima");
             checked.setId("permission-checked");
-            once.disableProperty().bind(checked.selectedProperty().not());
+            actions.requireCheck(checked);
             getChildren().add(checked);
         }
-        getChildren().add(buttons);
-
-        countdown = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
-            remaining--;
-            timer.setText(remainingText());
-            if (remaining <= 0) {
-                decide(Choice.DENY);
-            }
-        }));
-        countdown.setCycleCount(Math.max(1, prompt.seconds()));
-        countdown.play();
+        getChildren().add(actions);
+        actions.start();
     }
 
     public CompletableFuture<Choice> result() {
@@ -137,13 +94,9 @@ public final class PermissionPane extends VBox {
     /** Fechar a janela, perder a conexão ou o tempo acabar: nega. */
     public void decide(Choice choice) {
         if (decided.compareAndSet(false, true)) {
-            countdown.stop();
+            actions.stop();
             result.complete(choice);
         }
-    }
-
-    private String remainingText() {
-        return "Nega sozinho em " + Math.max(0, remaining) + " s";
     }
 
     /** Mostra o diálogo por cima da janela do Zordon, que vem para a frente. */

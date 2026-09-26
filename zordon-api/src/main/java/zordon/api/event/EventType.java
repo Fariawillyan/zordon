@@ -54,7 +54,7 @@ public enum EventType {
     /** Uma ativação pela palavra, {@code {score, outcome, bargeIn}}; nunca áudio nem texto (SPEC-013). */
     VOICE_WAKE(Topic.VOICE),
 
-    /** Nível do microfone em dBFS, {@code {rms, peak}}; só no teste ou na escuta (SPEC-009). */
+    /** Nível do microfone em dBFS, {@code {rms, peak, bass, mid, treble}}; só no teste ou na escuta (SPEC-009). */
     VOICE_LEVEL(Topic.VOICE),
 
     /** Estado visual do núcleo, {@code {state}} (SPEC-012). */
@@ -71,6 +71,15 @@ public enum EventType {
 
     /** Saída do lockdown: {@code {by}}, sempre {@code user} (SPEC-015). */
     LOCKDOWN_EXITED(Topic.SECURITY),
+
+    /** OPPRESSOR MODE ativo: {@code {since, trigger}} (SPEC-036). */
+    OPPRESSOR_ENTERED(Topic.SECURITY),
+
+    /** Fim do OPPRESSOR MODE: {@code {by}} (SPEC-036). */
+    OPPRESSOR_EXITED(Topic.SECURITY),
+
+    /** A voz pediu o modo: a janela deve pedir a senha. {@code {heard}} (SPEC-036). */
+    OPPRESSOR_PROMPT(Topic.SECURITY),
 
     /** Uma ferramenta foi chamada: {@code {callId, tool, risk, decision}}, sem argumentos (SPEC-016). */
     TOOL_CALLED(Topic.TOOLS),

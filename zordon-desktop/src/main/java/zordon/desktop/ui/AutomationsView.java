@@ -35,37 +35,37 @@ final class AutomationsView extends DestinationPage {
     private final ShellActions actions;
 
     AutomationsView(DesktopState state, ShellActions actions) {
-        super("RECURSOS", "Automações", actions::loadAutomations);
+        super("RECURSOS", "Automações", actions.data()::loadAutomations);
         this.state = state;
         this.actions = actions;
         setId("automations-view");
-        repaintOn(state.automations(), state.automationProposals());
+        repaintOn(state.resources().automations(), state.resources().automationProposals());
         render();
     }
 
     @Override
     void render() {
-        VBox proposals = rows(List.copyOf(state.automationProposals()), "Nada esperando aprovação.", proposal -> {
+        VBox proposals = rows(List.copyOf(state.resources().automationProposals()), "Nada esperando aprovação.", proposal -> {
             String id = text(proposal, "proposalId");
             Label line = wrapped(text(proposal, "goal")
                     + (text(proposal, "rationale").isEmpty() ? "" : "\nPor quê: " + text(proposal, "rationale"))
                     + (text(proposal, "summary").isEmpty() ? "" : "\n" + text(proposal, "summary")));
             return actionRow(line,
-                    button("automation-approve-" + id, "Aprovar", () -> actions.approveAutomation(id)),
-                    button("automation-reject-" + id, "Recusar", () -> actions.rejectAutomation(id)));
+                    button("automation-approve-" + id, "Aprovar", () -> actions.data().approveAutomation(id)),
+                    button("automation-reject-" + id, "Recusar", () -> actions.data().rejectAutomation(id)));
         });
         proposals.setId("automation-proposals");
 
-        VBox active = rows(List.copyOf(state.automations()),
+        VBox active = rows(List.copyOf(state.resources().automations()),
                 "Nenhuma automação ativa. Peça uma na conversa: \"todo dia às 9h, …\".", this::automationRow);
         active.setId("automation-list");
 
         VBox sections = new VBox(16);
-        if (!state.automationProposals().isEmpty()) {
+        if (!state.resources().automationProposals().isEmpty()) {
             sections.getChildren().add(Cards.section(
-                    "Esperando você (" + state.automationProposals().size() + ")", proposals));
+                    "Esperando você (" + state.resources().automationProposals().size() + ")", proposals));
         }
-        sections.getChildren().add(Cards.section("Ativas (" + state.automations().size() + ")", active));
+        sections.getChildren().add(Cards.section("Ativas (" + state.resources().automations().size() + ")", active));
         show(sections);
     }
 
@@ -80,7 +80,7 @@ final class AutomationsView extends DestinationPage {
         line.getStyleClass().add("settings-row");
         return actionRow(line,
                 button("automation-toggle-" + id, enabled ? "Desligar" : "Ligar",
-                        () -> actions.enableAutomation(id, !enabled)),
-                button("automation-run-" + id, "Rodar agora", () -> actions.runAutomation(id)));
+                        () -> actions.data().enableAutomation(id, !enabled)),
+                button("automation-run-" + id, "Rodar agora", () -> actions.data().runAutomation(id)));
     }
 }

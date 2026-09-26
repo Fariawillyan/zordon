@@ -9,7 +9,7 @@ tags: [spec,voz,tts,markdown,palavra-de-ativacao,limiar]
 specId: SPEC-034
 ---
 
-# SPEC-034 — Fala resumida e limiar ajustável
+# SPEC-034 — Fala limpa e limiar ajustável
 
 | Campo | Valor |
 |---|---|
@@ -55,9 +55,8 @@ retreinar o modelo.
 
 - tira a marcação — ênfase, títulos, listas, citações, tabelas, linhas
   horizontais, código em linha e links (fica o texto, não a URL);
-- **remove blocos de código** e, no lugar, diz "O código está na tela";
-- corta no fim de uma frase dentro de **320 caracteres** (~25 s no ritmo do
-  Piper) e acrescenta "O resto está na tela".
+- **remove blocos de código** sem acrescentar uma frase artificial sobre a tela;
+- fala a resposta natural completa, sem truncar por quantidade de caracteres.
 
 **Limiar ajustável** por `ZORDON_WAKE_THRESHOLD`, lido pelo motor de voz:
 
@@ -96,7 +95,7 @@ disparo falso, e depois de 0,90 o custo dispara.
 ```text
 AI_RESPONSE ─► ActivityInterpreter ─► SpokenAnswer.of ─► Narration ─► SpeechPlayer
                                        (tira marcação,
-                                        corta por frase)
+                                        preserva o texto completo)
 
 __main__.py (ZORDON_WAKE_THRESHOLD) ─► VoiceServer.wake_threshold ─► Stream
                                         (valida faixa, loga a troca)
@@ -108,7 +107,7 @@ O usuário pergunta por voz e o modelo responde com uma lista em Markdown e um
 bloco de código.
 1. `SpokenAnswer` tira `**`, `##` e os marcadores de lista.
 2. O bloco de código sai do texto falado.
-3. A voz diz as primeiras frases e termina com "O código está na tela".
+3. A voz diz todo o texto natural restante, sem "O resto está na tela".
 
 ## 7. Interfaces
 
@@ -129,7 +128,7 @@ class VoiceServer:
 
 ## 8. Eventos
 
-Nenhum novo. O `VOICE_NARRATION` passa a carregar o texto já resumido.
+Nenhum novo. O `VOICE_NARRATION` passa a carregar o texto natural completo, já limpo.
 
 ## 9. Dados
 
@@ -137,8 +136,8 @@ Nenhum. O texto completo continua na tela e no histórico da conversa.
 
 ## 10. Segurança
 
-- Resumir **não** esconde: o texto integral está na Conversa e no trace. A voz é
-  um canal de resumo por natureza (Comunicação §3).
+- A voz de conversa não corta a resposta: o texto natural integral também fica
+  na Conversa e no trace. Alertas de segurança continuam sendo resumidos.
 - Baixar o limiar aumenta disparo falso, não poder: uma ativação falsa abre a
   escuta, e tudo o que vier depois continua passando pelo motor de permissão.
 - O limiar em vigor é registrado no log na inicialização.
@@ -156,7 +155,7 @@ quando um valor fora da faixa foi recusado.
 
 | Caso | Comportamento |
 |---|---|
-| Resposta só com código | A voz diz apenas "O código está na tela" |
+| Resposta só com código | Nada é falado; comandos não são ditados como conversa |
 | Resposta vazia ou só marcação | Nada é falado |
 | `ZORDON_WAKE_THRESHOLD` não numérico | O motor não sobe; o erro aponta a variável |
 | Limiar fora da faixa | Aviso no log e o do modelo prevalece |
@@ -164,14 +163,14 @@ quando um valor fora da faixa foi recusado.
 ## 14. Testes
 
 - A marcação não é falada, e o link vira o texto, não a URL.
-- Resposta longa vira resumo terminado em frase completa, com "O resto está na tela".
+- Resposta longa é falada inteira depois da limpeza de Markdown.
 - Bloco de código não é ditado.
 - O limiar do usuário entra em vigor; valor absurdo é recusado.
 
 ### Evidências (2026-09-20)
 
-- `SpokenAnswerTest` (6 testes): marcação removida (CA-1), resumo com corte em
-  fim de frase (CA-2), código não ditado (CA-3), resposta curta falada inteira,
+- `SpokenAnswerTest`: marcação removida (CA-1), resposta longa falada inteira
+  (CA-2), código não ditado sem mensagem artificial (CA-3), resposta curta falada inteira,
   entrada vazia, e tabela não lida célula a célula.
 - `test_server.py` (3 testes novos): sem ajuste vale o do modelo, ajuste válido
   entra em vigor, e `0.0`, `1.0` ou negativo são recusados.
@@ -182,10 +181,10 @@ quando um valor fora da faixa foi recusado.
 
 - `CA-1` Dada uma resposta com Markdown, então nada da marcação é falado, e o
   texto de um link é dito sem a URL.
-- `CA-2` Dada uma resposta longa, então a voz diz um resumo terminado em frase
-  completa e aponta para a tela.
-- `CA-3` Dada uma resposta com bloco de código, então o código não é ditado e a
-  voz diz onde ele está.
+- `CA-2` Dada uma resposta longa, então a voz diz todo o texto natural, sem
+  truncar nem apontar para a tela.
+- `CA-3` Dada uma resposta com bloco de código, então o código não é ditado e
+  nenhuma mensagem artificial sobre a tela é acrescentada.
 - `CA-4` Dado `ZORDON_WAKE_THRESHOLD` válido, então ele entra em vigor e o log
   diz isso; dado um valor fora da faixa, então o do modelo prevalece com aviso.
 

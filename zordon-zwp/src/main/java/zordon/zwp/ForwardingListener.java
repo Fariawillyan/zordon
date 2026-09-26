@@ -1,0 +1,54 @@
+/*
+ * Copyright 2026 Willyan Faria
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package zordon.zwp;
+
+import java.util.concurrent.CountDownLatch;
+import zordon.api.event.EventEnvelope;
+import zordon.api.zwp.BinaryFrame;
+
+/** Repassa à aplicação os eventos e frames de uma conexão, e avisa quando ela fecha. */
+final class ForwardingListener implements ZwpClientListener {
+
+    private final SessionResume resume;
+    private final CoreConnection.Listener listener;
+    private final CountDownLatch closed = new CountDownLatch(1);
+
+    ForwardingListener(SessionResume resume, CoreConnection.Listener listener) {
+        this.resume = resume;
+        this.listener = listener;
+    }
+
+    /** Bloqueia até a conexão fechar. */
+    void awaitClose() throws InterruptedException {
+        closed.await();
+    }
+
+    @Override
+    public void onEvent(EventEnvelope event) {
+        resume.seen(event);
+        listener.onEvent(event);
+    }
+
+    @Override
+    public void onBinary(BinaryFrame frame) {
+        listener.onBinary(frame);
+    }
+
+    @Override
+    public void onClosed(int code, String reason) {
+        closed.countDown();
+    }
+}

@@ -53,17 +53,19 @@ class MemoryStoreTest {
     }
 
     private final Manual clock = new Manual();
+    private ZordonDatabase db;
     private SqliteMemoryStore store;
 
     private SqliteMemoryStore open() {
-        store = new SqliteMemoryStore(dir.resolve("zordon.db"), clock);
+        db = new ZordonDatabase(dir.resolve("zordon.db"), clock);
+        store = db.memory();
         return store;
     }
 
     @AfterEach
     void tearDown() {
         if (store != null) {
-            store.close();
+            db.close();
         }
     }
 
@@ -85,15 +87,15 @@ class MemoryStoreTest {
         open().session("s1", "Conversa", clock.instant());
         store.message("s1", "t1", "user", "oi", clock.instant());
         store.remember(fact(FactKind.PREFERENCE, "respostas", "prefere respostas curtas"));
-        assertThat(store.schemaVersion()).isEqualTo(8);
-        store.close();
+        assertThat(db.schemaVersion()).isEqualTo(8);
+        db.close();
 
         store = open();
         assertThat(store.history("s1", 10)).extracting(StoredLine::content).containsExactly("oi");
         assertThat(Files.exists(dir.resolve("zordon.db.bak.8"))).as("sem migração, sem cópia").isFalse();
-        store.close();
+        db.close();
 
-        assertThatThrownBy(() -> new SqliteMemoryStore(dir.resolve("zordon.db"), clock, null,
+        assertThatThrownBy(() -> new ZordonDatabase(dir.resolve("zordon.db"), clock, null,
                 List.of("V001__memoria.sql", "V002__tarefas.sql", "V003__automacoes.sql",
                         "V004__orcamento_automacoes.sql", "V005__achados.sql", "V006__eventos_de_seguranca.sql",
                         "V007__conhecimento.sql", "V008__uso.sql", "V009__quebrada.sql")))
@@ -101,24 +103,25 @@ class MemoryStoreTest {
         assertThat(tableExists("teste_parcial")).as("rollback").isFalse();
         assertThat(Files.exists(dir.resolve("zordon.db.bak.8"))).as("a cópia veio antes").isTrue();
 
-        store = new SqliteMemoryStore(dir.resolve("zordon.db"), clock, null,
+        db = new ZordonDatabase(dir.resolve("zordon.db"), clock, null,
                 List.of("V001__memoria.sql", "V002__tarefas.sql", "V003__automacoes.sql",
                         "V004__orcamento_automacoes.sql", "V005__achados.sql", "V006__eventos_de_seguranca.sql",
                         "V007__conhecimento.sql", "V008__uso.sql", "V009__ok.sql"));
-        assertThat(store.schemaVersion()).isEqualTo(9);
+        store = db.memory();
+        assertThat(db.schemaVersion()).isEqualTo(9);
         assertThat(store.facts(null, null, 10)).hasSize(1);
         assertThat(Files.list(dir).map(path -> path.getFileName().toString()).filter(name -> name.contains(".bak.")))
                 .as("a segunda cópia não sobrescreve a primeira").hasSize(2);
-        store.close();
+        db.close();
 
-        assertThatThrownBy(() -> new SqliteMemoryStore(dir.resolve("zordon.db"), clock))
+        assertThatThrownBy(() -> new ZordonDatabase(dir.resolve("zordon.db"), clock))
                 .hasMessageContaining("versão 9").hasMessageContaining("conhece até 8");
         store = null;
     }
 
     @Test
     void scriptComGatilhoViraComandosInteiros() {
-        List<String> statements = SqliteMemoryStore.statements("""
+        List<String> statements = Migrations.statements("""
                 -- comentário
                 CREATE TABLE a (x TEXT); -- no fim da linha
                 CREATE TRIGGER t AFTER INSERT ON a BEGIN
@@ -205,7 +208,8 @@ class MemoryStoreTest {
     @Test
     void rrfFundeOEmbedderEReordenaPorRecenciaEAcessos() {
         AtomicReference<List<String>> nearest = new AtomicReference<>(List.of());
-        store = new SqliteMemoryStore(dir.resolve("zordon.db"), clock, (query, limit) -> nearest.get());
+        db = new ZordonDatabase(dir.resolve("zordon.db"), clock, (query, limit) -> nearest.get());
+        store = db.memory();
         Fact lexical = store.remember(fact(FactKind.ENTITY, "banco", "o banco da API é Postgres"));
         Fact both = store.remember(fact(FactKind.ENTITY, "banco principal", "banco principal roda no container db"));
         Fact vector = store.remember(fact(FactKind.ENTITY, "armazenamento", "os dados ficam num volume Docker"));
@@ -291,26 +295,26 @@ class MemoryStoreTest {
     @Test
     void tarefaGuardaEtapasTransicoesEVereditosSemApagar() throws Exception {
         open();
-        String id = store.createTask("veja por que a API caiu", "ui", List.of(
+        String id = db.tasks().createTask("veja por que a API caiu", "ui", List.of(
                 new TaskStore.PlanStep("s1", "Ver os logs", "developer", List.of(), "green",
                         "{\"type\":\"judgement\",\"criterion\":\"a causa está nos logs\"}"),
                 new TaskStore.PlanStep("s2", "Anotar a causa", "zordon", List.of("s1"), "green",
                         "{\"type\":\"human\",\"criterion\":\"anotado\"}")));
-        store.taskState(id, "running", null);
-        store.stepState(id, "s1", "running", null);
-        store.stepResult(id, "s1", "{\"text\":\"postgres recusou\"}");
-        store.stepState(id, "s1", "verifying", null);
-        store.verdict(new TaskStore.Verdict(id, "s1", "developer", "m", "judgement", "pass", "ok", 1200, 900));
-        store.stepState(id, "s1", "done", "pass");
+        db.tasks().taskState(id, "running", null);
+        db.tasks().stepState(id, "s1", "running", null);
+        db.tasks().stepResult(id, "s1", "{\"text\":\"postgres recusou\"}");
+        db.tasks().stepState(id, "s1", "verifying", null);
+        db.tasks().verdict(new TaskStore.Verdict(id, "s1", "developer", "m", "judgement", "pass", "ok", 1200, 900));
+        db.tasks().stepState(id, "s1", "done", "pass");
 
-        TaskStore.TaskView view = store.task(id).orElseThrow();
+        TaskStore.TaskView view = db.tasks().task(id).orElseThrow();
         assertThat(view.state()).isEqualTo("running");
         assertThat(view.steps()).extracting(TaskStore.StepView::state).containsExactly("done", "planned");
         assertThat(view.steps().getFirst().attempts()).isEqualTo(1);
         assertThat(view.steps().getFirst().resultJson()).contains("postgres");
         assertThat(view.steps().get(1).dependsOn()).containsExactly("s1");
-        assertThat(store.interrupted()).extracting(TaskStore.TaskView::id).containsExactly(id);
-        assertThat(store.taskStats()).containsEntry("byState", java.util.Map.of("running", 1L))
+        assertThat(db.tasks().interrupted()).extracting(TaskStore.TaskView::id).containsExactly(id);
+        assertThat(db.tasks().taskStats()).containsEntry("byState", java.util.Map.of("running", 1L))
                 .containsEntry("verdicts7d", java.util.Map.of("pass", 1L));
 
         try (var db = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve("zordon.db"));
@@ -328,18 +332,18 @@ class MemoryStoreTest {
     @Test
     void estadoDaAutomacaoContaDisparosEFalhasSeguidas() {
         open();
-        assertThat(store.automationState("api")).isEqualTo(AutomationStateStore.State.fresh("api"));
-        store.automationFired("api", clock.instant());
-        assertThat(store.automationFinished("api", false)).isEqualTo(1);
-        assertThat(store.automationFinished("api", false)).isEqualTo(2);
-        assertThat(store.automationFinished("api", true)).as("sucesso zera").isZero();
-        store.automationDisabled("api", true, "20 falhas seguidas");
-        AutomationStateStore.State state = store.automationState("api");
+        assertThat(db.automations().automationState("api")).isEqualTo(AutomationStateStore.State.fresh("api"));
+        db.automations().automationFired("api", clock.instant());
+        assertThat(db.automations().automationFinished("api", false)).isEqualTo(1);
+        assertThat(db.automations().automationFinished("api", false)).isEqualTo(2);
+        assertThat(db.automations().automationFinished("api", true)).as("sucesso zera").isZero();
+        db.automations().automationDisabled("api", true, "20 falhas seguidas");
+        AutomationStateStore.State state = db.automations().automationState("api");
         assertThat(state.disabled()).isTrue();
         assertThat(state.fired()).isEqualTo(1);
         assertThat(state.lastFiredAt()).isEqualTo(clock.instant());
-        store.automationDisabled("api", false, null);
-        assertThat(store.automationState("api").disabled()).isFalse();
+        db.automations().automationDisabled("api", false, null);
+        assertThat(db.automations().automationState("api").disabled()).isFalse();
     }
 
     @Test

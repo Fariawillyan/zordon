@@ -15,18 +15,16 @@
  */
 package zordon.desktop.ui;
 
-import java.time.ZoneId;
-import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
+import java.util.List;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
-import javafx.scene.control.Tooltip;
+import javafx.scene.layout.VBox;
 import zordon.api.trace.Spec;
 import zordon.desktop.shell.DesktopState;
-import zordon.desktop.shell.VoicePresentation;
 import zordon.desktop.shell.VoiceStatus;
-import zordon.zwp.CoreConnection;
 
 /**
  * A tela de Voz da SPEC-010: o console em tela cheia. Em repouso ela é igual à
@@ -37,59 +35,45 @@ import zordon.zwp.CoreConnection;
 final class VoiceView extends StackPane {
 
     private final VoiceEffectsPane effects = new VoiceEffectsPane();
-    private final DesktopState state;
-    /** Só ícone: o rótulo da SPEC-006 vai para o leitor de tela e a dica (SPEC-012 CA-7). */
-    private final Label pillIcon = new Label();
-    private final javafx.scene.control.Tooltip pillHint = new javafx.scene.control.Tooltip();
-    private final Button turnOff = new Button();
-    private final HBox pill;
+    private final VoicePill pill;
     private final VoiceStatusStrip strip;
 
     VoiceView(DesktopState state, ShellActions actions) {
-        this.state = state;
         getStyleClass().add("voice-page");
         setMinSize(0, 0);
 
-        pillIcon.getStyleClass().add("pill-icon");
-        turnOff.getStyleClass().add("pill-action");
-        turnOff.setId("voice-turn-off");
-        turnOff.setGraphic(Icons.of("micoff", 16, javafx.scene.paint.Color.web("#04141B")));
-        turnOff.setAccessibleText("Desligar o microfone");
-        turnOff.setTooltip(new javafx.scene.control.Tooltip("Desligar o microfone"));
-        turnOff.setOnAction(event -> actions.setVoiceMode("off"));
-        pill = new HBox(8, pillIcon, turnOff);
-        pill.setId("voice-pill");
-        pill.getStyleClass().add("voice-pill");
-        pill.setAlignment(Pos.CENTER);
-        pill.setMaxSize(HBox.USE_PREF_SIZE, HBox.USE_PREF_SIZE);
+        pill = new VoicePill(state, actions);
         effects.topCenter(pill);
         effects.onTalk(() -> toggleListening(state, actions));
         effects.modeControl(new VoiceModePicker(state, actions, true));
         // O console manda na tela e a faixa de estado fecha embaixo (SPEC-032).
         this.strip = new VoiceStatusStrip(state);
-        javafx.scene.layout.VBox column = new javafx.scene.layout.VBox(effects, strip);
+        VBox column = new VBox(effects, strip);
         column.setMinSize(0, 0);
-        javafx.scene.layout.VBox.setVgrow(effects, javafx.scene.layout.Priority.ALWAYS);
+        VBox.setVgrow(effects, Priority.ALWAYS);
         getChildren().add(column);
 
         visibleProperty().addListener((observable, before, now) -> effects.active(now));
         effects.active(isVisible());
-        state.voiceProperty().addListener((observable, before, now) -> {
-            effects.feedback(before, now);
-            showPill();
-        });
-        state.connectionProperty().addListener((observable, before, now) -> showPill());
-        state.lockdownProperty().addListener((observable, before, now) -> showPill());
-        Tooltip.install(pill, pillHint);
+        state.voice().statusProperty().addListener((observable, before, now) -> effects.feedback(before, now));
         // O estado visual do núcleo e o nível do microfone chegam do núcleo (SPEC-012).
-        state.activityProperty().addListener((observable, before, now) -> effects.activity(now));
-        effects.activity(state.activityProperty().get());
-        state.voiceLevelProperty().addListener((observable, before, now) -> {
+        state.voice().activityProperty().addListener((observable, before, now) -> effects.activity(now));
+        effects.activity(state.voice().activityProperty().get());
+        state.security().oppressorProperty().addListener((observable, before, now) -> effects.oppressor(now));
+        effects.oppressor(state.security().oppressorProperty().get());
+        state.voice().levelProperty().addListener((observable, before, now) -> {
             if (now != null) {
-                effects.micLevel(now[0]);
+                effects.micLevel(now);
             }
         });
-        showPill();
+        // Ctrl+Espaço fala com o Zordon de qualquer tela (SPEC-011 CA-7): a tela
+        // de Voz está sempre na cena, mesmo escondida, e registra o atalho nela.
+        sceneProperty().addListener((observable, before, scene) -> {
+            if (scene != null) {
+                scene.getAccelerators().put(new KeyCodeCombination(KeyCode.SPACE, KeyCombination.CONTROL_DOWN),
+                        () -> toggleListening(state, actions));
+            }
+        });
     }
 
     VoiceStatusStrip statusStrip() {
@@ -98,35 +82,12 @@ final class VoiceView extends StackPane {
 
     /** Clicar na esfera começa a escuta; clicar de novo, durante ela, encerra (SPEC-011 CA-7). */
     static void toggleListening(DesktopState state, ShellActions actions) {
-        VoiceStatus voice = state.voiceProperty().get();
+        VoiceStatus voice = state.voice().statusProperty().get();
         if (voice != null && "listening".equals(voice.activity())) {
-            actions.stopListening();
+            actions.voice().stopListening();
         } else {
-            actions.startListening();
+            actions.voice().startListening();
         }
-    }
-
-    private void showPill() {
-        CoreConnection.State connection = state.connectionProperty().get();
-        VoiceStatus voice = state.voiceProperty().get();
-        ZoneId zone = ZoneId.systemDefault();
-        boolean paused = connection == CoreConnection.State.ONLINE && state.lockdownProperty().get();
-        boolean rest = !paused && VoicePresentation.atRest(connection, voice, zone);
-        pill.setVisible(!rest);
-        // Lockdown vem antes da voz: é o estado que o usuário precisa ver primeiro (SPEC-015 CA-6).
-        String label = paused ? zordon.desktop.shell.SecurityPresentation.PAUSED
-                : VoicePresentation.pillText(connection, voice, zone);
-        pill.setAccessibleText(label);
-        pillIcon.setAccessibleText(label);
-        pillHint.setText(label);
-        boolean offer = connection == CoreConnection.State.ONLINE && VoicePresentation.offersTurnOff(voice);
-        boolean live = offer || voice != null && voice.testing();
-        pillIcon.setGraphic(Icons.of(live ? "mic" : "micoff", 16,
-                javafx.scene.paint.Color.web(live ? "#12E3F7" : "#F0B341")));
-        turnOff.setVisible(offer);
-        turnOff.setManaged(offer);
-        pill.getStyleClass().removeAll("pill-live", "pill-warning");
-        pill.getStyleClass().add(offer || voice != null && voice.testing() ? "pill-live" : "pill-warning");
     }
 
     boolean pillVisible() {
@@ -139,11 +100,8 @@ final class VoiceView extends StackPane {
     }
 
     /** Textos visíveis da pílula; voice-first, precisa ser vazio (SPEC-012 CA-7). */
-    java.util.List<String> pillVisibleTexts() {
-        return pill.lookupAll(".label").stream()
-                .map(node -> ((javafx.scene.control.Labeled) node).getText())
-                .filter(text -> text != null && !text.isBlank())
-                .toList();
+    List<String> pillVisibleTexts() {
+        return pill.visibleTexts();
     }
 
     String activity() {

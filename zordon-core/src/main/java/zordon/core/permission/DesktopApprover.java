@@ -71,8 +71,12 @@ public final class DesktopApprover implements PermissionEngine.Approver {
     }
 
     @Override
-    public CompletableFuture<PermissionEngine.Approval> ask(ActionDescriptor action, Principal actor, RiskLevel risk,
-            Duration ttl, boolean perAction) {
+    public CompletableFuture<PermissionEngine.Approval> ask(PermissionEngine.Approver.ApprovalRequest request) {
+        ActionDescriptor action = request.action();
+        Principal actor = request.actor();
+        RiskLevel risk = request.risk();
+        Duration ttl = request.ttl();
+        boolean perAction = request.perAction();
         String desktop;
         synchronized (this) {
             desktop = desktops.peekLast();

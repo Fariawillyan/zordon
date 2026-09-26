@@ -1,10 +1,9 @@
-"""O mínimo para a fala soar certa em português (SPEC-011 §3, CA-8).
+"""Normalização de texto para a fala soar natural em português (SPEC-011 §3, CA-8).
 
 Copyright 2026 Willyan Faria — Apache License 2.0
 
 A voz do Piper já lê números ("8" → "oito"), mas lê "15h40" como "quinze agá
-quarenta". Aqui só os horários; a normalização completa tem item próprio no
-roadmap.
+quarenta". Inclui horários, siglas técnicas comuns, espaços e pontuação final.
 """
 
 import re
@@ -16,6 +15,24 @@ _TENS = {20: "vinte", 30: "trinta", 40: "quarenta", 50: "cinquenta"}
 _FEMININE = {"um": "uma", "dois": "duas"}
 
 _TIME = re.compile(r"\b([01]?\d|2[0-3])h([0-5]\d)?\b")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_PRONUNCIATIONS = {
+    "WSL2": "dáblio ésse éle dois",
+    "HTTP": "agá tê tê pê",
+    "JSON": "jêison",
+    "LLM": "éle éle eme",
+    "MCP": "eme cê pê",
+    "CPU": "cê pê u",
+    "API": "á pê í",
+    "STT": "ésse tê tê",
+    "TTS": "tê tê ésse",
+    "WSL": "dáblio ésse éle",
+}
+_ACRONYM = re.compile(
+    r"(?<![\w])(?:" + "|".join(sorted(map(re.escape, _PRONUNCIATIONS), key=len, reverse=True))
+    + r")(?![\w])",
+    re.IGNORECASE,
+)
 
 
 def number(value, feminine=False):
@@ -42,4 +59,17 @@ def time(hours, minutes):
 
 
 def for_speech(text):
-    return _TIME.sub(lambda m: time(int(m.group(1)), int(m.group(2) or 0)), text)
+    spoken = re.sub(r"\s+", " ", text).strip()
+    spoken = _TIME.sub(lambda m: time(int(m.group(1)), int(m.group(2) or 0)), spoken)
+    spoken = _ACRONYM.sub(lambda m: _PRONUNCIATIONS[m.group(0).upper()], spoken)
+    # Uma frase sem pontuação final tende a receber uma queda menos natural no
+    # Piper. Não toca em perguntas, exclamações ou frases já pontuadas.
+    if spoken and spoken[-1].isalnum():
+        spoken += "."
+    return spoken
+
+
+def sentences(text):
+    """Divide uma fala em frases completas, preservando a pontuação."""
+    spoken = for_speech(text)
+    return [part for part in _SENTENCE.split(spoken) if part]

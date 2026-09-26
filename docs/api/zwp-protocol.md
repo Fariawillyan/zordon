@@ -203,11 +203,14 @@ capacidade `debug.invoke` pode fazê-lo, e toda invocação assim é marcada com
 | `security.respond` | `{messageId, choice}` | `{}` — resposta a "comunicar antes de agir" |
 | `notify.pending` | `{}` | `{messages[]}` — avisos ainda não confirmados, para a reconexão ([SPEC-015](../specs/security/SPEC-015-pedido-de-permissao-notificacoes-e-kill-switch.md)) |
 | `notify.acknowledge` | `{messageId}` | `{acknowledged}` — confirma leitura (obrigatório em CRITICAL) |
-| `security.status` | `{}` | `{lockdown, audit, pendingNotifications, approver}` |
+| `security.status` | `{}` | `{lockdown, oppressor, audit, pendingNotifications, approver}` |
 | `security.breakers` | `{}` | `{breakers[{subject, state, since, reason, findingId?}]}` ([SPEC-027](../specs/defense/SPEC-027-resposta-e-disjuntor.md)) |
 | `security.breakerRelease` | `{subject, mode}` | `{state}` — `mode`: `supervised` \| `closed`; só de um `desktop` |
 | `security.lockdown` | `{reason}` | `{active, since, reason, trigger}` — "Pausar Zordon": só leitura |
 | `security.resume` | `{}` | `{active: false}` — só de um cliente `desktop`; os demais recebem `ERR_PERMISSION_DENIED` |
+| `security.oppressor.enter` | `{password}` | `{active, configured, since, trigger}` — OPPRESSOR MODE (SPEC-036); senha errada ou ausente é `ERR_PERMISSION_DENIED` |
+| `security.oppressor.exit` | `{}` | `{active: false, configured}` — volta ao comportamento normal na ação seguinte |
+| `security.oppressor.password` | `{current, next}` | `{configured: true}` — cadastra ou troca a senha mestre; `current` só é conferido se já houver uma |
 | `tools.list` | `{}` | `{tools[{name, description, risk, effects}]}` ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)) |
 | `security.quarantine.list` | `{}` | `{items[]}` |
 | `security.quarantine.restore` | `{vaultId}` | `{restored}` |
@@ -331,7 +334,7 @@ de protocolo.
 | `tools` | `TOOL_CALLED` | `{callId, tool, risk, decision}` — sem argumentos ([SPEC-016](../specs/security/SPEC-016-execucao-mediada-ferramentas-e-ponte-windows.md)) |
 | `tools` | `TOOL_RESULT` | `{callId, tool, status, durationMs}` |
 | `voice` | `VOICE_WAKE` | `{score, outcome, bargeIn}` — uma ativação pela palavra "Zordon" e o desfecho; nunca áudio nem texto ([SPEC-013](../specs/voice/SPEC-013-palavra-de-ativacao-e-conversa-sem-clique.md)) |
-| `voice` | `VOICE_LEVEL` | `{rms, peak}` em dBFS — no máximo 20 Hz, só durante o teste do microfone ou uma escuta ativa |
+| `voice` | `VOICE_LEVEL` | `{rms, peak, bass, mid, treble}` em dBFS — no máximo 20 Hz, só durante o teste do microfone ou uma escuta ativa |
 | `voice` | `TTS_STARTED` / `TTS_FINISHED` | `{streamId}` |
 | `chat` | `USER_COMMAND` | `{turnId, text, source: "voice"\|"text"}` |
 | `chat` | `AI_THINKING` | `{turnId, model, agentId}` |

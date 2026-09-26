@@ -16,6 +16,15 @@ class FakeModels:
         return "Dom Pedro foi imperador?", 0.9, 1000
 
 
+class TtsModels(FakeModels):
+    def __init__(self):
+        self.calls = []
+
+    def synthesize(self, text, profile):
+        self.calls.append((text, profile))
+        yield 22050, b"\x00" * 100
+
+
 class StreamTranscriptTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.server = VoiceServer(FakeModels(), None)
@@ -39,6 +48,22 @@ class StreamTranscriptTest(unittest.IsolatedAsyncioTestCase):
         self.server.streams.clear()
         await self.server._stream_final(1, b"", "end", False)
         self.server.send.assert_not_called()
+
+
+class SynthesisProfileTest(unittest.IsolatedAsyncioTestCase):
+    async def test_perfil_de_prosodia_vai_para_o_modelo_e_o_audio_em_blocos(self):
+        models = TtsModels()
+        server = VoiceServer(models, None)
+        server.state = "ready"
+        server.send = AsyncMock()
+        try:
+            await server._speak(7, "Tudo bem. Posso continuar?", "normal")
+            self.assertEqual(models.calls, [("Tudo bem.", "normal"), ("Posso continuar?", "normal")])
+            events = [call.args[0] for call in server.send.await_args_list]
+            self.assertEqual(events[0], {"ev": "tts", "id": 7, "rate": 22050})
+            self.assertEqual(events[-1], {"ev": "tts_end", "id": 7})
+        finally:
+            server.executor.shutdown(wait=True)
 
 
 class WakeThresholdTest(unittest.TestCase):

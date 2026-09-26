@@ -105,14 +105,14 @@ public final class DefenseEngine {
             return;
         }
         // Sem playbook: fica registrado como observado, que é o que de fato aconteceu.
-        record(finding, "nenhuma", SecurityEvent.NONE, "OBSERVED", "POLICY", false, null);
+        record(finding, new Response("nenhuma", SecurityEvent.NONE, "OBSERVED", "POLICY", false), null);
     }
 
     private void act(Finding finding, String userMessageId, String proposed, java.util.function.BooleanSupplier run) {
         if (userMessageId == null || userMessageId.isBlank()) {
             // Sem aviso entregue não há contenção: a invariante do SecurityEvent existe por isso.
             log.warn("defesa não agiu em {}: nenhuma mensagem foi entregue ao usuário", finding.subject());
-            record(finding, proposed, SecurityEvent.NONE, "OBSERVED", "DENIED", false, null);
+            record(finding, new Response(proposed, SecurityEvent.NONE, "OBSERVED", "DENIED", false), null);
             return;
         }
         boolean ok;
@@ -123,14 +123,16 @@ public final class DefenseEngine {
             ok = false;
         }
         log.warn("defesa: {} em {} ({})", proposed, finding.subject(), ok ? "contido" : "falhou");
-        record(finding, proposed, proposed, ok ? "CONTAINED" : "FAILED", "AUTO_CONTAINMENT", true, userMessageId);
+        record(finding, new Response(proposed, proposed, ok ? "CONTAINED" : "FAILED", "AUTO_CONTAINMENT", true), userMessageId);
     }
 
-    private void record(Finding finding, String proposed, String executed, String outcome, String authorization,
-            boolean rollback, String userMessageId) {
+    /** O desfecho de uma resposta da defesa: o que foi proposto, o que rodou e como. */
+    private record Response(String proposed, String executed, String outcome, String authorization, boolean rollback) {}
+
+    private void record(Finding finding, Response response, String userMessageId) {
         SecurityEvent event = new SecurityEvent("sec-" + UUID.randomUUID(), clock.instant(), finding.severity(),
-                finding.detector(), finding.subject().toString(), finding.id(), proposed, executed, outcome,
-                authorization, rollback, userMessageId);
+                finding.detector(), finding.subject().toString(), finding.id(), response.proposed(),
+                response.executed(), response.outcome(), response.authorization(), response.rollback(), userMessageId);
         events.securityEvent(new SecurityEventStore.SecurityEventRow(event.id(), event.ts(),
                 event.severity().wire(), event.detector(), event.subject(), event.findingId(), event.proposed(),
                 event.executed(), event.outcome(), event.authorization(), event.rollbackAvailable(),
@@ -154,7 +156,7 @@ public final class DefenseEngine {
         state.ifPresent(value -> {
             bus.publish(EventType.CIRCUIT_BREAKER_CLOSED, Map.of("subject", subject, "by", "user", "state",
                     value.name().toLowerCase(java.util.Locale.ROOT)));
-            notifications.publish(notifications.message(Severity.INFO, "SECURITY",
+            notifications.publish(notifications.message(new NotificationCenter.MessageFields(Severity.INFO, "SECURITY",
                     "Disjuntor liberado: " + subject,
                     "Você liberou " + subject + " como " + mode + ".",
                     "Liberar é decisão do dono: a defesa nunca fecha um disjuntor sozinha.",
@@ -162,7 +164,7 @@ public final class DefenseEngine {
                     "O sujeito voltou a poder agir" + (value == CircuitBreakers.State.HALF_OPEN
                             ? ", com cada ação confirmada na tela." : "."),
                     subject, true, value.name().toLowerCase(java.util.Locale.ROOT),
-                    List.of("Acompanhar na tela de Segurança")));
+                    List.of("Acompanhar na tela de Segurança"))));
         });
         return state.map(value -> value.name().toLowerCase(java.util.Locale.ROOT));
     }

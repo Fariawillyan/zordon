@@ -289,7 +289,8 @@ class VoiceServiceTest {
     void testeLigaSemMotorPeloTempoPedidoEDesligaSozinho() {
         Clients clients = Clients.obedient();
         AudioIngest ingest = AudioIngest.detached();
-        VoiceService voice = new VoiceService(new VoiceStore(store()), engine, clients, published::add, clock, null, ingest);
+        VoiceService voice = new VoiceService(new VoiceService.Dependencies(new VoiceStore(store()), engine, clients,
+                published::add, clock, null, ingest, () -> clock.millis() * 1_000_000L));
         voice.hostConnected("h1");
 
         Map<String, Object> during = voice.testMicrophone(3);
@@ -377,8 +378,8 @@ class VoiceServiceTest {
         java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors
                 .newSingleThreadScheduledExecutor(Thread.ofVirtual().name("voice-deadlines").factory());
         try {
-            VoiceService voice = new VoiceService(new VoiceStore(store()), engine, clients, published::add,
-                    jumping, scheduler, AudioIngest.detached(), System::nanoTime);
+            VoiceService voice = new VoiceService(new VoiceService.Dependencies(new VoiceStore(store()), engine,
+                    clients, published::add, jumping, scheduler, AudioIngest.detached(), System::nanoTime));
             voice.hostConnected("h1");
 
             voice.testMicrophone(1);
@@ -439,7 +440,9 @@ class VoiceServiceTest {
     }
 
     private VoiceService service(Clients clients) {
-        return new VoiceService(new VoiceStore(store()), engine, clients, published::add, clock, null);
+        // Relógio falso: o prazo anda junto com o relógio do teste.
+        return new VoiceService(new VoiceService.Dependencies(new VoiceStore(store()), engine, clients, published::add,
+                clock, null, AudioIngest.detached(), () -> clock.millis() * 1_000_000L));
     }
 
     private Path store() {

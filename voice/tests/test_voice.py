@@ -100,7 +100,20 @@ class NormalizeTest(unittest.TestCase):
 
     def test_o_resto_fica_como_esta(self):
         self.assertEqual(normalize.for_speech("Você tem 8 containers."), "Você tem 8 containers.")
-        self.assertEqual(normalize.for_speech("h2o e 25h"), "h2o e 25h")
+        self.assertEqual(normalize.for_speech("  h2o   e 25h  "), "h2o e 25h.")
+
+    def test_uma_frase_sem_pontuacao_ganha_fim_natural(self):
+        self.assertEqual(normalize.for_speech("Pronto"), "Pronto.")
+        self.assertEqual(normalize.for_speech("Tudo bem?"), "Tudo bem?")
+
+    def test_frases_sao_separadas_sem_perder_a_pontuacao(self):
+        self.assertEqual(normalize.sentences("Pronto. Tudo bem?"), ["Pronto.", "Tudo bem?"])
+
+    def test_siglas_tecnicas_ganham_pronuncia_em_portugues(self):
+        self.assertEqual(
+            normalize.for_speech("O WSL2 usa a API e a CPU."),
+            "O dáblio ésse éle dois usa a á pê í e a cê pê u.",
+        )
 
 
 if __name__ == "__main__":

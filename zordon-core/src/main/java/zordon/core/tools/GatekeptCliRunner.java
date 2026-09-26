@@ -79,13 +79,14 @@ public final class GatekeptCliRunner implements CliRunner {
         long started = System.nanoTime();
         try {
             ProcessRunner.Result result = runner.run(granted, workDir, timeout, stdin);
-            gatekeeper.complete(granted, result.exitCode() == 0 ? AuditLog.Status.OK : AuditLog.Status.FAILED,
+            granted.complete(new AuditLog.Completion(
+                    result.exitCode() == 0 ? AuditLog.Status.OK : AuditLog.Status.FAILED,
                     Duration.ofNanos(System.nanoTime() - started), result.stdout().length() + " bytes de resposta",
-                    result.timedOut() ? "tempo esgotado" : result.exitCode() == 0 ? null : "código " + result.exitCode());
+                    result.timedOut() ? "tempo esgotado" : result.exitCode() == 0 ? null : "código " + result.exitCode()));
             return new Result(result.exitCode(), result.stdout(), result.stderr(), result.timedOut());
         } catch (Exception e) {
-            gatekeeper.complete(granted, AuditLog.Status.FAILED, Duration.ofNanos(System.nanoTime() - started), null,
-                    e.toString());
+            granted.complete(new AuditLog.Completion(AuditLog.Status.FAILED,
+                    Duration.ofNanos(System.nanoTime() - started), null, e.toString()));
             throw e;
         }
     }
